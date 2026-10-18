@@ -5,6 +5,7 @@ Les valeurs sensibles (clé secrète, accès à la base, hôtes autorisés) sont
 depuis les variables d'environnement ou le fichier .env, jamais écrites ici.
 """
 
+from datetime import timedelta
 from pathlib import Path
 
 import environ
@@ -38,6 +39,7 @@ DJANGO_APPS = [
 
 THIRD_PARTY_APPS = [
     "rest_framework",
+    "rest_framework_simplejwt.token_blacklist",
     "django_filters",
     "drf_spectacular",
     "corsheaders",
@@ -126,3 +128,61 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # CORS : seules les origines listées dans CORS_ALLOWED_ORIGINS sont acceptées.
 
 CORS_ALLOWED_ORIGINS = env("CORS_ALLOWED_ORIGINS")
+
+
+# Django REST Framework : tout est privé par défaut, chaque vue publique le déclare.
+
+REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
+    ],
+    "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
+    "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
+    "PAGE_SIZE": 20,
+    "DEFAULT_FILTER_BACKENDS": [
+        "django_filters.rest_framework.DjangoFilterBackend",
+        "rest_framework.filters.SearchFilter",
+        "apps.core.filters.StableOrderingFilter",
+    ],
+    # Les compteurs de throttling vivent dans le cache par défaut.
+    "DEFAULT_THROTTLE_CLASSES": [
+        "rest_framework.throttling.AnonRateThrottle",
+        "rest_framework.throttling.UserRateThrottle",
+    ],
+    "DEFAULT_THROTTLE_RATES": {
+        "anon": env("THROTTLE_ANON_RATE", default="100/hour"),
+        "user": env("THROTTLE_USER_RATE", default="1000/hour"),
+    },
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+}
+
+
+# JWT (SimpleJWT) : jeton d'accès court, jeton de rafraîchissement à usage unique.
+
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=15),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=1),
+    # Chaque rafraîchissement émet un nouveau refresh et met l'ancien sur liste noire.
+    "ROTATE_REFRESH_TOKENS": True,
+    "BLACKLIST_AFTER_ROTATION": True,
+    "UPDATE_LAST_LOGIN": True,
+    "AUTH_HEADER_TYPES": ("Bearer",),
+}
+
+
+# Documentation OpenAPI (drf-spectacular) : /api/schema/, /api/docs/, /api/redoc/
+
+SPECTACULAR_SETTINGS = {
+    "TITLE": "TravelHub API",
+    "DESCRIPTION": (
+        "API REST de planification de voyages. Obtenez un jeton avec "
+        "`POST /api/auth/token/`, puis cliquez sur « Authorize » et collez le jeton "
+        "d'accès (sans le préfixe Bearer)."
+    ),
+    "VERSION": "1.0.0",
+    "SERVE_INCLUDE_SCHEMA": False,
+    # Schémas distincts en lecture et en écriture : les champs calculés
+    # n'apparaissent pas dans les corps de requête.
+    "COMPONENT_SPLIT_REQUEST": True,
+    "SWAGGER_UI_SETTINGS": {"persistAuthorization": True},
+}

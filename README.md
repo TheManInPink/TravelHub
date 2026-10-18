@@ -75,7 +75,36 @@ La commande est idempotente : la relancer ne crée pas de doublons. Les comptes 
 | `config.settings.test` | Tests (`pytest.ini`) |
 | `config.settings.prod` | Production (`wsgi.py`, `asgi.py`) ; vérifier avec `python manage.py check --deploy --settings=config.settings.prod` |
 
-Variables d'environnement (voir `.env.example`) : `SECRET_KEY`, `DEBUG`, `ALLOWED_HOSTS`, `DATABASE_URL`, `CORS_ALLOWED_ORIGINS`.
+Variables d'environnement (voir `.env.example`) : `SECRET_KEY`, `DEBUG`, `ALLOWED_HOSTS`, `DATABASE_URL`, `CORS_ALLOWED_ORIGINS`, et facultativement `THROTTLE_ANON_RATE` (défaut `100/hour`) et `THROTTLE_USER_RATE` (défaut `1000/hour`).
+
+## API REST
+
+Documentation interactive : `/api/docs/` (Swagger UI), `/api/redoc/` (ReDoc), schéma OpenAPI brut : `/api/schema/`.
+
+| Méthode | Chemin | Rôle |
+| --- | --- | --- |
+| POST | `/api/auth/register/` | Inscription ; renvoie l'utilisateur et une paire de jetons |
+| POST | `/api/auth/token/` | Connexion (`username`, `password`) ; jeton d'accès 15 min, de rafraîchissement 1 jour |
+| POST | `/api/auth/token/refresh/` | Nouveau jeton d'accès ; rotation : l'ancien refresh est mis sur liste noire |
+| POST | `/api/auth/logout/` | Met le refresh fourni sur liste noire (authentifié, son propre jeton seulement) |
+| GET | `/api/auth/me/` | Profil de l'utilisateur connecté |
+| GET, POST | `/api/trips/` | Mes voyages (paginés par 20), création |
+| GET, PUT, PATCH, DELETE | `/api/trips/{id}/` | Détail avec destinations et activités, modification, suppression |
+
+Tout est authentifié par défaut (`Authorization: Bearer <access>`). Dans Swagger : `POST /api/auth/token/` → *Try it out*, copier `access`, bouton **Authorize**, coller le jeton (sans `Bearer`).
+
+Accès aux voyages :
+
+| Utilisateur | Lire | Modifier | Supprimer |
+| --- | --- | --- | --- |
+| Propriétaire | 200 | 200 | 204 |
+| Éditeur | 200 | 200 | 403 |
+| Lecteur | 200 | 403 | 403 |
+| Non participant | 404 | 404 | 404 |
+
+Un non-participant reçoit 404 et non 403 : l'API ne révèle pas l'existence des voyages des autres.
+
+Paramètres de liste : `status`, `start_date__gte`, `end_date__lte`, `title__icontains`, `search` (titre et description), `ordering` (`start_date`, `title`, `created_at`, préfixe `-` pour décroissant), `page`.
 
 ## Structure
 

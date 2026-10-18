@@ -6,13 +6,40 @@ from datetime import date
 
 import pytest
 from django.contrib.auth import get_user_model
+from django.core.cache import cache
 from django.core.management import call_command
+from rest_framework.test import APIClient
 
 from apps.itinerary.models import Activity, Destination
 from apps.trips.services import create_trip
 
 TRIP_START = date(2027, 6, 1)
 TRIP_END = date(2027, 6, 20)
+
+
+@pytest.fixture(autouse=True)
+def _clear_cache():
+    """Les compteurs de throttling vivent dans le cache : chaque test repart de zéro."""
+    cache.clear()
+    yield
+    cache.clear()
+
+
+@pytest.fixture
+def api_client():
+    return APIClient()
+
+
+@pytest.fixture
+def client_for():
+    """Client API authentifié comme user, sans passer par l'émission d'un JWT."""
+
+    def _make(user):
+        client = APIClient()
+        client.force_authenticate(user)
+        return client
+
+    return _make
 
 
 @pytest.fixture
