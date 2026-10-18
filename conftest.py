@@ -11,6 +11,7 @@ from django.core.management import call_command
 from rest_framework.test import APIClient
 
 from apps.itinerary.models import Activity, Destination
+from apps.trips.models import TripParticipant
 from apps.trips.services import create_trip
 
 TRIP_START = date(2027, 6, 1)
@@ -75,6 +76,15 @@ def make_trip(owner):
 @pytest.fixture
 def trip(make_trip):
     return make_trip()
+
+
+@pytest.fixture
+def members(trip, make_user):
+    """Un éditeur, un lecteur et un utilisateur étranger au voyage du propriétaire."""
+    editor, viewer, stranger = make_user("editor"), make_user("viewer"), make_user("stranger")
+    TripParticipant.objects.create(trip=trip, user=editor, role=TripParticipant.Role.EDITOR)
+    TripParticipant.objects.create(trip=trip, user=viewer, role=TripParticipant.Role.VIEWER)
+    return {"editor": editor, "viewer": viewer, "stranger": stranger}
 
 
 @pytest.fixture

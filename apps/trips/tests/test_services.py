@@ -1,10 +1,64 @@
 from datetime import date
+from decimal import Decimal
 
 import pytest
 from django.core.exceptions import ValidationError
 
+from apps.itinerary.models import Activity, Destination
 from apps.trips.models import Trip, TripParticipant
-from apps.trips.services import create_trip, ensure_owner_membership
+from apps.trips.services import clone_trip, create_trip, ensure_owner_membership
+
+
+def row_counts():
+    return {
+        model.__name__: model.objects.count()
+        for model in (Trip, TripParticipant, Destination, Activity)
+    }
+
+
+@pytest.mark.django_db
+class TestCloneTrip:
+    @pytest.fixture
+    def source(self, trip, destination, make_activity):
+        make_activity(cost=Decimal("12.00"))
+        make_activity(name="Shibuya", cost=Decimal("0.00"))
+        return trip
+
+    def test_copies_everything_for_new_owner(self, source, make_user):
+        alice = make_user("alice")
+
+        copy = clone_trip(source, owner=alice)
+
+        assert copy.owner == alice
+        assert copy.title == "Copie de Voyage au Japon"
+        assert [d.city for d in copy.destinations.all()] == ["Tokyo"]
+        assert Activity.objects.filter(destination__trip=copy).count() == 2
+        assert list(copy.participants.all()) == [alice]
+
+    def test_long_title_is_truncated(self, source, owner):
+        source.title = "x" * 200
+        source.save()
+        assert len(clone_trip(source, owner=owner).title) == 200
+
+    def test_failure_midway_rolls_everything_back(self, source, owner, monkeypatch):
+        """Démonstration de transaction.atomic : l'échec de la copie des activités
+        annule aussi le voyage, son participant owner et les destinations déjà insérés."""
+        before = row_counts()
+        inserted = {}
+
+        def failing_bulk_create(objs, *args, **kwargs):
+            # Les lignes précédentes existent bien à ce moment, dans la transaction.
+            inserted.update(row_counts())
+            raise RuntimeError("panne simulée pendant la copie des activités")
+
+        monkeypatch.setattr(Activity.objects, "bulk_create", failing_bulk_create)
+
+        with pytest.raises(RuntimeError, match="panne simulée"):
+            clone_trip(source, owner=owner)
+
+        assert inserted == {**before, "Trip": 2, "TripParticipant": 2, "Destination": 2}
+        assert row_counts() == before
+        assert not Trip.objects.filter(title="Copie de Voyage au Japon").exists()
 
 
 @pytest.mark.django_db

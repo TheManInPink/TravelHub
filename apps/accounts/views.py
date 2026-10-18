@@ -5,7 +5,7 @@ from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
-from apps.core.openapi import THROTTLED, UNAUTHORIZED, VALIDATION_ERROR
+from apps.core.openapi import THROTTLED, UNAUTHORIZED, VALIDATION_ERROR, error_response
 
 from .serializers import (
     LogoutSerializer,
@@ -18,7 +18,9 @@ from .serializers import (
 TAG = "Authentification"
 
 EXAMPLE_TOKENS = {"access": "eyJhbGciOiJIUzI1NiIs…", "refresh": "eyJhbGciOiJIUzI1NiIs…"}
-INVALID_TOKEN = OpenApiResponse(description="Jeton invalide, expiré ou déjà révoqué.")
+INVALID_TOKEN = error_response(
+    "Jeton invalide, expiré ou déjà révoqué", "token_not_valid", "Le jeton est invalide ou expiré"
+)
 
 
 class RegisterView(generics.CreateAPIView):

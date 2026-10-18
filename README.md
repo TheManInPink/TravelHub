@@ -90,6 +90,14 @@ Documentation interactive : `/api/docs/` (Swagger UI), `/api/redoc/` (ReDoc), sc
 | GET | `/api/auth/me/` | Profil de l'utilisateur connecté |
 | GET, POST | `/api/trips/` | Mes voyages (paginés par 20), création |
 | GET, PUT, PATCH, DELETE | `/api/trips/{id}/` | Détail avec destinations et activités, modification, suppression |
+| GET | `/api/trips/{id}/stats/` | Coût total, budget restant, coût moyen ; nombre, somme et moyenne par catégorie |
+| POST | `/api/trips/{id}/clone/` | Copie (brouillon) du voyage, de ses destinations et activités, en une transaction |
+| GET, POST | `/api/trips/{id}/participants/` | Participants ; ajout par courriel (`email`, `role` editor ou viewer) |
+| PATCH, DELETE | `/api/trips/{id}/participants/{user_id}/` | Changement de rôle (`owner` transfère la propriété), retrait |
+| GET, POST | `/api/destinations/` | Destinations de mes voyages, création (`trip` dans le corps) |
+| GET, PUT, PATCH, DELETE | `/api/destinations/{id}/` | Détail, modification, suppression |
+| GET, POST | `/api/activities/` | Activités de mes voyages, création (`destination` dans le corps) |
+| GET, PUT, PATCH, DELETE | `/api/activities/{id}/` | Détail, modification, suppression |
 
 Tout est authentifié par défaut (`Authorization: Bearer <access>`). Dans Swagger : `POST /api/auth/token/` → *Try it out*, copier `access`, bouton **Authorize**, coller le jeton (sans `Bearer`).
 
@@ -104,7 +112,42 @@ Accès aux voyages :
 
 Un non-participant reçoit 404 et non 403 : l'API ne révèle pas l'existence des voyages des autres.
 
-Paramètres de liste : `status`, `start_date__gte`, `end_date__lte`, `title__icontains`, `search` (titre et description), `ordering` (`start_date`, `title`, `created_at`, préfixe `-` pour décroissant), `page`.
+Les destinations et activités suivent les droits de leur voyage : lecture pour tout participant, création, modification et suppression pour le propriétaire et les éditeurs. À la création, un voyage (ou une destination) parent visible sans droit d'écriture donne 403, un parent inconnu ou invisible donne 404.
+
+Actions sur un voyage :
+
+| Action | Propriétaire | Éditeur | Lecteur | Non participant |
+| --- | --- | --- | --- | --- |
+| `stats`, `clone`, liste des participants | 200 / 201 | 200 / 201 | 200 / 201 | 404 |
+| Ajout, changement de rôle, retrait d'un participant | 201 / 200 / 204 | 403 | 403 | 404 |
+
+Le propriétaire ne peut être ni retiré ni rétrogradé (400) : il transfère d'abord la propriété en donnant le rôle `owner` à un autre participant, et devient alors éditeur.
+
+Paramètres de liste :
+
+| Ressource | Filtres | `ordering` |
+| --- | --- | --- |
+| `/api/trips/` | `status`, `start_date__gte`, `end_date__lte`, `title__icontains`, `search` (titre, description) | `start_date` (défaut), `title`, `created_at` |
+| `/api/destinations/` | `trip`, `country_code`, `arrival_date__gte`, `departure_date__lte`, `search` (ville, pays) | `order` (défaut, par voyage), `arrival_date`, `city` |
+| `/api/activities/` | `trip`, `destination`, `category`, `date`, `date__gte`, `date__lte`, `search` (nom, description) | `cost`, `date`, `name` ; chronologique par défaut |
+
+Préfixe `-` pour l'ordre décroissant ; `page` pour la pagination.
+
+### Format des erreurs
+
+Toutes les erreurs ont la même forme :
+
+```json
+{
+  "error": {
+    "code": "validation_error",
+    "message": "Les données envoyées sont invalides.",
+    "details": {"end_date": ["La date de fin doit être postérieure ou égale à la date de début."]}
+  }
+}
+```
+
+`code` vaut notamment `validation_error`, `integrity_error`, `not_authenticated`, `token_not_valid`, `permission_denied`, `not_found` ou `throttled`. `details` contient les erreurs par champ (`non_field_errors` pour les erreurs globales), un objet vide sinon. Le gestionnaire (`apps/core/exceptions.py`) convertit aussi en 400 les `ValidationError` de Django levées par les services et les `IntegrityError` ; dans ce dernier cas, le message est celui de la contrainte PostgreSQL violée.
 
 ## Structure
 

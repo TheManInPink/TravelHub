@@ -1,4 +1,9 @@
 from rest_framework import serializers
+from rest_framework.exceptions import NotFound, PermissionDenied
+
+from apps.core.permissions import IsTripEditor
+from apps.core.serializers import ModelCleanMixin
+from apps.trips.models import Trip
 
 from .models import Activity, Destination
 
@@ -32,3 +37,102 @@ class NestedDestinationSerializer(serializers.ModelSerializer):
             "activities",
         ]
         read_only_fields = fields
+
+
+class EditableParentField(serializers.PrimaryKeyRelatedField):
+    """Voyage ou destination auquel rattacher l'objet créé ou modifié.
+
+    Le parent est cherché parmi les objets visibles par l'utilisateur : inconnu ou
+    invisible, il donne 404 comme un GET ; visible sans droit d'écriture, 403.
+    NotFound et PermissionDenied ne sont pas des ValidationError : elles interrompent
+    la validation et l'emportent sur les erreurs des autres champs.
+    """
+
+    def __init__(self, *, trip_lookup, **kwargs):
+        # Chemin du parent vers son voyage : "pk" pour un Trip, "trip" pour une Destination.
+        self.trip_lookup = trip_lookup
+        super().__init__(**kwargs)
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        request = self.context.get("request")
+        if request is None:  # génération du schéma OpenAPI
+            return queryset
+        visible = Trip.objects.visible_to(request.user)
+        return queryset.filter(**{f"{self.trip_lookup}__in": visible})
+
+    def to_internal_value(self, data):
+        try:
+            parent = super().to_internal_value(data)
+        except serializers.ValidationError as exc:
+            if exc.get_codes() == ["does_not_exist"]:
+                name = self.queryset.model._meta.verbose_name
+                raise NotFound(f"{name.capitalize()} introuvable.") from exc
+            raise
+        if not IsTripEditor().has_object_permission(self.context["request"], None, parent):
+            raise PermissionDenied(IsTripEditor.message)
+        return parent
+
+
+class UpperCaseCharField(serializers.CharField):
+    """Met la valeur en majuscules avant les validateurs : « jp » devient « JP »."""
+
+    def to_internal_value(self, data):
+        return super().to_internal_value(data).upper()
+
+
+class DestinationSerializer(ModelCleanMixin, serializers.ModelSerializer):
+    trip = EditableParentField(
+        queryset=Trip.objects.all(),
+        trip_lookup="pk",
+        help_text="Voyage dont vous êtes propriétaire ou éditeur.",
+    )
+    country_code = UpperCaseCharField(
+        max_length=2,
+        validators=Destination._meta.get_field("country_code").validators,
+        help_text="Code ISO 3166-1 alpha-2, par exemple JP.",
+    )
+
+    class Meta:
+        model = Destination
+        fields = [
+            "id",
+            "trip",
+            "order",
+            "city",
+            "country",
+            "country_code",
+            "arrival_date",
+            "departure_date",
+            "latitude",
+            "longitude",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["created_at", "updated_at"]
+
+
+class ActivitySerializer(ModelCleanMixin, serializers.ModelSerializer):
+    destination = EditableParentField(
+        queryset=Destination.objects.select_related("trip"),
+        trip_lookup="trip",
+        help_text="Destination d'un voyage dont vous êtes propriétaire ou éditeur.",
+    )
+    trip = serializers.IntegerField(source="destination.trip_id", read_only=True)
+
+    class Meta:
+        model = Activity
+        fields = [
+            "id",
+            "destination",
+            "trip",
+            "name",
+            "description",
+            "category",
+            "date",
+            "start_time",
+            "cost",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["created_at", "updated_at"]

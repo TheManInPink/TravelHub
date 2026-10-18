@@ -59,3 +59,19 @@ class IsTripOwner(BasePermission):
 
     def has_object_permission(self, request, view, obj):
         return get_trip(obj).owner_id == request.user.pk
+
+
+class TripRolePermissionMixin:
+    """Pour un ViewSet : ajoute aux permissions par défaut la permission objet de l'action.
+
+    object_permission_by_action associe une action à IsTripEditor ou IsTripOwner ;
+    les actions absentes (lectures) exigent IsTripMember.
+    """
+
+    object_permission_by_action = {}
+
+    def get_object_permission_class(self):
+        return self.object_permission_by_action.get(self.action, IsTripMember)
+
+    def get_permissions(self):
+        return [*super().get_permissions(), self.get_object_permission_class()()]

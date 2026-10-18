@@ -1,16 +1,15 @@
-import copy
-
-from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
 
 from apps.accounts.serializers import UserSummarySerializer
+from apps.core.serializers import ModelCleanMixin
+from apps.itinerary.models import Activity
 from apps.itinerary.serializers import NestedDestinationSerializer
 
-from .models import Trip
+from .models import Trip, TripParticipant
 from .services import create_trip
 
 
-class TripSerializer(serializers.ModelSerializer):
+class TripSerializer(ModelCleanMixin, serializers.ModelSerializer):
     """Voyage en liste, création et modification.
 
     destination_count, activity_count et total_cost proviennent de
@@ -54,17 +53,9 @@ class TripSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {"end_date": "La date de fin doit être postérieure ou égale à la date de début."}
             )
-        if self.instance is not None:
-            # Trip.clean() refuse de raccourcir un voyage en laissant des destinations
-            # hors de ses dates ; on l'applique à une copie pour ne pas modifier l'instance.
-            candidate = copy.copy(self.instance)
-            for field, value in attrs.items():
-                setattr(candidate, field, value)
-            try:
-                candidate.clean()
-            except DjangoValidationError as exc:
-                raise serializers.ValidationError({"non_field_errors": list(exc.messages)}) from exc
-        return attrs
+        # ModelCleanMixin applique ensuite Trip.clean(), qui refuse de raccourcir un voyage
+        # en laissant des destinations hors de ses dates.
+        return super().validate(attrs)
 
     def create(self, validated_data):
         return create_trip(owner=self.context["request"].user, **validated_data)
@@ -77,3 +68,74 @@ class TripDetailSerializer(TripSerializer):
 
     class Meta(TripSerializer.Meta):
         fields = [*TripSerializer.Meta.fields, "destinations"]
+
+
+class TripCloneSerializer(serializers.Serializer):
+    title = serializers.CharField(
+        max_length=Trip._meta.get_field("title").max_length,
+        required=False,
+        help_text="Titre de la copie ; « Copie de <titre> » par défaut.",
+    )
+
+
+class CategoryStatsSerializer(serializers.Serializer):
+    category = serializers.ChoiceField(choices=Activity.Category.choices)
+    label = serializers.CharField()
+    count = serializers.IntegerField()
+    total_cost = serializers.DecimalField(max_digits=12, decimal_places=2)
+    average_cost = serializers.DecimalField(max_digits=12, decimal_places=2)
+
+
+class TripStatsSerializer(serializers.Serializer):
+    trip = serializers.IntegerField()
+    budget = serializers.DecimalField(max_digits=10, decimal_places=2, allow_null=True)
+    total_cost = serializers.DecimalField(max_digits=12, decimal_places=2)
+    remaining_budget = serializers.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        allow_null=True,
+        help_text="Budget moins le coût total ; négatif en cas de dépassement, null sans budget.",
+    )
+    destination_count = serializers.IntegerField()
+    activity_count = serializers.IntegerField()
+    average_cost = serializers.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        allow_null=True,
+        help_text="Coût moyen d'une activité ; null sans activité.",
+    )
+    by_category = CategoryStatsSerializer(many=True)
+
+
+class ParticipantSerializer(serializers.ModelSerializer):
+    user = UserSummarySerializer(read_only=True)
+    invited_by = UserSummarySerializer(read_only=True)
+
+    class Meta:
+        model = TripParticipant
+        fields = ["user", "role", "joined_at", "invited_by"]
+        read_only_fields = fields
+
+
+# Rôles attribuables à l'ajout : la propriété se transfère ensuite par changement de rôle.
+INVITABLE_ROLES = [
+    (role, label)
+    for role, label in TripParticipant.Role.choices
+    if role != TripParticipant.Role.OWNER
+]
+
+
+class ParticipantCreateSerializer(serializers.Serializer):
+    email = serializers.EmailField(help_text="Courriel d'un utilisateur inscrit.")
+    role = serializers.ChoiceField(
+        choices=INVITABLE_ROLES,
+        default=TripParticipant.Role.VIEWER,
+        help_text="Pour transférer la propriété, modifiez ensuite le rôle en owner.",
+    )
+
+
+class ParticipantRoleSerializer(serializers.Serializer):
+    role = serializers.ChoiceField(
+        choices=TripParticipant.Role.choices,
+        help_text="owner transfère la propriété du voyage ; l'ancien propriétaire devient éditeur.",
+    )

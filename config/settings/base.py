@@ -154,6 +154,8 @@ REST_FRAMEWORK = {
         "user": env("THROTTLE_USER_RATE", default="1000/hour"),
     },
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+    # Enveloppe {"error": {"code", "message", "details"}} pour toutes les erreurs.
+    "EXCEPTION_HANDLER": "apps.core.exceptions.exception_handler",
 }
 
 
@@ -185,4 +187,9 @@ SPECTACULAR_SETTINGS = {
     # n'apparaissent pas dans les corps de requête.
     "COMPONENT_SPLIT_REQUEST": True,
     "SWAGGER_UI_SETTINGS": {"persistAuthorization": True},
+    # Deux champs « role » aux choix différents : on nomme chaque énumération.
+    "ENUM_NAME_OVERRIDES": {
+        "ParticipantRoleEnum": "apps.trips.models.ParticipantRole",
+        "InvitableRoleEnum": "apps.trips.serializers.INVITABLE_ROLES",
+    },
 }

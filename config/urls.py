@@ -12,6 +12,7 @@ urlpatterns = [
     path("admin/", admin.site.urls),
     path("api/auth/", include("apps.accounts.urls")),
     path("api/", include("apps.trips.urls")),
+    path("api/", include("apps.itinerary.urls")),
     # Documentation OpenAPI, publique : SPECTACULAR_SETTINGS["SERVE_PERMISSIONS"] vaut AllowAny.
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path("api/docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"),

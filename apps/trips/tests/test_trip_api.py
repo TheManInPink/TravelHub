@@ -25,15 +25,6 @@ PAYLOAD = {
 }
 
 
-@pytest.fixture
-def members(trip, make_user):
-    """Un éditeur, un lecteur et un utilisateur étranger au voyage du propriétaire."""
-    editor, viewer, stranger = make_user("editor"), make_user("viewer"), make_user("stranger")
-    TripParticipant.objects.create(trip=trip, user=editor, role=Role.EDITOR)
-    TripParticipant.objects.create(trip=trip, user=viewer, role=Role.VIEWER)
-    return {"editor": editor, "viewer": viewer, "stranger": stranger}
-
-
 @pytest.mark.django_db
 class TestAuthenticationRequired:
     def test_list_requires_authentication(self, api_client):
@@ -64,7 +55,7 @@ class TestCreate:
             LIST_URL, {**PAYLOAD, "start_date": "2027-07-10", "end_date": "2027-07-01"}
         )
         assert response.status_code == 400
-        assert "end_date" in response.data
+        assert "end_date" in response.data["error"]["details"]
         assert not Trip.objects.exists()
 
     @pytest.mark.parametrize(
@@ -74,7 +65,7 @@ class TestCreate:
     def test_rejects_invalid_field(self, client_for, owner, field, value):
         response = client_for(owner).post(LIST_URL, {**PAYLOAD, field: value})
         assert response.status_code == 400
-        assert field in response.data
+        assert field in response.data["error"]["details"]
 
 
 @pytest.mark.django_db
@@ -223,13 +214,13 @@ class TestUpdateValidation:
         # Seule end_date est envoyée : elle est comparée au start_date existant (2027-06-01).
         response = client_for(owner).patch(detail_url(trip), {"end_date": "2027-05-01"})
         assert response.status_code == 400
-        assert "end_date" in response.data
+        assert "end_date" in response.data["error"]["details"]
 
     def test_cannot_shrink_trip_below_its_destinations(self, client_for, owner, trip, destination):
         # La destination de Tokyo va du 1er au 7 juin.
         response = client_for(owner).patch(detail_url(trip), {"end_date": "2027-06-05"})
         assert response.status_code == 400
-        assert "non_field_errors" in response.data
+        assert "non_field_errors" in response.data["error"]["details"]
         trip.refresh_from_db()
         assert trip.end_date == date(2027, 6, 20)
 

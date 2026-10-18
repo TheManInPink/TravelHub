@@ -64,25 +64,25 @@ class TestRegister:
         response = api_client.post(REGISTER_URL, self.payload)
 
         assert response.status_code == 400
-        assert "email" in response.data
+        assert "email" in response.data["error"]["details"]
 
     def test_rejects_duplicate_username(self, api_client, make_user):
         make_user("alice")
         response = api_client.post(REGISTER_URL, {**self.payload, "email": "autre@example.com"})
         assert response.status_code == 400
-        assert "username" in response.data
+        assert "username" in response.data["error"]["details"]
 
     @pytest.mark.parametrize("password", ["123", "password", "alice2027"])
     def test_rejects_weak_password(self, api_client, password):
         response = api_client.post(REGISTER_URL, {**self.payload, "password": password})
         assert response.status_code == 400
-        assert "password" in response.data
+        assert "password" in response.data["error"]["details"]
         assert not get_user_model().objects.filter(username="alice").exists()
 
     def test_requires_email(self, api_client):
         response = api_client.post(REGISTER_URL, {**self.payload, "email": ""})
         assert response.status_code == 400
-        assert "email" in response.data
+        assert "email" in response.data["error"]["details"]
 
 
 @pytest.mark.django_db
@@ -136,7 +136,7 @@ class TestLogout:
         response = api_client.post(LOGOUT_URL, {"refresh": tokens["refresh"]})
 
         assert response.status_code == 400
-        assert "refresh" in response.data
+        assert "refresh" in response.data["error"]["details"]
 
     def test_cannot_revoke_another_users_token(self, api_client, owner, make_user):
         make_user("bob")
