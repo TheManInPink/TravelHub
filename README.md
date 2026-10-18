@@ -57,6 +57,16 @@ powershell -ExecutionPolicy Bypass -File .\scripts\db\reset_postgres_password.ps
 
 Le script sauvegarde `pg_hba.conf`, autorise temporairement les connexions locales sans mot de passe, définit le nouveau mot de passe, restaure toujours la configuration d'origine, puis crée le rôle et la base de TravelHub.
 
+## Données de démonstration
+
+```powershell
+python manage.py seed_demo                         # 3 utilisateurs, 4 voyages, destinations et activités
+python manage.py seed_demo --reset                 # supprime puis recrée les données de démo
+python manage.py seed_demo --reset --password "…"  # comptes de démo avec un mot de passe
+```
+
+La commande est idempotente : la relancer ne crée pas de doublons. Les comptes de démo (`alice`, `mamadou`, `yuki`) ont un courriel en `@demo.travelhub.example` ; `--reset` ne supprime que ces comptes et leurs voyages. Sans `--password` ni variable `DEMO_PASSWORD`, ils ne peuvent pas se connecter. Les dates sont relatives au jour de l'exécution : un voyage terminé, un en cours, un planifié et un brouillon, à Montréal, Paris, Tokyo et Dakar. Pour les consulter, connectez-vous à `/admin/` avec le superutilisateur.
+
 ## Paramètres
 
 | Module | Usage |

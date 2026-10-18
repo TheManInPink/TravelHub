@@ -1,10 +1,12 @@
 """Fixtures pytest partagées par toutes les applications."""
 
+import io
 import itertools
 from datetime import date
 
 import pytest
 from django.contrib.auth import get_user_model
+from django.core.management import call_command
 
 from apps.itinerary.models import Activity, Destination
 from apps.trips.services import create_trip
@@ -80,3 +82,10 @@ def make_activity(destination):
         return Activity.objects.create(**fields)
 
     return _make
+
+
+@pytest.fixture
+def demo_data(db, monkeypatch):
+    """Base remplie par la commande seed_demo (comptes de démo sans mot de passe)."""
+    monkeypatch.delenv("DEMO_PASSWORD", raising=False)
+    call_command("seed_demo", stdout=io.StringIO())
