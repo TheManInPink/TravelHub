@@ -1,0 +1,39 @@
+\documentclass[12pt,twoside,letterpaper]{article}
+%NOTE: This report format is 
+
+\newcommand{\reporttitle}{{\huge \textsc{Rapport} \\ \vspace{0.5cm} {\Large Travail Pratique}}}
+
+\newcommand{\reportauthorOne}{Nom \& Prénom}
+\newcommand{\reportauthorTwo}{Nom \& Prénom}
+\newcommand{\reportauthorThree}{Nom \& Prénom}
+% \newcommand{\cidOne}{your id number}
+\newcommand{\reportProfessor}{Yacine Yaddaden, Ph. D.}
+% \newcommand{\cidTwo}{your id number}
+\newcommand{\reporttype}{Coursework}
+\bibliographystyle{plain}
+
+% include files that load packages and define macros
+\input{includes} % various packages needed for maths etc.
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{document}
+% front page
+\input{titlepage}
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%% table of content
+%If a table of content is needed, simply uncomment the following lines
+\tableofcontents
+\newpage
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%% Main document
+\section{Introduction}
+\cite{ref_01}
+
+\newpage
+\bibliography{report_v1.0}
+
+
+\end{document}
