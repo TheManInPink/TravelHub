@@ -4,10 +4,13 @@ from rest_framework.exceptions import NotFound, PermissionDenied
 from apps.core.permissions import IsTripEditor
 from apps.core.serializers import ModelCleanMixin
 from apps.integrations.serializers import (
+    CountrySerializer,
     CurrentWeatherSerializer,
     DailyForecastSerializer,
+    ForecastSerializer,
     UnitsSerializer,
 )
+from apps.integrations.services.aggregator import SOURCES
 from apps.trips.models import Trip
 
 from .models import Activity, Destination
@@ -22,10 +25,8 @@ class NestedActivitySerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
-class NestedDestinationSerializer(serializers.ModelSerializer):
-    """Destination et ses activités, affichées en lecture seule dans le détail d'un voyage."""
-
-    activities = NestedActivitySerializer(many=True, read_only=True)
+class DestinationSummarySerializer(serializers.ModelSerializer):
+    """Destination en lecture seule, sans ses activités."""
 
     class Meta:
         model = Destination
@@ -39,8 +40,17 @@ class NestedDestinationSerializer(serializers.ModelSerializer):
             "departure_date",
             "latitude",
             "longitude",
-            "activities",
         ]
+        read_only_fields = fields
+
+
+class NestedDestinationSerializer(DestinationSummarySerializer):
+    """Destination et ses activités, affichées en lecture seule dans le détail d'un voyage."""
+
+    activities = NestedActivitySerializer(many=True, read_only=True)
+
+    class Meta(DestinationSummarySerializer.Meta):
+        fields = [*DestinationSummarySerializer.Meta.fields, "activities"]
         read_only_fields = fields
 
 
@@ -149,6 +159,44 @@ class DestinationWeatherSerializer(serializers.Serializer):
         source="forecast.daily",
         many=True,
         help_text="Jours du séjour compris dans les 16 jours de prévision.",
+    )
+
+
+class TripSummarySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Trip
+        fields = ["id", "title", "status", "start_date", "end_date", "budget"]
+        read_only_fields = fields
+
+
+class SourceWarningSerializer(serializers.Serializer):
+    source = serializers.ChoiceField(
+        choices=SOURCES, help_text="Bloc de la réponse resté vide (null)."
+    )
+    code = serializers.CharField(
+        help_text="Code d'erreur du service externe, ex. external_service_unavailable."
+    )
+    message = serializers.CharField()
+
+
+class DestinationOverviewSerializer(serializers.Serializer):
+    """Vue d'ensemble produite par apps.integrations.services.aggregator."""
+
+    destination = DestinationSummarySerializer()
+    trip = TripSummarySerializer(source="destination.trip")
+    activities = NestedActivitySerializer(many=True)
+    activity_count = serializers.IntegerField()
+    total_cost = serializers.DecimalField(
+        max_digits=12, decimal_places=2, help_text="Somme des coûts des activités."
+    )
+    weather = ForecastSerializer(
+        allow_null=True, help_text="Open-Meteo ; null si indisponible (voir warnings)."
+    )
+    country = CountrySerializer(
+        allow_null=True, help_text="Countries GraphQL ; null si indisponible (voir warnings)."
+    )
+    warnings = SourceWarningSerializer(
+        many=True, help_text="Une entrée par source en échec ; vide si tout a répondu."
     )
 
 

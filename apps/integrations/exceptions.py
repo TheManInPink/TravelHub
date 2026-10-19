@@ -24,6 +24,14 @@ class LocationNotFound(IntegrationError):
     default_message = "Lieu introuvable."
 
 
+class CountryNotFound(IntegrationError):
+    """Countries GraphQL ne connaît pas le code pays demandé."""
+
+    status_code = 404
+    code = "country_not_found"
+    default_message = "Pays introuvable."
+
+
 class NoDataAvailable(IntegrationError):
     """Le service répond, mais n'a pas de données pour la période demandée."""
 

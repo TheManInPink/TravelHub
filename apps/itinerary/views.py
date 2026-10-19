@@ -18,13 +18,27 @@ from apps.core.openapi import (
     VALIDATION_ERROR,
     ApiErrorSerializer,
     error_body,
+    error_response,
 )
 from apps.core.permissions import IsTripEditor, TripRolePermissionMixin
+from apps.integrations.exceptions import (
+    CountryNotFound,
+    ExternalServiceTimeout,
+    ExternalServiceUnavailable,
+)
+from apps.integrations.serializers import CountrySerializer
+from apps.integrations.services.aggregator import get_destination_overview
+from apps.integrations.services.countries import get_country
 from apps.trips.models import Trip
 
 from .filters import ActivityFilter, DestinationFilter
 from .models import Activity, Destination
-from .serializers import ActivitySerializer, DestinationSerializer, DestinationWeatherSerializer
+from .serializers import (
+    ActivitySerializer,
+    DestinationOverviewSerializer,
+    DestinationSerializer,
+    DestinationWeatherSerializer,
+)
 from .services import destination_forecast
 
 COMMON_ERRORS = {401: UNAUTHORIZED, 429: THROTTLED}
@@ -85,6 +99,90 @@ WEATHER_EXAMPLE = OpenApiExample(
     },
     response_only=True,
 )
+
+COUNTRY_NOT_FOUND = OpenApiResponse(
+    response=ApiErrorSerializer,
+    description="Destination introuvable ou code pays inconnu de Countries GraphQL",
+    examples=[
+        OpenApiExample("Destination introuvable", value=error_body("not_found", "Non trouvé.")),
+        OpenApiExample(
+            "Code pays inconnu",
+            value=error_body(
+                CountryNotFound.code, "Pays introuvable : ZZ n'est pas un code pays connu."
+            ),
+        ),
+    ],
+)
+COUNTRY_UNAVAILABLE = error_response(
+    "Countries GraphQL injoignable, en erreur ou réponse inattendue",
+    ExternalServiceUnavailable.code,
+    "Countries GraphQL est momentanément indisponible (erreur 502).",
+)
+COUNTRY_TIMEOUT = error_response(
+    "Countries GraphQL trop lent",
+    ExternalServiceTimeout.code,
+    "Countries GraphQL n'a pas répondu en 5 secondes.",
+)
+COUNTRY_VALUE = {
+    "code": "JP",
+    "name": "Japan",
+    "native": "日本",
+    "capital": "Tokyo",
+    "emoji": "🇯🇵",
+    "currency": "JPY",
+    "currencies": ["JPY"],
+    "continent": "Asia",
+    "languages": [{"name": "Japanese", "native": "日本語"}],
+}
+OVERVIEW_EXAMPLES = [
+    OpenApiExample(
+        "Open-Meteo indisponible",
+        value={
+            "destination": {
+                "id": 3,
+                "order": 2,
+                "city": "Kyoto",
+                "country": "Japon",
+                "country_code": "JP",
+                "arrival_date": "2026-10-20",
+                "departure_date": "2026-10-23",
+                "latitude": "35.021070",
+                "longitude": "135.753850",
+            },
+            "trip": {
+                "id": 12,
+                "title": "Voyage au Japon",
+                "status": "planned",
+                "start_date": "2026-10-19",
+                "end_date": "2026-10-28",
+                "budget": "4500.00",
+            },
+            "activities": [
+                {
+                    "id": 7,
+                    "name": "Cérémonie du thé",
+                    "description": "Maison de thé à Gion.",
+                    "category": "culture",
+                    "date": "2026-10-21",
+                    "start_time": "14:00:00",
+                    "cost": "45.00",
+                }
+            ],
+            "activity_count": 1,
+            "total_cost": "45.00",
+            "weather": None,
+            "country": COUNTRY_VALUE,
+            "warnings": [
+                {
+                    "source": "weather",
+                    "code": "external_service_unavailable",
+                    "message": "Open-Meteo est momentanément indisponible (erreur 503).",
+                }
+            ],
+        },
+        response_only=True,
+    )
+]
 
 EDITOR_ACTIONS = {
     "create": IsTripEditor,
@@ -216,6 +314,46 @@ class DestinationViewSet(TripRolePermissionMixin, viewsets.ModelViewSet):
             {"destination": destination, "forecast": forecast}
         )
         return Response(serializer.data)
+
+    @extend_schema(
+        summary="Pays d'une destination",
+        description=(
+            "Nom, nom local, capitale, drapeau, monnaies, continent et langues du pays de la "
+            "destination (code pays), fournis en anglais par Countries GraphQL. Ouvert à tout "
+            "participant. Réponses en cache 24 heures."
+        ),
+        responses={
+            200: CountrySerializer,
+            404: COUNTRY_NOT_FOUND,
+            503: COUNTRY_UNAVAILABLE,
+            504: COUNTRY_TIMEOUT,
+            **COMMON_ERRORS,
+        },
+        examples=[OpenApiExample("Japon", value=COUNTRY_VALUE, response_only=True)],
+    )
+    @action(detail=True, methods=["get"])
+    def country(self, request, pk=None):
+        destination = self.get_object()
+        return Response(CountrySerializer(get_country(destination.country_code)).data)
+
+    @extend_schema(
+        summary="Vue d'ensemble d'une destination",
+        description=(
+            "Destination, voyage, activités et coût total (base de données), météo du séjour "
+            "(Open-Meteo, comme /weather/) et pays (Countries GraphQL, comme /country/). Les "
+            "deux services sont interrogés en parallèle. Ouvert à tout participant.\n\n"
+            "Dégradation partielle : si un service échoue (indisponible, délai dépassé, ville "
+            "ou pays inconnu, séjour hors des 16 jours de prévision), la réponse reste un 200, "
+            "son bloc `weather` ou `country` vaut `null` et `warnings` en donne la raison."
+        ),
+        responses={200: DestinationOverviewSerializer, **OBJECT_ERRORS},
+        examples=OVERVIEW_EXAMPLES,
+    )
+    @action(detail=True, methods=["get"])
+    def overview(self, request, pk=None):
+        destination = self.get_object()
+        overview = get_destination_overview(destination)
+        return Response(DestinationOverviewSerializer(overview).data)
 
 
 @crud_schema(

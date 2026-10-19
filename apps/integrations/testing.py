@@ -1,4 +1,4 @@
-"""Réponses Open-Meteo factices pour les tests (bibliothèque responses)."""
+"""Réponses Open-Meteo et Countries GraphQL factices pour les tests (bibliothèque responses)."""
 
 import datetime
 
@@ -47,3 +47,18 @@ def forecast_payload(first_day=None, days=FORECAST_DAYS, weather_code=61):
             "weather_code": [weather_code] * days,
         },
     }
+
+
+def country_payload(**country):
+    country = {
+        "code": "JP",
+        "name": "Japan",
+        "native": "日本",
+        "capital": "Tokyo",
+        "emoji": "🇯🇵",
+        "currency": "JPY",
+        "continent": {"name": "Asia"},
+        "languages": [{"name": "Japanese", "native": "日本語"}],
+        **country,
+    }
+    return {"data": {"country": country}}

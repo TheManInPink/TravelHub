@@ -14,7 +14,6 @@ from apps.integrations.exceptions import (
     LocationNotFound,
     NoDataAvailable,
 )
-from apps.integrations.services import open_meteo
 from apps.integrations.services.open_meteo import (
     FORECAST_URL,
     GEOCODING_URL,
@@ -29,20 +28,6 @@ from apps.integrations.testing import forecast_payload, geocoding_payload
 
 def days_from_today(days):
     return timezone.localdate() + timedelta(days=days)
-
-
-@pytest.fixture
-def cache_timeouts(monkeypatch):
-    """Durée de mise en cache demandée pour chaque clé."""
-    timeouts = {}
-    original = open_meteo.cache.set
-
-    def spy(key, value, timeout):
-        timeouts[key.split(":")[1]] = timeout
-        original(key, value, timeout)
-
-    monkeypatch.setattr(open_meteo.cache, "set", spy)
-    return timeouts
 
 
 def kyoto_forecast(start=2, end=5):

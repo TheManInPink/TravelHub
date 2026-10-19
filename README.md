@@ -97,6 +97,8 @@ Documentation interactive : `/api/docs/` (Swagger UI), `/api/redoc/` (ReDoc), sc
 | GET, POST | `/api/destinations/` | Destinations de mes voyages, création (`trip` dans le corps) |
 | GET, PUT, PATCH, DELETE | `/api/destinations/{id}/` | Détail, modification, suppression |
 | GET | `/api/destinations/{id}/weather/` | Météo actuelle et prévisions du séjour (Open-Meteo) |
+| GET | `/api/destinations/{id}/country/` | Pays de la destination (Countries GraphQL) |
+| GET | `/api/destinations/{id}/overview/` | Destination, voyage, activités, coût total, météo et pays ; dégradation partielle |
 | GET, POST | `/api/activities/` | Activités de mes voyages, création (`destination` dans le corps) |
 | GET, PUT, PATCH, DELETE | `/api/activities/{id}/` | Détail, modification, suppression |
 
@@ -135,6 +137,30 @@ Le propriétaire ne peut être ni retiré ni rétrogradé (400) : il transfère 
 
 Le service (`apps/integrations/services/open_meteo.py`) renvoie des dataclasses. Ses exceptions (`apps/integrations/exceptions.py`) ne dépendent pas de DRF, ce qui permettra de les réutiliser dans l'API GraphQL.
 
+### Pays (Countries GraphQL)
+
+`GET /api/destinations/{id}/country/` est ouvert à tout participant. La réponse décrit le pays du `country_code` de la destination : `code`, `name`, `native`, `capital`, `emoji` (drapeau), `currency` (tel que fourni, par exemple `USD,USN,USS`), `currencies` (la même chose en liste), `continent` et `languages` (`name`, `native`). Countries GraphQL fournit les noms en anglais.
+
+- Requête GraphQL paramétrée envoyée par POST à `https://countries.trevorblades.com/graphql` : le code pays passe dans `variables`, jamais dans le texte de la requête.
+- Cache Django : 24 heures. Même délai et mêmes essais qu'Open-Meteo (`apps/integrations/services/http.py`).
+- Erreurs : `country_not_found` (404, `country` vaut `null` pour ce code), `external_service_unavailable` (503 : service injoignable, 5xx, liste `errors` GraphQL non vide, réponse illisible), `external_service_timeout` (504).
+
+### Vue d'ensemble d'une destination
+
+`GET /api/destinations/{id}/overview/` réunit en une réponse `destination`, `trip`, `activities`, `activity_count` et `total_cost` (base de données), `weather` (comme `/weather/`) et `country` (comme `/country/`). Open-Meteo et Countries GraphQL sont interrogés en parallèle (`ThreadPoolExecutor`) pendant la lecture de la base ; les fils secondaires n'exécutent aucune requête SQL.
+
+Dégradation partielle : une source en échec ne fait pas échouer la réponse, qui reste un 200. Son bloc vaut `null` et `warnings` en donne la raison :
+
+```json
+"weather": null,
+"warnings": [
+  {"source": "weather", "code": "external_service_unavailable",
+   "message": "Open-Meteo est momentanément indisponible (erreur 503)."}
+]
+```
+
+Un séjour hors des 16 jours de prévision donne ainsi un avertissement `no_data_available` plutôt qu'un 404. L'agrégateur est dans `apps/integrations/services/aggregator.py`.
+
 Paramètres de liste :
 
 | Ressource | Filtres | `ordering` |
@@ -159,7 +185,7 @@ Toutes les erreurs ont la même forme :
 }
 ```
 
-`code` vaut notamment `validation_error`, `integrity_error`, `not_authenticated`, `token_not_valid`, `permission_denied`, `not_found`, `throttled`, ou pour les services externes `location_not_found`, `no_data_available`, `external_service_unavailable` et `external_service_timeout`. `details` contient les erreurs par champ (`non_field_errors` pour les erreurs globales), un objet vide sinon. Le gestionnaire (`apps/core/exceptions.py`) convertit aussi en 400 les `ValidationError` de Django levées par les services et les `IntegrityError` ; dans ce dernier cas, le message est celui de la contrainte PostgreSQL violée.
+`code` vaut notamment `validation_error`, `integrity_error`, `not_authenticated`, `token_not_valid`, `permission_denied`, `not_found`, `throttled`, ou pour les services externes `location_not_found`, `country_not_found`, `no_data_available`, `external_service_unavailable` et `external_service_timeout`. `details` contient les erreurs par champ (`non_field_errors` pour les erreurs globales), un objet vide sinon. Le gestionnaire (`apps/core/exceptions.py`) convertit aussi en 400 les `ValidationError` de Django levées par les services et les `IntegrityError` ; dans ce dernier cas, le message est celui de la contrainte PostgreSQL violée.
 
 ## Structure
 

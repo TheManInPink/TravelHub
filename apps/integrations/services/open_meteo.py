@@ -4,8 +4,7 @@
 - get_forecast() interroge https://api.open-meteo.com/v1/forecast : conditions actuelles
   et prévisions quotidiennes des 16 prochains jours ; cache 30 minutes.
 
-Chaque requête a un délai de 5 s et deux essais : une erreur réseau, un délai dépassé ou
-une réponse 5xx déclenchent le second essai, une réponse 4xx non. Seules les réponses
+Délai, nouvel essai et cache : voir apps.integrations.services.http. Seules les réponses
 exploitables sont mises en cache. Les échecs deviennent les exceptions de
 apps.integrations.exceptions ; les réponses deviennent des dataclasses compactes.
 """
@@ -13,26 +12,17 @@ apps.integrations.exceptions ; les réponses deviennent des dataclasses compacte
 import dataclasses
 import datetime
 import hashlib
-import logging
 from dataclasses import dataclass
 
-import requests
-from django.core.cache import cache
 from django.utils import timezone
 
-from apps.integrations.exceptions import (
-    ExternalServiceTimeout,
-    ExternalServiceUnavailable,
-    LocationNotFound,
-    NoDataAvailable,
-)
+from apps.integrations.exceptions import LocationNotFound, NoDataAvailable
 
-logger = logging.getLogger(__name__)
+from .http import cached, new_session, request_json
 
+SERVICE = "Open-Meteo"
 GEOCODING_URL = "https://geocoding-api.open-meteo.com/v1/search"
 FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
-TIMEOUT_SECONDS = 5
-ATTEMPTS = 2
 GEOCODING_CACHE_SECONDS = 7 * 24 * 60 * 60
 FORECAST_CACHE_SECONDS = 30 * 60
 FORECAST_DAYS = 16  # maximum d'Open-Meteo, aujourd'hui compris
@@ -81,8 +71,7 @@ WEATHER_LABELS = {
 }
 UNKNOWN_WEATHER = "Conditions inconnues"
 
-session = requests.Session()
-session.headers["User-Agent"] = "TravelHub/1.0"
+session = new_session()
 
 
 def weather_label(code):
@@ -245,49 +234,11 @@ def _parse_forecast(payload):
 
 
 def _fetch(url, params, cache_key, cache_seconds, parse):
-    """Réponse analysée par parse(), lue dans le cache ou demandée au service."""
-    payload = cache.get(cache_key)
-    from_cache = payload is not None
-    if not from_cache:
-        payload = _get_json(url, params)
-    try:
-        result = parse(payload)
-    except (AttributeError, KeyError, IndexError, TypeError, ValueError) as exc:
-        logger.error("Réponse inattendue d'Open-Meteo (%s) : %r", url, exc)
-        raise ExternalServiceUnavailable("Open-Meteo a renvoyé une réponse inattendue.") from exc
-    if not from_cache:
-        cache.set(cache_key, payload, cache_seconds)
-    return result
-
-
-def _get_json(url, params):
-    """GET avec délai et nouvel essai ; renvoie le JSON décodé."""
-    for attempt in range(1, ATTEMPTS + 1):
-        try:
-            response = session.get(url, params=params, timeout=TIMEOUT_SECONDS)
-        except requests.Timeout:
-            error = ExternalServiceTimeout(
-                f"Open-Meteo n'a pas répondu en {TIMEOUT_SECONDS} secondes."
-            )
-        except requests.RequestException:
-            error = ExternalServiceUnavailable("Open-Meteo est injoignable.")
-        else:
-            if response.status_code < 500:
-                break
-            error = ExternalServiceUnavailable(
-                f"Open-Meteo est momentanément indisponible (erreur {response.status_code})."
-            )
-        logger.warning("Open-Meteo, essai %d/%d échoué (%s) : %s", attempt, ATTEMPTS, url, error)
-    else:
-        raise error
-
-    if not response.ok:
-        # 4xx : la requête est refusée telle quelle, un nouvel essai n'y changerait rien.
-        logger.error("Open-Meteo a refusé la requête (%s) : %s", response.url, response.text[:200])
-        raise ExternalServiceUnavailable(
-            f"Open-Meteo a refusé la requête (erreur {response.status_code})."
-        )
-    try:
-        return response.json()
-    except ValueError as exc:
-        raise ExternalServiceUnavailable("Open-Meteo a renvoyé une réponse illisible.") from exc
+    """Réponse analysée par parse(), lue dans le cache ou demandée à Open-Meteo."""
+    return cached(
+        SERVICE,
+        cache_key,
+        cache_seconds,
+        lambda: request_json(session, SERVICE, "GET", url, params=params),
+        parse,
+    )
