@@ -6,6 +6,8 @@ Elles décrivent l'enveloppe produite par apps.core.exceptions.exception_handler
 from drf_spectacular.utils import OpenApiExample, OpenApiResponse
 from rest_framework import serializers
 
+from apps.integrations.exceptions import ExternalServiceTimeout, ExternalServiceUnavailable
+
 
 class ApiErrorBodySerializer(serializers.Serializer):
     code = serializers.CharField(
@@ -57,4 +59,14 @@ FORBIDDEN = error_response(
 NOT_FOUND = error_response("Introuvable ou non visible", "not_found", "Non trouvé.")
 THROTTLED = error_response(
     "Trop de requêtes", "throttled", "Requête ralentie. Disponible à nouveau dans 42 secondes."
+)
+SERVICE_UNAVAILABLE = error_response(
+    "Service externe injoignable ou en erreur",
+    ExternalServiceUnavailable.code,
+    "Open-Meteo est momentanément indisponible (erreur 500).",
+)
+GATEWAY_TIMEOUT = error_response(
+    "Service externe trop lent",
+    ExternalServiceTimeout.code,
+    "Open-Meteo n'a pas répondu en 5 secondes.",
 )

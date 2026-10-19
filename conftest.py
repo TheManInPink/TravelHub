@@ -5,6 +5,7 @@ import itertools
 from datetime import date
 
 import pytest
+import responses
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.core.management import call_command
@@ -24,6 +25,17 @@ def _clear_cache():
     cache.clear()
     yield
     cache.clear()
+
+
+@pytest.fixture
+def mock_http():
+    """Intercepte les requêtes HTTP de requests : aucune ne part sur le réseau.
+
+    Une requête non déclarée lève ConnectionError ; une réponse déclarée mais jamais
+    demandée fait échouer le test.
+    """
+    with responses.RequestsMock() as mock:
+        yield mock
 
 
 @pytest.fixture

@@ -96,6 +96,7 @@ Documentation interactive : `/api/docs/` (Swagger UI), `/api/redoc/` (ReDoc), sc
 | PATCH, DELETE | `/api/trips/{id}/participants/{user_id}/` | Changement de rôle (`owner` transfère la propriété), retrait |
 | GET, POST | `/api/destinations/` | Destinations de mes voyages, création (`trip` dans le corps) |
 | GET, PUT, PATCH, DELETE | `/api/destinations/{id}/` | Détail, modification, suppression |
+| GET | `/api/destinations/{id}/weather/` | Météo actuelle et prévisions du séjour (Open-Meteo) |
 | GET, POST | `/api/activities/` | Activités de mes voyages, création (`destination` dans le corps) |
 | GET, PUT, PATCH, DELETE | `/api/activities/{id}/` | Détail, modification, suppression |
 
@@ -123,6 +124,17 @@ Actions sur un voyage :
 
 Le propriétaire ne peut être ni retiré ni rétrogradé (400) : il transfère d'abord la propriété en donnant le rôle `owner` à un autre participant, et devient alors éditeur.
 
+### Météo (Open-Meteo)
+
+`GET /api/destinations/{id}/weather/` est ouvert à tout participant du voyage. La réponse contient les conditions actuelles (`temperature`, `wind_speed`, `precipitation`, `weather_code`) et, pour chaque jour du séjour compris dans les 16 jours de prévision, `temperature_max`, `temperature_min`, `precipitation_sum`, `wind_speed_max` et `weather_code`. Chaque code météo WMO est accompagné d'une `description` en français. Unités : °C, km/h, mm ; heures locales de la destination (`timezone`).
+
+- Une destination sans coordonnées est d'abord géocodée (ville et code pays). Ses `latitude` et `longitude` sont alors enregistrées et réutilisées aux appels suivants. Changer la ville ou le code pays sans fournir de nouvelles coordonnées les efface.
+- Cache Django : géocodage 7 jours, prévisions 30 minutes, par position arrondie à 4 décimales.
+- Chaque requête vers Open-Meteo a un délai de 5 s et deux essais. Le second essai n'a lieu qu'après une erreur réseau, un délai dépassé ou une réponse 5xx.
+- Erreurs : `location_not_found` (404, ville inconnue), `no_data_available` (404, séjour entièrement hors des 16 jours), `external_service_unavailable` (503, service injoignable, en erreur ou réponse illisible), `external_service_timeout` (504).
+
+Le service (`apps/integrations/services/open_meteo.py`) renvoie des dataclasses. Ses exceptions (`apps/integrations/exceptions.py`) ne dépendent pas de DRF, ce qui permettra de les réutiliser dans l'API GraphQL.
+
 Paramètres de liste :
 
 | Ressource | Filtres | `ordering` |
@@ -147,7 +159,7 @@ Toutes les erreurs ont la même forme :
 }
 ```
 
-`code` vaut notamment `validation_error`, `integrity_error`, `not_authenticated`, `token_not_valid`, `permission_denied`, `not_found` ou `throttled`. `details` contient les erreurs par champ (`non_field_errors` pour les erreurs globales), un objet vide sinon. Le gestionnaire (`apps/core/exceptions.py`) convertit aussi en 400 les `ValidationError` de Django levées par les services et les `IntegrityError` ; dans ce dernier cas, le message est celui de la contrainte PostgreSQL violée.
+`code` vaut notamment `validation_error`, `integrity_error`, `not_authenticated`, `token_not_valid`, `permission_denied`, `not_found`, `throttled`, ou pour les services externes `location_not_found`, `no_data_available`, `external_service_unavailable` et `external_service_timeout`. `details` contient les erreurs par champ (`non_field_errors` pour les erreurs globales), un objet vide sinon. Le gestionnaire (`apps/core/exceptions.py`) convertit aussi en 400 les `ValidationError` de Django levées par les services et les `IntegrityError` ; dans ce dernier cas, le message est celui de la contrainte PostgreSQL violée.
 
 ## Structure
 

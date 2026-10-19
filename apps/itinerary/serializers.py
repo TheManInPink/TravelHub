@@ -3,6 +3,11 @@ from rest_framework.exceptions import NotFound, PermissionDenied
 
 from apps.core.permissions import IsTripEditor
 from apps.core.serializers import ModelCleanMixin
+from apps.integrations.serializers import (
+    CurrentWeatherSerializer,
+    DailyForecastSerializer,
+    UnitsSerializer,
+)
 from apps.trips.models import Trip
 
 from .models import Activity, Destination
@@ -110,6 +115,41 @@ class DestinationSerializer(ModelCleanMixin, serializers.ModelSerializer):
             "updated_at",
         ]
         read_only_fields = ["created_at", "updated_at"]
+
+    def validate(self, attrs):
+        # Les coordonnées (souvent mémorisées par le géocodage) ne valent plus pour une
+        # autre ville : sans nouvelles coordonnées fournies, elles sont effacées.
+        if self.instance is not None and not {"latitude", "longitude"} & attrs.keys():
+            if any(
+                field in attrs and attrs[field] != getattr(self.instance, field)
+                for field in ("city", "country_code")
+            ):
+                attrs["latitude"] = attrs["longitude"] = None
+        return super().validate(attrs)
+
+
+class DestinationWeatherSerializer(serializers.Serializer):
+    """Météo d'une destination : {"destination": …, "forecast": Forecast d'Open-Meteo}."""
+
+    destination = serializers.IntegerField(source="destination.pk")
+    city = serializers.CharField(source="destination.city")
+    country_code = serializers.CharField(source="destination.country_code")
+    latitude = serializers.DecimalField(
+        source="destination.latitude", max_digits=9, decimal_places=6
+    )
+    longitude = serializers.DecimalField(
+        source="destination.longitude", max_digits=9, decimal_places=6
+    )
+    timezone = serializers.CharField(
+        source="forecast.timezone", help_text="Fuseau de la destination, ex. Asia/Tokyo."
+    )
+    units = UnitsSerializer(source="forecast.units")
+    current = CurrentWeatherSerializer(source="forecast.current")
+    daily = DailyForecastSerializer(
+        source="forecast.daily",
+        many=True,
+        help_text="Jours du séjour compris dans les 16 jours de prévision.",
+    )
 
 
 class ActivitySerializer(ModelCleanMixin, serializers.ModelSerializer):

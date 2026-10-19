@@ -1,12 +1,22 @@
-from drf_spectacular.utils import OpenApiExample, extend_schema, extend_schema_view
+from drf_spectacular.utils import (
+    OpenApiExample,
+    OpenApiResponse,
+    extend_schema,
+    extend_schema_view,
+)
 from rest_framework import viewsets
+from rest_framework.decorators import action
+from rest_framework.response import Response
 
 from apps.core.openapi import (
     FORBIDDEN,
+    GATEWAY_TIMEOUT,
     NOT_FOUND,
+    SERVICE_UNAVAILABLE,
     THROTTLED,
     UNAUTHORIZED,
     VALIDATION_ERROR,
+    ApiErrorSerializer,
     error_body,
 )
 from apps.core.permissions import IsTripEditor, TripRolePermissionMixin
@@ -14,11 +24,67 @@ from apps.trips.models import Trip
 
 from .filters import ActivityFilter, DestinationFilter
 from .models import Activity, Destination
-from .serializers import ActivitySerializer, DestinationSerializer
+from .serializers import ActivitySerializer, DestinationSerializer, DestinationWeatherSerializer
+from .services import destination_forecast
 
 COMMON_ERRORS = {401: UNAUTHORIZED, 429: THROTTLED}
 OBJECT_ERRORS = {**COMMON_ERRORS, 404: NOT_FOUND}
 WRITE_ERRORS = {400: VALIDATION_ERROR, 403: FORBIDDEN, **OBJECT_ERRORS}
+
+WEATHER_NOT_FOUND = OpenApiResponse(
+    response=ApiErrorSerializer,
+    description="Destination introuvable, ville inconnue ou séjour hors des 16 jours de prévision",
+    examples=[
+        OpenApiExample("Destination introuvable", value=error_body("not_found", "Non trouvé.")),
+        OpenApiExample(
+            "Ville inconnue",
+            value=error_body(
+                "location_not_found",
+                "Ville introuvable : Atlantide (GR). Vérifiez le nom et le code pays.",
+            ),
+        ),
+        OpenApiExample(
+            "Séjour trop lointain",
+            value=error_body(
+                "no_data_available",
+                "Aucune prévision pour le 2027-04-06 au 2027-04-10 : Open-Meteo ne prévoit "
+                "que les 16 prochains jours (2026-10-18 au 2026-11-02).",
+            ),
+        ),
+    ],
+)
+WEATHER_EXAMPLE = OpenApiExample(
+    "Météo à Kyoto",
+    value={
+        "destination": 3,
+        "city": "Kyoto",
+        "country_code": "JP",
+        "latitude": "35.021070",
+        "longitude": "135.753850",
+        "timezone": "Asia/Tokyo",
+        "units": {"temperature": "°C", "wind_speed": "km/h", "precipitation": "mm"},
+        "current": {
+            "time": "2026-10-19T09:15",
+            "temperature": 17.4,
+            "wind_speed": 6.1,
+            "precipitation": 0.0,
+            "weather_code": 2,
+            "description": "Partiellement nuageux",
+        },
+        "daily": [
+            {
+                "date": "2026-10-20",
+                "temperature_max": 21.3,
+                "temperature_min": 12.8,
+                "precipitation_sum": 0.4,
+                "wind_speed_max": 11.2,
+                "weather_code": 61,
+                "description": "Pluie faible",
+            }
+        ],
+    },
+    response_only=True,
+)
 
 EDITOR_ACTIONS = {
     "create": IsTripEditor,
@@ -123,6 +189,33 @@ class DestinationViewSet(TripRolePermissionMixin, viewsets.ModelViewSet):
         visible = Trip.objects.visible_to(self.request.user)
         # select_related : les permissions objet remontent à destination.trip.
         return Destination.objects.filter(trip__in=visible).select_related("trip")
+
+    @extend_schema(
+        summary="Météo d'une destination",
+        description=(
+            "Conditions actuelles et prévisions quotidiennes d'Open-Meteo pour les jours du "
+            "séjour compris dans les 16 prochains jours. Ouvert à tout participant. "
+            "Sans coordonnées, la ville est d'abord géocodée (avec son code pays) et ses "
+            "coordonnées sont enregistrées dans la destination. Réponses en cache : "
+            "géocodage 7 jours, météo 30 minutes."
+        ),
+        responses={
+            200: DestinationWeatherSerializer,
+            404: WEATHER_NOT_FOUND,
+            503: SERVICE_UNAVAILABLE,
+            504: GATEWAY_TIMEOUT,
+            **COMMON_ERRORS,
+        },
+        examples=[WEATHER_EXAMPLE],
+    )
+    @action(detail=True, methods=["get"])
+    def weather(self, request, pk=None):
+        destination = self.get_object()
+        forecast = destination_forecast(destination)
+        serializer = DestinationWeatherSerializer(
+            {"destination": destination, "forecast": forecast}
+        )
+        return Response(serializer.data)
 
 
 @crud_schema(

@@ -11,7 +11,8 @@ Toutes les erreurs ont la même forme :
 
 Les ValidationError de Django (levées par les services et Model.clean()) et les
 IntegrityError (contrainte de base violée, par exemple par deux requêtes simultanées)
-deviennent des 400 au lieu de 500.
+deviennent des 400 au lieu de 500. Les erreurs des services externes
+(apps.integrations.exceptions) gardent leur statut (404, 503, 504) et leur code.
 """
 
 from functools import cache
@@ -26,6 +27,8 @@ from rest_framework import exceptions
 from rest_framework.serializers import as_serializer_error
 from rest_framework.settings import api_settings
 from rest_framework.views import exception_handler as drf_exception_handler
+
+from apps.integrations.exceptions import IntegrationError
 
 VALIDATION_MESSAGE = "Les données envoyées sont invalides."
 INTEGRITY_MESSAGE = "L'opération viole une contrainte d'intégrité des données."
@@ -76,6 +79,10 @@ def exception_handler(exc, context):
         exc = exceptions.NotFound()
     elif isinstance(exc, DjangoPermissionDenied):
         exc = exceptions.PermissionDenied(*exc.args)
+    elif isinstance(exc, IntegrationError):
+        status_code = exc.status_code
+        exc = exceptions.APIException(exc.message, code=exc.code)
+        exc.status_code = status_code
 
     response = drf_exception_handler(exc, context)
     if response is None:

@@ -8,6 +8,12 @@ from rest_framework.exceptions import NotAuthenticated
 
 from apps.core.exceptions import INTEGRITY_MESSAGE, exception_handler
 from apps.core.testing import error_of
+from apps.integrations.exceptions import (
+    ExternalServiceTimeout,
+    ExternalServiceUnavailable,
+    LocationNotFound,
+    NoDataAvailable,
+)
 from apps.trips.models import Trip, TripParticipant
 
 
@@ -53,6 +59,18 @@ class TestConversions:
                 "details": {},
             }
         }
+
+    @pytest.mark.parametrize(
+        ("exc", "status", "code"),
+        [
+            (LocationNotFound("Ville introuvable."), 404, "location_not_found"),
+            (NoDataAvailable(), 404, "no_data_available"),
+            (ExternalServiceUnavailable(), 503, "external_service_unavailable"),
+            (ExternalServiceTimeout(), 504, "external_service_timeout"),
+        ],
+    )
+    def test_integration_errors_keep_their_status_and_code(self, exc, status, code):
+        assert body(exc) == (status, {"code": code, "message": exc.message, "details": {}})
 
 
 @pytest.mark.django_db
