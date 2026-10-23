@@ -5,3 +5,6 @@ from .base import env
 
 DEBUG = env("DEBUG", default=True)
 ALLOWED_HOSTS = env("ALLOWED_HOSTS", default=["localhost", "127.0.0.1"])
+
+GRAPHQL_GRAPHIQL = DEBUG
+GRAPHQL_INTROSPECTION = DEBUG

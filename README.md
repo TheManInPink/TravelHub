@@ -187,11 +187,61 @@ Toutes les erreurs ont la même forme :
 
 `code` vaut notamment `validation_error`, `integrity_error`, `not_authenticated`, `token_not_valid`, `permission_denied`, `not_found`, `throttled`, ou pour les services externes `location_not_found`, `country_not_found`, `no_data_available`, `external_service_unavailable` et `external_service_timeout`. `details` contient les erreurs par champ (`non_field_errors` pour les erreurs globales), un objet vide sinon. Le gestionnaire (`apps/core/exceptions.py`) convertit aussi en 400 les `ValidationError` de Django levées par les services et les `IntegrityError` ; dans ce dernier cas, le message est celui de la contrainte PostgreSQL violée.
 
+## API GraphQL
+
+Point d'entrée unique : `POST /graphql/` (Graphene-Django). En développement, ouvrir `http://localhost:8000/graphql/` dans le navigateur affiche GraphiQL : obtenir un jeton avec `POST /api/auth/token/`, puis, dans l'onglet *Headers* :
+
+```json
+{"Authorization": "Bearer <access>"}
+```
+
+| Racine | Champs |
+| --- | --- |
+| Query | `me`, `myTrips(status, startAfter, search, orderBy, limit, offset)`, `myTripsCount(status, startAfter, search)`, `trip(id)`, `destination(id)`, `destinationOverview(id)` |
+| Mutation | `createTrip`, `updateTrip`, `deleteTrip`, `cloneTrip`, `addParticipant`, `removeParticipant`, `createDestination`, `updateDestination`, `deleteDestination`, `createActivity`, `updateActivity`, `deleteActivity` |
+
+- Un `schema.py` par application (`accounts`, `trips`, `itinerary`, `integrations`), assemblés dans `config/schema.py`.
+- Mêmes règles que l'API REST : tout resolver part de `Trip.objects.visible_to(user)`, les mutations réutilisent les serializers DRF (donc `Model.clean()` et les contraintes) et les services (`create_trip`, `clone_trip`, `add_participant`…), et les permissions objet de `apps/core/permissions.py`. Chaque mutation s'exécute dans une transaction.
+- `Destination.weather` et `Destination.countryInfo` appellent Open-Meteo et Countries GraphQL seulement si on les demande ; un échec ne vide que ce champ. `destinationOverview` garde la dégradation partielle de l'API REST (`warnings`).
+- `myTrips` est paginé comme l'API REST : `limit` vaut 20 par défaut (100 au plus), `offset` saute des voyages, et `myTripsCount` donne le total avec les mêmes filtres.
+- `myTrips` et `trip` ne préchargent destinations, activités et participants que s'ils sont demandés : le nombre de requêtes SQL ne dépend pas du nombre de voyages.
+- Le courriel d'un utilisateur n'est visible que par lui-même ; ni mot de passe ni droits d'administration ne sont exposés.
+
+Authentification (`apps/core/views.py`, `TravelHubGraphQLView`) : le jeton JWT est vérifié par le `JWTAuthentication` de SimpleJWT. Sans en-tête, la requête est anonyme et chaque champ répond `not_authenticated`. Un jeton invalide ou expiré donne un 401. Le cookie de session n'est jamais pris en compte, ce qui permet d'exempter la vue de CSRF.
+
+Limites de requêtes : les mêmes que l'API REST (`THROTTLE_ANON_RATE`, `THROTTLE_USER_RATE`), avec les mêmes compteurs. Un utilisateur dispose donc d'un seul quota pour REST et GraphQL. Au-delà, la réponse est un 429 avec l'en-tête `Retry-After` et une erreur `throttled`.
+
+Les erreurs gardent le code et les détails de l'erreur REST équivalente, dans `extensions` (noms de champs en camelCase) :
+
+```json
+{
+  "errors": [{
+    "message": "Les données envoyées sont invalides.",
+    "path": ["updateTrip"],
+    "extensions": {
+      "code": "validation_error",
+      "details": {"endDate": ["La date de fin doit être postérieure ou égale à la date de début."]}
+    }
+  }],
+  "data": {"updateTrip": null}
+}
+```
+
+Codes : ceux de l'API REST (`not_authenticated`, `token_not_valid`, `throttled`, `permission_denied`, `not_found`, `validation_error`, `integrity_error`, codes des services externes), plus `internal_error` pour une erreur inattendue, dont le message n'est pas divulgué. Un non-participant reçoit `not_found`, un lecteur qui tente une modification `permission_denied`. Les erreurs de syntaxe, de type ou de profondeur donnent un 400.
+
+Durcissement (paramètres `GRAPHQL_*`, relus à chaque requête) :
+
+| Paramètre | Développement | Production, tests |
+| --- | --- | --- |
+| `GRAPHQL_GRAPHIQL` | activé | désactivé |
+| `GRAPHQL_INTROSPECTION` | activée | désactivée (`__schema`, `__type` ; `__typename` reste permis) |
+| `GRAPHQL_MAX_DEPTH` | 6 | 6 |
+
 ## Structure
 
 ```text
-config/            projet Django (settings découpés, urls, wsgi, asgi)
-apps/core/         éléments communs (TimeStampedModel, permissions, exceptions)
+config/            projet Django (settings découpés, urls, schéma GraphQL, wsgi, asgi)
+apps/core/         éléments communs (TimeStampedModel, permissions, exceptions, vue GraphQL)
 apps/accounts/     utilisateur personnalisé, authentification
 apps/trips/        voyages et participants
 apps/itinerary/    destinations et activités

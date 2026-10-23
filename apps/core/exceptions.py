@@ -13,6 +13,8 @@ Les ValidationError de Django (levées par les services et Model.clean()) et les
 IntegrityError (contrainte de base violée, par exemple par deux requêtes simultanées)
 deviennent des 400 au lieu de 500. Les erreurs des services externes
 (apps.integrations.exceptions) gardent leur statut (404, 503, 504) et leur code.
+
+error_body() produit le même corps pour l'API GraphQL (apps.core.views).
 """
 
 from functools import cache
@@ -63,8 +65,12 @@ def integrity_error_message(exc):
     return _constraint_messages().get(name, INTEGRITY_MESSAGE)
 
 
-def exception_handler(exc, context):
-    """EXCEPTION_HANDLER de DRF : convertit, délègue à DRF, puis enveloppe la réponse."""
+def to_api_exception(exc):
+    """Traduit une exception de Django ou d'un service externe en APIException de DRF.
+
+    Renvoie (exception, code) : code remplace celui de l'exception quand il ne vaut pas
+    None. Une exception inconnue est renvoyée telle quelle.
+    """
     code = None
     if isinstance(exc, DjangoValidationError):
         exc = exceptions.ValidationError(django_error_detail(exc))
@@ -83,12 +89,31 @@ def exception_handler(exc, context):
         status_code = exc.status_code
         exc = exceptions.APIException(exc.message, code=exc.code)
         exc.status_code = status_code
+    return exc, code
 
+
+def exception_handler(exc, context):
+    """EXCEPTION_HANDLER de DRF : convertit, délègue à DRF, puis enveloppe la réponse."""
+    exc, code = to_api_exception(exc)
     response = drf_exception_handler(exc, context)
     if response is None:
         return None  # erreur inattendue : Django renvoie une 500
     response.data = {"error": _error_body(exc, response.data, code)}
     return response
+
+
+def error_body(exc):
+    """{"code", "message", "details"} de l'exception, comme dans une réponse d'erreur REST.
+
+    Sert à l'API GraphQL. None pour une exception inattendue, dont le message ne doit
+    pas être montré au client.
+    """
+    exc, code = to_api_exception(exc)
+    if not isinstance(exc, exceptions.APIException):
+        return None
+    # Même forme que response.data dans le gestionnaire de DRF.
+    data = exc.detail if isinstance(exc.detail, list | dict) else {"detail": exc.detail}
+    return _error_body(exc, data, code)
 
 
 def _error_body(exc, data, code):

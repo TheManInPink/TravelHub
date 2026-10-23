@@ -193,3 +193,19 @@ SPECTACULAR_SETTINGS = {
         "InvitableRoleEnum": "apps.trips.serializers.INVITABLE_ROLES",
     },
 }
+
+
+# API GraphQL (Graphene-Django) : /graphql/, authentifiée par JWT comme l'API REST.
+
+GRAPHENE = {
+    "SCHEMA": "config.schema.schema",
+    "TESTING_ENDPOINT": "/graphql/",
+    # Pas de DjangoDebugMiddleware (ajouté par défaut si DEBUG) : le schéma n'a pas de champ _debug.
+    "MIDDLEWARE": [],
+}
+# Profondeur maximale d'une requête : coupe les requêtes cycliques
+# (trip { destinations { trip { destinations … } } }).
+GRAPHQL_MAX_DEPTH = 6
+# L'interface GraphiQL et l'introspection du schéma ne sont ouvertes qu'en développement.
+GRAPHQL_GRAPHIQL = DEBUG
+GRAPHQL_INTROSPECTION = DEBUG
