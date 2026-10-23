@@ -4,7 +4,7 @@ from django.contrib import admin
 from django.urls import include, path
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
 
-from apps.core.views import TravelHubGraphQLView
+from apps.core.views import TravelHubGraphQLView, health
 
 admin.site.site_header = "TravelHub — administration"
 admin.site.site_title = "TravelHub"
@@ -21,6 +21,8 @@ urlpatterns = [
     path("api/redoc/", SpectacularRedocView.as_view(url_name="schema"), name="redoc"),
     # API GraphQL ; GraphiQL dans le navigateur en développement (GRAPHQL_GRAPHIQL).
     path("graphql/", TravelHubGraphQLView.as_view(), name="graphql"),
+    # Contrôle de santé (HEALTHCHECK de l'image Docker) : base et cache.
+    path("health/", health, name="health"),
 ]
 
 # Erreurs hors DRF au format JSON de l'API, jamais de page HTML ni de trace de pile.

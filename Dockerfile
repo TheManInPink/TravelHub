@@ -31,16 +31,19 @@ COPY --from=builder /opt/venv /opt/venv
 COPY . .
 
 # collectstatic n'ouvre pas la base, mais les paramètres exigent ces deux variables.
-RUN SECRET_KEY=collectstatic DATABASE_URL=postgres://build@localhost/build \
+RUN SECRET_KEY=collectstatic DATABASE_URL=postgres://build@localhost/build LOG_FILE= \
     python manage.py collectstatic --noinput
+
+# Seul répertoire modifiable par le serveur : journaux rotatifs (volume web-logs).
+RUN install -d -o travelhub -g travelhub /app/logs
 
 USER travelhub
 
 EXPOSE 8000
 
-# /admin/login/ répond sans base ni throttling ; l'en-tête évite la redirection HTTPS.
+# /health/ vérifie la base et le cache ; il est exempté de la redirection HTTPS.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-    CMD ["python", "-c", "import urllib.request as u; u.urlopen(u.Request('http://localhost:8000/admin/login/', headers={'X-Forwarded-Proto': 'https'}), timeout=4)"]
+    CMD ["python", "-c", "import urllib.request as u; u.urlopen('http://localhost:8000/health/', timeout=4)"]
 
 # Options dans gunicorn.conf.py (lu depuis /app).
 CMD ["gunicorn", "config.wsgi"]

@@ -18,6 +18,7 @@ htmlcov/
 staticfiles/
 media/
 backups/
+logs/
 
 # Hors du service web
 Dockerfile

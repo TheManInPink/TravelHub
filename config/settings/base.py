@@ -57,6 +57,8 @@ LOCAL_APPS = [
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
 
 MIDDLEWARE = [
+    # En premier : l'identifiant de requête couvre aussi les redirections HTTPS.
+    "apps.core.middleware.RequestIdMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     # CorsMiddleware doit précéder CommonMiddleware.
@@ -128,6 +130,8 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # CORS : seules les origines listées dans CORS_ALLOWED_ORIGINS sont acceptées.
 
 CORS_ALLOWED_ORIGINS = env("CORS_ALLOWED_ORIGINS")
+# Le front-end peut lire l'identifiant de requête (à citer en cas d'erreur).
+CORS_EXPOSE_HEADERS = ["X-Request-ID"]
 
 
 # Django REST Framework : tout est privé par défaut, chaque vue publique le déclare.
@@ -209,3 +213,59 @@ GRAPHQL_MAX_DEPTH = 6
 # L'interface GraphiQL et l'introspection du schéma ne sont ouvertes qu'en développement.
 GRAPHQL_GRAPHIQL = DEBUG
 GRAPHQL_INTROSPECTION = DEBUG
+
+
+# Journaux : une ligne JSON par événement (apps.core.logs), sur la console et dans un
+# fichier rotatif (LOG_FILE, 10 Mo × 5 archives ; LOG_FILE vide : console seulement).
+# Chaque ligne porte le request_id de la requête en cours (RequestIdMiddleware).
+
+LOG_LEVEL = env("LOG_LEVEL", default="INFO")
+LOG_FILE = env("LOG_FILE", default=str(BASE_DIR / "logs" / "travelhub.log"))
+if LOG_FILE:
+    Path(LOG_FILE).parent.mkdir(parents=True, exist_ok=True)
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "filters": {"request_id": {"()": "apps.core.logs.RequestIdFilter"}},
+    "formatters": {"json": {"()": "apps.core.logs.JsonFormatter"}},
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "json",
+            "filters": ["request_id"],
+        },
+        **(
+            {
+                "file": {
+                    "class": "logging.handlers.RotatingFileHandler",
+                    "filename": LOG_FILE,
+                    "maxBytes": 10 * 1024 * 1024,
+                    "backupCount": 5,
+                    "encoding": "utf-8",
+                    # Fichier ouvert au premier message seulement (collectstatic, check…).
+                    "delay": True,
+                    "formatter": "json",
+                    "filters": ["request_id"],
+                }
+            }
+            if LOG_FILE
+            else {}
+        ),
+    },
+    "root": {"handlers": ["console", "file"] if LOG_FILE else ["console"], "level": LOG_LEVEL},
+    "loggers": {
+        # Les gestionnaires par défaut de Django (texte, courriel aux ADMINS) sont retirés :
+        # tout remonte à la racine. django.request journalise les 4xx et les 500 (avec la
+        # trace), que le client ne voit jamais (apps.core.views.server_error).
+        "django": {
+            "handlers": [],
+            "level": env("DJANGO_LOG_LEVEL", default="INFO"),
+            "propagate": True,
+        },
+        # runserver : RequestIdMiddleware journalise déjà chaque requête.
+        "django.server": {"handlers": [], "level": "WARNING", "propagate": True},
+        # Requêtes SQL (en DEBUG) trop bavardes pour la racine.
+        "django.db.backends": {"level": "INFO"},
+    },
+}

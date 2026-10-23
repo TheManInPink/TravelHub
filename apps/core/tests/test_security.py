@@ -177,8 +177,13 @@ class TestProductionSettings:
     def test_base_settings_are_not_modified(self, prod):
         assert "DEFAULT_RENDERER_CLASSES" not in settings.REST_FRAMEWORK
 
-    def test_errors_are_logged_to_the_console(self, prod):
-        assert prod.LOGGING["root"]["handlers"] == ["console"]
+    def test_errors_are_logged_as_json(self, prod):
+        assert "console" in prod.LOGGING["root"]["handlers"]
+        assert prod.LOGGING["formatters"]["json"]["()"] == "apps.core.logs.JsonFormatter"
+        assert prod.LOGGING["loggers"]["django"]["propagate"] is True
+
+    def test_health_is_reachable_over_plain_http(self, prod):
+        assert prod.SECURE_REDIRECT_EXEMPT == [r"^health/$"]
 
     def test_development_settings_follow_debug(self):
         dev = load_settings("config.settings.dev")

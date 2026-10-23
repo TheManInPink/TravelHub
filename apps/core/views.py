@@ -1,4 +1,5 @@
-"""Point d'entrée de l'API GraphQL (/graphql/) et réponses d'erreur hors DRF.
+"""Point d'entrée de l'API GraphQL (/graphql/), contrôle de santé (/health/) et
+réponses d'erreur hors DRF.
 
 not_found et server_error remplacent les pages HTML de Django (handler404, handler500
 dans config/urls.py) quand DEBUG vaut False : une URL inconnue ou une erreur inattendue
@@ -6,12 +7,17 @@ renvoie aussi l'enveloppe {"error": {...}}, sans trace de pile.
 """
 
 import logging
+import uuid
 
 from django.conf import settings
 from django.contrib.auth.models import AnonymousUser
+from django.core.cache import cache
+from django.db import DatabaseError, connection
 from django.http import JsonResponse
 from django.utils.decorators import method_decorator
+from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_safe
 from graphene.utils.str_converters import to_camel_case
 from graphene.validation import depth_limit_validator
 from graphene_django.views import GraphQLView
@@ -41,6 +47,46 @@ def not_found(request, exception=None):
 def server_error(request):
     """handler500 : l'exception est journalisée par Django, le client n'en voit rien."""
     return JsonResponse({"error": INTERNAL_ERROR}, status=500)
+
+
+@never_cache
+@require_safe
+def health(request):
+    """Contrôle de santé de Docker : base de données et cache.
+
+    Vue Django simple, hors DRF : ni authentification ni throttling. 200 si tout répond,
+    503 sinon ; la cause n'est pas divulguée, elle est journalisée.
+    """
+    checks = {"database": check_database(), "cache": check_cache()}
+    healthy = all(result == "ok" for result in checks.values())
+    body = {"status": "ok" if healthy else "error", "checks": checks}
+    return JsonResponse(body, status=200 if healthy else 503)
+
+
+def check_database():
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT 1")
+            cursor.fetchone()
+    except DatabaseError:
+        logger.exception("Contrôle de santé : base de données injoignable")
+        return "error"
+    return "ok"
+
+
+def check_cache():
+    key = f"health:{uuid.uuid4().hex}"
+    try:
+        cache.set(key, "ok", timeout=10)
+        ok = cache.get(key) == "ok"
+        cache.delete(key)
+    except Exception:  # chaque backend (Redis, Memcached…) a ses propres exceptions
+        logger.exception("Contrôle de santé : cache injoignable")
+        return "error"
+    if not ok:
+        logger.error("Contrôle de santé : le cache ne restitue pas la valeur écrite")
+        return "error"
+    return "ok"
 
 
 class DisableIntrospection(ValidationRule):

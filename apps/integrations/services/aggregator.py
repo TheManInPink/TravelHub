@@ -3,12 +3,14 @@
 Open-Meteo et Countries GraphQL sont interrogés en parallèle (ThreadPoolExecutor)
 pendant que le fil principal lit la base. Les fils secondaires n'exécutent aucune
 requête SQL : chaque fil aurait sa propre connexion, jamais fermée, et ne verrait pas
-une transaction en cours dans le fil principal.
+une transaction en cours dans le fil principal. Chaque tâche s'exécute dans une copie du
+contexte du fil principal : ses journaux gardent l'identifiant de la requête.
 
 Une source en échec ne fait pas échouer la vue d'ensemble : son bloc vaut None et un
 avertissement {source, code, message} explique pourquoi (dégradation partielle).
 """
 
+import contextvars
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from decimal import Decimal
@@ -59,9 +61,12 @@ def get_destination_overview(destination):
     """
     geocoding = destination.latitude is None or destination.longitude is None
     with ThreadPoolExecutor(max_workers=len(SOURCES), thread_name_prefix="overview") as pool:
+        # Une copie par tâche : un contexte ne peut pas s'exécuter dans deux fils à la fois.
         futures = {
-            WEATHER: pool.submit(fetch_forecast, destination),
-            COUNTRY: pool.submit(countries.get_country, destination.country_code),
+            WEATHER: pool.submit(contextvars.copy_context().run, fetch_forecast, destination),
+            COUNTRY: pool.submit(
+                contextvars.copy_context().run, countries.get_country, destination.country_code
+            ),
         }
         activities = list(destination.activities.all())  # pendant les appels externes
         results, warnings = {}, []

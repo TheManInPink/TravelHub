@@ -101,8 +101,9 @@ jobs:
           } > .env
           docker compose up --no-build --detach --wait --wait-timeout 120 web
 
-      - name: Vérifier /api/docs/ et /api/schema/
+      - name: Vérifier /health/, /api/docs/ et /api/schema/
         run: |
+          curl --fail --silent --show-error http://localhost:8000/health/
           curl --fail --silent --show-error http://localhost:8000/api/docs/ > /dev/null
           curl --fail --silent --show-error http://localhost:8000/api/schema/ > /dev/null
 

@@ -18,6 +18,9 @@ services:
     command: sh -c "python manage.py migrate --noinput && exec gunicorn config.wsgi"
     ports:
       - "${WEB_PORT:-8000}:8000"
+    # Journaux : docker compose logs web (JSON), et fichiers rotatifs conservés ici.
+    volumes:
+      - web-logs:/app/logs
     depends_on:
       db:
         condition: service_healthy
@@ -80,3 +83,4 @@ configs:
 volumes:
   postgres-data:
   pgadmin-data:
+  web-logs:

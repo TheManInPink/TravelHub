@@ -2,6 +2,8 @@
 
 Back-end Django de planification et de gestion de voyages (TP1) : API REST (Django REST Framework), API GraphQL (Graphene-Django), PostgreSQL, intégration d'Open-Meteo et de Countries GraphQL.
 
+Sommaire : [installation locale](#installation-powershell) · [Docker](#docker) · [variables d'environnement](#variables-denvironnement) · [comptes de démonstration](#comptes-de-démonstration) · [exploitation (journaux, santé)](#exploitation) · [sauvegarde et restauration](#sauvegarde-et-restauration) · [API REST](#api-rest) · [API GraphQL](#api-graphql) · [sécurité](#sécurité-owasp-api-security-top-10-2023) · [tests](#tests-et-qualité)
+
 ## Prérequis
 
 | Outil | Version |
@@ -27,8 +29,11 @@ Copy-Item .env.example .env      # puis remplacer SECRET_KEY et le mot de passe 
 .\scripts\db\create_database.ps1 # crée le rôle et la base décrits par DATABASE_URL
 python manage.py migrate
 python manage.py createsuperuser
+python manage.py seed_demo --password "MotDePasseDemo-2026"   # facultatif : comptes de démo
 python manage.py runserver
 ```
+
+Vérification : http://localhost:8000/health/ répond `{"status": "ok", …}` et http://localhost:8000/api/docs/ affiche Swagger UI.
 
 Générer une clé secrète :
 
@@ -64,46 +69,183 @@ Prérequis : Docker Desktop (Compose v2.23 ou plus récent). Le fichier `.env` s
 ```powershell
 docker compose up --build        # web (Gunicorn), db (PostgreSQL 18), pgadmin
 docker compose exec web python manage.py createsuperuser
-docker compose exec web python manage.py seed_demo
-docker compose down              # arrête ; --volumes efface aussi la base
+docker compose exec web python manage.py seed_demo --password "MotDePasseDemo-2026"
+docker compose ps                # web doit être « healthy » (contrôle /health/)
+docker compose logs -f web       # journaux JSON
+docker compose down              # arrête ; --volumes efface aussi la base et les journaux
 ```
 
 | Service | Adresse | Rôle |
 | --- | --- | --- |
-| `web` | http://localhost:8000/api/docs/ | Image du `Dockerfile`, paramètres `config.settings.prod` ; applique les migrations à chaque démarrage |
+| `web` | http://localhost:8000/api/docs/ | Image du `Dockerfile`, paramètres `config.settings.prod` ; applique les migrations à chaque démarrage ; journaux rotatifs dans le volume `web-logs` |
 | `db` | `db:5432`, réseau interne seulement | `postgres:18`, données dans le volume `postgres-data`, contrôle `pg_isready` |
 | `pgadmin` | http://localhost:5050 | Connexion avec `PGADMIN_DEFAULT_EMAIL` / `PGADMIN_DEFAULT_PASSWORD` ; le serveur « TravelHub (Docker) » est déjà déclaré |
 
-Le `Dockerfile` construit les dépendances dans une première étape (`python:3.14-slim`), puis copie l'environnement virtuel dans l'image finale. Il exécute `collectstatic` (fichiers servis par WhiteNoise) et lance Gunicorn (`gunicorn.conf.py`, `WEB_CONCURRENCY` processus) sous un utilisateur non root. Son `HEALTHCHECK` interroge `/admin/login/`. Le service `web` remplace `DATABASE_URL` par l'hôte `db` et désactive la redirection HTTPS et HSTS pour l'accès local en HTTP. En production, derrière un proxy HTTPS, on garde les valeurs par défaut.
+Le `Dockerfile` construit les dépendances dans une première étape (`python:3.14-slim`), puis copie l'environnement virtuel dans l'image finale. Il exécute `collectstatic` (fichiers servis par WhiteNoise) et lance Gunicorn (`gunicorn.conf.py`, `WEB_CONCURRENCY` processus) sous un utilisateur non root, qui ne peut écrire que dans `/app/logs`. Son `HEALTHCHECK` interroge `/health/` toutes les 30 s. Le service `web` remplace `DATABASE_URL` par l'hôte `db` et désactive la redirection HTTPS et HSTS pour l'accès local en HTTP. En production, derrière un proxy HTTPS, on garde les valeurs par défaut.
 
 ## Intégration continue
 
 `.github/workflows/ci.yml`, à chaque push sur `master` et à chaque pull request :
 
 - **Lint et tests** : service PostgreSQL 18, cache pip, `ruff check`, `ruff format --check`, puis `pytest --cov-fail-under=80`. Le résumé de couverture s'affiche dans la page de l'exécution, et `coverage.xml` et `htmlcov/` sont publiés comme artefact `coverage`.
-- **Image Docker** : construction de l'image (cache GitHub Actions), puis `docker compose up --wait web` et vérification de `/api/docs/` et `/api/schema/`.
+- **Image Docker** : construction de l'image (cache GitHub Actions), puis `docker compose up --wait web` (attend le contrôle `/health/`) et vérification de `/health/`, `/api/docs/` et `/api/schema/`.
 
 Dependabot (`.github/dependabot.yml`) propose chaque semaine les mises à jour pip et GitHub Actions.
 
-## Données de démonstration
+## Variables d'environnement
 
-```powershell
-python manage.py seed_demo                         # 3 utilisateurs, 4 voyages, destinations et activités
-python manage.py seed_demo --reset                 # supprime puis recrée les données de démo
-python manage.py seed_demo --reset --password "…"  # comptes de démo avec un mot de passe
-```
+Lues dans l'environnement, sinon dans `.env` (modèle : `.env.example`) ; une variable déjà définie dans l'environnement a priorité sur `.env`.
 
-La commande est idempotente : la relancer ne crée pas de doublons. Les comptes de démo (`alice`, `mamadou`, `yuki`) ont un courriel en `@demo.travelhub.example` ; `--reset` ne supprime que ces comptes et leurs voyages. Sans `--password` ni variable `DEMO_PASSWORD`, ils ne peuvent pas se connecter. Les dates sont relatives au jour de l'exécution : un voyage terminé, un en cours, un planifié et un brouillon, à Montréal, Paris, Tokyo et Dakar. Pour les consulter, connectez-vous à `/admin/` avec le superutilisateur.
+| Variable | Obligatoire | Défaut | Rôle |
+| --- | --- | --- | --- |
+| `SECRET_KEY` | oui | | Clé de signature Django et JWT (50 caractères au moins) |
+| `DATABASE_URL` | oui | | `postgres://utilisateur:motdepasse@hôte:5432/base` ; remplacée par l'hôte `db` dans Docker |
+| `DEBUG` | | `False` (`True` en dev) | Ignorée en production (`config.settings.prod`) |
+| `ALLOWED_HOSTS` | en production | `localhost,127.0.0.1` en dev | Noms d'hôte acceptés, séparés par des virgules |
+| `CORS_ALLOWED_ORIGINS` | | aucune | Origines du front-end autorisées |
+| `DB_CONN_MAX_AGE` | | `60` | Durée de vie des connexions PostgreSQL, en secondes |
+| `THROTTLE_ANON_RATE`, `THROTTLE_USER_RATE` | | `100/hour`, `1000/hour` | Limites de requêtes (REST et GraphQL) |
+| `LOG_LEVEL` | | `INFO` | Niveau des journaux de l'application |
+| `DJANGO_LOG_LEVEL` | | `INFO` | Niveau des journaux de Django |
+| `LOG_FILE` | | `logs/travelhub.log` | Fichier rotatif ; vide : console seulement |
+| `DEMO_PASSWORD` | | | Mot de passe des comptes créés par `seed_demo` |
+| `CSRF_TRUSTED_ORIGINS` | | | Production : origines HTTPS de confiance pour l'admin |
+| `SECURE_SSL_REDIRECT` | | `True` | Production : redirection HTTP → HTTPS (`False` dans Docker local) |
+| `SECURE_HSTS_SECONDS` | | 30 jours | Production : durée HSTS (`0` dans Docker local) |
+| `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | Docker | `travelhub`, —, `travelhub` | Base du conteneur `db` (évitez `@ : /` dans le mot de passe) |
+| `PGADMIN_DEFAULT_EMAIL`, `PGADMIN_DEFAULT_PASSWORD` | Docker | `admin@example.com`, — | Compte pgAdmin |
+| `WEB_PORT`, `PGADMIN_PORT` | | `8000`, `5050` | Ports publiés par Docker |
+| `WEB_CONCURRENCY` | | `2` | Processus Gunicorn |
 
-## Paramètres
+Modules de paramètres :
 
 | Module | Usage |
 | --- | --- |
 | `config.settings.dev` | Développement (`manage.py` par défaut) |
-| `config.settings.test` | Tests (`pytest.ini`) |
+| `config.settings.test` | Tests (`pytest.ini`) ; journaux sur la console seulement |
 | `config.settings.prod` | Production (`wsgi.py`, `asgi.py`, image Docker) ; vérifier avec `python manage.py check --deploy --settings=config.settings.prod` |
 
-Variables d'environnement (voir `.env.example`) : `SECRET_KEY`, `DEBUG`, `ALLOWED_HOSTS`, `DATABASE_URL`, `CORS_ALLOWED_ORIGINS`, et facultativement `THROTTLE_ANON_RATE` (défaut `100/hour`) et `THROTTLE_USER_RATE` (défaut `1000/hour`). En production seulement : `CSRF_TRUSTED_ORIGINS`, `SECURE_SSL_REDIRECT` (défaut `True`), `SECURE_HSTS_SECONDS` (défaut 30 jours) et `DJANGO_LOG_LEVEL` (défaut `INFO`).
+## Comptes de démonstration
+
+```powershell
+python manage.py seed_demo --password "MotDePasseDemo-2026"          # crée les comptes et leurs voyages
+python manage.py seed_demo --reset --password "MotDePasseDemo-2026"  # recrée tout (autre mot de passe…)
+python manage.py seed_demo                                           # sans mot de passe : comptes non connectables
+```
+
+| Compte | Rôle `owner` | Rôle `editor` | Rôle `viewer` |
+| --- | --- | --- | --- |
+| `alice` | Week-end à Montréal | Automne à Paris, Retrouvailles à Dakar | Printemps au Japon |
+| `mamadou` | Automne à Paris, Retrouvailles à Dakar | | |
+| `yuki` | Printemps au Japon | Week-end à Montréal | Automne à Paris, Retrouvailles à Dakar |
+
+Courriels en `@demo.travelhub.example` (`alice@demo.travelhub.example`…). `alice` voit les 4 voyages et permet de tester chaque rôle.
+
+Le mot de passe est celui de `--password`, sinon de `DEMO_PASSWORD`. Il n'est fixé qu'à la création d'un compte : pour le changer, relancer avec `--reset`. Connexion : `POST /api/auth/token/` avec `{"username": "alice", "password": "…"}`, puis le jeton `access` dans Swagger (**Authorize**) ou GraphiQL.
+
+La commande est idempotente : la relancer ne crée pas de doublons. `--reset` ne supprime que les comptes en `@demo.travelhub.example` et leurs voyages. Les dates sont relatives au jour de l'exécution : un voyage terminé, un en cours, un planifié et un brouillon, à Montréal, Paris, Tokyo et Dakar.
+
+L'administration (`/admin/`) demande un superutilisateur : `python manage.py createsuperuser` (dans Docker : `docker compose exec web python manage.py createsuperuser`). Aucun compte administrateur n'est créé par défaut.
+
+## Exploitation
+
+### Journaux
+
+Une ligne JSON par événement (`apps/core/logs.py`), sur la console (sortie d'erreur ; `docker compose logs web` dans Docker) et dans un fichier rotatif `LOG_FILE` (10 Mo, 5 archives : `travelhub.log.1` … `.5`) :
+
+```json
+{"timestamp": "2026-10-23T22:01:39.510+00:00", "level": "INFO", "logger": "travelhub.request",
+ "message": "GET /api/trips/ 200", "request_id": "292f04c8d5e541e69c07c7565e0e65f0",
+ "method": "GET", "path": "/api/trips/", "status": 200, "duration_ms": 401.1, "user_id": 5}
+```
+
+| Logger | Contenu |
+| --- | --- |
+| `travelhub.request` | Une ligne par requête : méthode, chemin **sans** chaîne de requête, statut, durée (ms), utilisateur. `/health/` seulement au niveau DEBUG |
+| `apps.integrations.services.http` | Chaque appel externe (`"event": "external_call"`) : `service` (Open-Meteo, Countries GraphQL), `method`, `url` sans paramètres, `status` (code HTTP, `timeout` ou `network_error`), `duration_ms`, `attempt`. WARNING pour un échec ou un refus (4xx). Une réponse lue dans le cache n'est pas un appel |
+| `django.request` | Requêtes en 4xx (WARNING) et erreurs 500 avec leur trace (ERROR) ; le client ne reçoit que `internal_error` |
+| `gunicorn.error` | Démarrage de Gunicorn et de ses processus (Docker) |
+
+Identifiant de requête (`apps/core/middleware.py`) : chaque réponse porte un en-tête `X-Request-ID`, repris dans toutes les lignes de la requête, y compris celles des fils de la vue d'ensemble. Un `X-Request-ID` envoyé par le client ou un proxy est conservé s'il est sûr (lettres, chiffres, `. _ -`, 64 caractères au plus), remplacé sinon. Le front-end peut le lire (`CORS_EXPOSE_HEADERS`) et l'afficher avec un message d'erreur.
+
+Aucun secret n'est journalisé : ni corps de requête, ni en-têtes, ni chaîne de requête, ni paramètres d'appels externes. En filet de sécurité, le formateur masque (`[masqué]`) les champs dont le nom évoque un secret (`password`, `token`, `access`, `refresh`, `authorization`, `cookie`…) ainsi que tout JWT ou en-tête `Bearer` présent dans un message ou une trace (`apps/core/tests/test_logging.py`).
+
+Rechercher dans le fichier (PowerShell) :
+
+```powershell
+Get-Content logs\travelhub.log -Wait | ConvertFrom-Json | Where-Object level -ne INFO   # suivi des avertissements
+Select-String -Path logs\travelhub.log -Pattern '"request_id": "292f04c8d5e541e69c07c7565e0e65f0"'
+Get-Content logs\travelhub.log | ConvertFrom-Json | Where-Object event -eq external_call |
+    Group-Object service | Select-Object Name, Count                                    # appels par service
+docker compose exec web tail -n 20 /app/logs/travelhub.log
+```
+
+Avec plusieurs processus Gunicorn, chacun fait tourner le fichier pour son compte : la sortie de `docker compose logs`, complète et ordonnée, reste la référence.
+
+### Contrôle de santé
+
+`GET /health/` (ou `HEAD`) : sans authentification ni limite de requêtes, jamais mis en cache.
+
+| Situation | Statut | Corps |
+| --- | --- | --- |
+| Base et cache répondent | 200 | `{"status": "ok", "checks": {"database": "ok", "cache": "ok"}}` |
+| Base injoignable | 503 | `{"status": "error", "checks": {"database": "error", "cache": "ok"}}` |
+| Cache en échec | 503 | `{"status": "error", "checks": {"database": "ok", "cache": "error"}}` |
+
+La base est vérifiée par `SELECT 1`, le cache par une écriture suivie d'une relecture. La cause d'un échec n'est pas divulguée : elle est journalisée (logger `apps.core.views`). Le `HEALTHCHECK` de l'image l'interroge toutes les 30 s ; `docker compose up --wait` et la CI attendent l'état `healthy`. En production, `/health/` est exempté de la redirection HTTPS (`SECURE_REDIRECT_EXEMPT`), car Docker l'interroge en HTTP sans passer par le proxy.
+
+## Sauvegarde et restauration
+
+`scripts/backup.ps1` et `scripts/restore.ps1` (PowerShell 5.1 ou 7). Les archives sont au format personnalisé de `pg_dump` (`-Fc`), dans `backups/` (ignoré par Git), nommées `<base>_AAAAMMJJ-HHMMSS.dump` (locale) ou `<base>-docker_AAAAMMJJ-HHMMSS.dump` (Docker). Le mot de passe n'apparaît jamais sur la ligne de commande : il passe par `PGPASSWORD` le temps de la commande, ou n'est pas nécessaire dans le conteneur (connexion locale par socket).
+
+```powershell
+.\scripts\backup.ps1                                 # base de DATABASE_URL (PostgreSQL local)
+.\scripts\backup.ps1 -Docker                         # base du service db de docker compose
+.\scripts\backup.ps1 -Keep 14 -OutputDir D:\sauvegardes
+```
+
+Chaque archive est relue avec `pg_restore --list` avant d'être conservée ; une archive incomplète est supprimée. Rétention : les 7 plus récentes de chaque série (`-Keep`), les plus anciennes sont supprimées.
+
+```powershell
+.\scripts\restore.ps1 -Database travelhub_restore    # dernière sauvegarde dans une base neuve, créée au besoin
+.\scripts\restore.ps1 -File .\backups\travelhub_20261023-180008.dump -Force   # écrase la base de DATABASE_URL
+.\scripts\restore.ps1 -Docker -Force                 # écrase la base du conteneur (web arrêté puis redémarré)
+.\scripts\restore.ps1 -Docker -Database travelhub_restore -File .\backups\travelhub_20261023-180008.dump
+```
+
+- Sans `-File`, la sauvegarde la plus récente de `backups/` ; sans `-Database`, la base de `DATABASE_URL` (ou `POSTGRES_DB` avec `-Docker`). Une base absente est créée (le rôle de l'application a `CREATEDB`).
+- Une base qui contient déjà des tables n'est écrasée qu'avec `-Force` (`pg_restore --clean --if-exists`).
+- Restauration en une seule transaction (`--single-transaction --exit-on-error`) : une archive corrompue ou une erreur laisse la base inchangée.
+- `--no-owner --no-privileges` : une sauvegarde locale se restaure dans Docker et inversement.
+- Avec `-Docker`, si la base visée est celle de `web`, le service est arrêté pendant la restauration puis redémarré ; il applique alors les migrations plus récentes que la sauvegarde. En local, arrêtez `runserver` avant d'écraser la base qu'il utilise.
+
+Vérifier une restauration dans une base vide :
+
+```powershell
+.\scripts\backup.ps1
+.\scripts\restore.ps1 -Database travelhub_restore
+$env:DATABASE_URL = "postgres://travelhub:<mot-de-passe>@localhost:5432/travelhub_restore"  # même URL que .env, autre base
+python manage.py migrate --check     # code 0 : schéma à jour
+python manage.py runserver 8001      # puis http://localhost:8001/health/ et une connexion avec un compte de la sauvegarde
+Remove-Item Env:\DATABASE_URL        # revenir à la base de .env
+& "C:\Program Files\PostgreSQL\18\bin\dropdb.exe" -h localhost -U travelhub travelhub_restore   # nettoyage
+```
+
+Équivalent sans les scripts, avec `docker compose exec` :
+
+```powershell
+# Sauvegarde : pg_dump écrit dans le conteneur, puis copie sur l'hôte
+# (pas de redirection > : PowerShell 5.1 altère les données binaires).
+docker compose exec -T db sh -c 'pg_dump -Fc -U $POSTGRES_USER -d $POSTGRES_DB -f /tmp/travelhub.dump'
+docker compose cp db:/tmp/travelhub.dump backups/travelhub-docker_manuel.dump
+
+# Restauration dans une base vide travelhub_restore
+docker compose cp backups/travelhub-docker_manuel.dump db:/tmp/travelhub.dump
+docker compose exec -T db sh -c 'createdb -U $POSTGRES_USER travelhub_restore && pg_restore -U $POSTGRES_USER -d travelhub_restore --no-owner --no-privileges --exit-on-error --single-transaction /tmp/travelhub.dump'
+docker compose exec -T db rm /tmp/travelhub.dump
+```
+
+Le volume `postgres-data` n'est pas une sauvegarde : `docker compose down --volumes` l'efface. Copiez régulièrement `backups/` hors de la machine.
 
 ## API REST
 
@@ -274,7 +416,10 @@ apps/accounts/     utilisateur personnalisé, authentification
 apps/trips/        voyages et participants
 apps/itinerary/    destinations et activités
 apps/integrations/ services Open-Meteo et Countries GraphQL
-scripts/db/        création, sauvegarde et restauration de la base
+scripts/           sauvegarde et restauration (backup.ps1, restore.ps1)
+scripts/db/        création du rôle et de la base PostgreSQL
+logs/              journaux JSON rotatifs (ignoré par Git)
+backups/           archives pg_dump (ignoré par Git)
 .github/           CI (workflows/ci.yml) et Dependabot
 postman/           collection Postman v2.1 et environnement local
 ```
@@ -290,7 +435,7 @@ postman/           collection Postman v2.1 et environnement local
 | API5 Broken Function Level Authorization | Permissions par rôle (`IsTripMember`, `IsTripEditor`, `IsTripOwner`) : un lecteur reçoit 403 sur toute écriture, et seul le propriétaire gère les participants. | matrice « lecteur » de `test_object_level_authorization.py`, `test_permissions.py` |
 | API6 Unrestricted Access to Sensitive Business Flows | L'inscription et la connexion sont soumises à la limite anonyme ; la duplication de voyages à la limite par utilisateur. | `test_auth_api.py` |
 | API7 Server Side Request Forgery | Les URL d'Open-Meteo et de Countries sont des constantes. La ville part en paramètre de requête ; le code pays (`^[A-Z]{2}$`) en variable GraphQL, jamais concaténé. | `apps/integrations/tests/` |
-| API8 Security Misconfiguration | `check --deploy` sans avertissement. HSTS, redirection HTTPS, cookies `Secure`, `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy` et COOP. CORS limité à `CORS_ALLOWED_ORIGINS`, sans identifiants. En production : JSON seulement (pas d'API navigable), GraphiQL et introspection désactivés, et des 404/500 en JSON sans trace de pile, l'erreur étant journalisée sur la console. | `test_security.py`, `test_input_validation.py` |
+| API8 Security Misconfiguration | `check --deploy` sans avertissement. HSTS, redirection HTTPS, cookies `Secure`, `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy` et COOP. CORS limité à `CORS_ALLOWED_ORIGINS`, sans identifiants. En production : JSON seulement (pas d'API navigable), GraphiQL et introspection désactivés, et des 404/500 en JSON sans trace de pile, l'erreur étant journalisée. Journaux JSON sans jeton ni mot de passe, avec masquage en filet de sécurité. | `test_security.py`, `test_input_validation.py`, `test_logging.py` |
 | API9 Improper Inventory Management | Une seule version de l'API, entièrement décrite par OpenAPI (`/api/docs/`) et par la collection Postman. | `test_api_docs.py` |
 | API10 Unsafe Consumption of APIs | Réponses externes validées puis converties en dataclasses ; une réponse illisible devient une 503 et un délai dépassé une 504. Seules les réponses exploitables sont mises en cache. | `test_open_meteo.py`, `test_countries.py`, `test_destination_overview.py` |
 

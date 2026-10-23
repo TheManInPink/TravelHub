@@ -25,6 +25,8 @@ STORAGES = {
 # Derrière un proxy inverse (nginx, plateforme cloud) qui termine le HTTPS.
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 SECURE_SSL_REDIRECT = env.bool("SECURE_SSL_REDIRECT", default=True)
+# Le HEALTHCHECK de Docker interroge Gunicorn en HTTP, sans passer par le proxy.
+SECURE_REDIRECT_EXEMPT = [r"^health/$"]
 SECURE_HSTS_SECONDS = env.int("SECURE_HSTS_SECONDS", default=60 * 60 * 24 * 30)
 SECURE_HSTS_INCLUDE_SUBDOMAINS = True
 SECURE_HSTS_PRELOAD = True
@@ -46,25 +48,3 @@ REST_FRAMEWORK = {
 # Ni GraphiQL ni introspection : le schéma n'est pas publié en production.
 GRAPHQL_GRAPHIQL = False
 GRAPHQL_INTROSPECTION = False
-
-# Sans DEBUG, Django n'écrit les erreurs 500 nulle part (pas d'ADMINS) : on les envoie
-# sur la sortie d'erreur, lue par le gestionnaire de processus. Le client, lui, ne reçoit
-# que {"error": {"code": "internal_error", …}} (apps.core.views.server_error).
-LOGGING = {
-    "version": 1,
-    "disable_existing_loggers": False,
-    "formatters": {
-        "standard": {"format": "{asctime} {levelname} {name} {message}", "style": "{"},
-    },
-    "handlers": {
-        "console": {"class": "logging.StreamHandler", "formatter": "standard"},
-    },
-    "root": {"handlers": ["console"], "level": "WARNING"},
-    "loggers": {
-        "django": {
-            "handlers": ["console"],
-            "level": env("DJANGO_LOG_LEVEL", default="INFO"),
-            "propagate": False,
-        },
-    },
-}
