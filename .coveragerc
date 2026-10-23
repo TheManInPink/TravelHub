@@ -1,0 +1,22 @@
+# Configuration de coverage.py, lue par pytest-cov (voir pytest.ini).
+[run]
+source =
+    apps
+    config
+branch = true
+omit =
+    */migrations/*
+    */tests/*
+    # Points d'entrée des serveurs WSGI et ASGI, jamais importés par les tests.
+    config/asgi.py
+    config/wsgi.py
+
+[report]
+# Pas de fail_under ici : il ferait échouer « pytest un_fichier.py ». Seuil de la suite
+# complète : pytest --cov-fail-under=80.
+show_missing = true
+skip_covered = true
+
+[html]
+directory = htmlcov
+title = TravelHub : couverture des tests

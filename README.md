@@ -75,7 +75,7 @@ La commande est idempotente : la relancer ne crée pas de doublons. Les comptes 
 | `config.settings.test` | Tests (`pytest.ini`) |
 | `config.settings.prod` | Production (`wsgi.py`, `asgi.py`) ; vérifier avec `python manage.py check --deploy --settings=config.settings.prod` |
 
-Variables d'environnement (voir `.env.example`) : `SECRET_KEY`, `DEBUG`, `ALLOWED_HOSTS`, `DATABASE_URL`, `CORS_ALLOWED_ORIGINS`, et facultativement `THROTTLE_ANON_RATE` (défaut `100/hour`) et `THROTTLE_USER_RATE` (défaut `1000/hour`).
+Variables d'environnement (voir `.env.example`) : `SECRET_KEY`, `DEBUG`, `ALLOWED_HOSTS`, `DATABASE_URL`, `CORS_ALLOWED_ORIGINS`, et facultativement `THROTTLE_ANON_RATE` (défaut `100/hour`) et `THROTTLE_USER_RATE` (défaut `1000/hour`). En production seulement : `CSRF_TRUSTED_ORIGINS`, `SECURE_SSL_REDIRECT` (défaut `True`), `SECURE_HSTS_SECONDS` (défaut 30 jours) et `DJANGO_LOG_LEVEL` (défaut `INFO`).
 
 ## API REST
 
@@ -247,13 +247,73 @@ apps/trips/        voyages et participants
 apps/itinerary/    destinations et activités
 apps/integrations/ services Open-Meteo et Countries GraphQL
 scripts/db/        création, sauvegarde et restauration de la base
+postman/           collection Postman v2.1 et environnement local
 ```
 
-## Qualité
+## Sécurité (OWASP API Security Top 10, 2023)
+
+| Risque | Mesures | Tests |
+| --- | --- | --- |
+| API1 Broken Object Level Authorization | Chaque vue, resolver et filtre part de `Trip.objects.visible_to(user)`. Un non-participant reçoit 404, jamais 403. Les filtres `?trip=` / `?destination=` sont des `NumberFilter`, sans oracle d'existence. Un parent (`trip`, `destination`) est cherché parmi les objets visibles. | `apps/core/tests/test_object_level_authorization.py` : matrice A/B sur chaque point d'accès REST et chaque opération GraphQL (non-participant, lecteur, anonyme), base inchangée après un refus |
+| API2 Broken Authentication | JWT d'accès de 15 min. Rotation du refresh avec liste noire, déconnexion limitée à son propre jeton, validateurs de mot de passe. Les cookies de session ne sont jamais acceptés par `/graphql/`. | `test_security.py` (jeton falsifié, non signé, expiré, refresh utilisé comme accès), `apps/accounts/tests/` |
+| API3 Broken Object Property Level Authorization | Liste blanche de champs modifiables. `owner`, `id`, horodatages et totaux en lecture seule. Ni `is_staff` ni groupes à l'inscription. Le rôle `owner` ne s'attribue pas par invitation. GraphQL : aucun champ de mot de passe ou de droits, et le courriel n'est visible que par son titulaire. | `test_mass_assignment.py` |
+| API4 Unrestricted Resource Consumption | Limites de 100 requêtes/h en anonyme et 1000/h par utilisateur, avec un quota partagé entre REST et GraphQL. Pagination par 20 (GraphQL : 100 au plus). Profondeur GraphQL limitée à 6. Services externes : délai de 5 s, deux essais, cache. | `test_auth_api.py`, `test_graphql_view.py` |
+| API5 Broken Function Level Authorization | Permissions par rôle (`IsTripMember`, `IsTripEditor`, `IsTripOwner`) : un lecteur reçoit 403 sur toute écriture, et seul le propriétaire gère les participants. | matrice « lecteur » de `test_object_level_authorization.py`, `test_permissions.py` |
+| API6 Unrestricted Access to Sensitive Business Flows | L'inscription et la connexion sont soumises à la limite anonyme ; la duplication de voyages à la limite par utilisateur. | `test_auth_api.py` |
+| API7 Server Side Request Forgery | Les URL d'Open-Meteo et de Countries sont des constantes. La ville part en paramètre de requête ; le code pays (`^[A-Z]{2}$`) en variable GraphQL, jamais concaténé. | `apps/integrations/tests/` |
+| API8 Security Misconfiguration | `check --deploy` sans avertissement. HSTS, redirection HTTPS, cookies `Secure`, `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy` et COOP. CORS limité à `CORS_ALLOWED_ORIGINS`, sans identifiants. En production : JSON seulement (pas d'API navigable), GraphiQL et introspection désactivés, et des 404/500 en JSON sans trace de pile, l'erreur étant journalisée sur la console. | `test_security.py`, `test_input_validation.py` |
+| API9 Improper Inventory Management | Une seule version de l'API, entièrement décrite par OpenAPI (`/api/docs/`) et par la collection Postman. | `test_api_docs.py` |
+| API10 Unsafe Consumption of APIs | Réponses externes validées puis converties en dataclasses ; une réponse illisible devient une 503 et un délai dépassé une 504. Seules les réponses exploitables sont mises en cache. | `test_open_meteo.py`, `test_countries.py`, `test_destination_overview.py` |
+
+Validation des entrées (`test_input_validation.py`) : dates incohérentes ou hors du voyage et du séjour, montants négatifs ou trop précis, longueurs, choix inconnus, codes pays, coordonnées, filtres et pages invalides, JSON mal formé (400), type de contenu (415). Une donnée refusée n'écrit jamais rien en base.
+
+Risques résiduels acceptés :
+
+- l'inscription et l'ajout d'un participant indiquent si un courriel est inscrit (énumération possible, limitée par le throttling) ;
+- GraphQL limite la profondeur des requêtes, pas leur largeur (alias multiples) ; le throttling compte les requêtes HTTP ;
+- la documentation OpenAPI reste publique en production, alors que l'introspection GraphQL y est fermée.
+
+## Tests et qualité
 
 ```powershell
-pytest                       # tests
-pytest --cov=apps --cov-report=html
-ruff check .                 # analyse statique
-ruff format .                # formatage
+pytest                          # tests + couverture (terminal et htmlcov/index.html)
+pytest --cov-fail-under=80      # échoue si la couverture totale passe sous 80 %
+pytest -m "not slow"            # sans le test qui lance check --deploy dans un sous-processus
+pytest apps/trips --no-cov      # un sous-ensemble, sans mesure de couverture
+ruff check .                    # analyse statique
+ruff format .                   # formatage
+python manage.py check --deploy --settings=config.settings.prod
 ```
+
+La couverture (`.coveragerc`) mesure les branches de `apps/` et `config/`, sans les tests ni les migrations. Rapport HTML : `htmlcov/index.html`.
+
+Fixtures communes (`conftest.py`) :
+
+- `api_client` (anonyme), `client_for(user)` ;
+- `user_a`, `user_b`, `trip_a`, `destination_a`, `activity_a`, `trip_b`… et les clients authentifiés `client_a` et `client_b`, pour les accès croisés ;
+- fabriques `make_user`, `make_trip`, `make_destination`, `make_activity` : objets valides, n'importe quel champ peut être remplacé ;
+- `graphql(query, variables, user=…)` pour envoyer une requête GraphQL avec un vrai jeton ;
+- `mock_http`, qui intercepte Open-Meteo et Countries : aucun test ne sort sur le réseau.
+
+### Collection Postman
+
+`postman/TravelHub.postman_collection.json` (format v2.1) et l'environnement `postman/TravelHub.postman_environment.json` (`base_url`, `access`, `refresh`).
+
+1. Dans Postman : *Import*, choisir les deux fichiers, puis sélectionner l'environnement « TravelHub — local ».
+2. Lancer le serveur : `python manage.py runserver`.
+3. Sur la collection : *Run collection*, puis *Run TravelHub API*.
+
+| Dossier | Contenu |
+| --- | --- |
+| Auth | Inscription d'Alice et de Bob, connexion (stocke `access` et `refresh` dans l'environnement), rotation, profil, déconnexion |
+| Trips | CRUD, recherche et filtres, statistiques, duplication |
+| Destinations, Activities | CRUD, filtres, statistiques après ajout |
+| Participants | Bob lecteur (403 en écriture), éditeur, puis retiré (404) |
+| Externes | Météo, pays, vue d'ensemble ; 503 ou 504 acceptés sans Internet |
+| GraphQL | `me`, `myTrips`, `trip`, mutations, `destinationOverview` |
+| Cas d'erreur | 400, 401, 403, 404, 405, 415, affectation de masse, erreurs GraphQL, profondeur maximale |
+| Nettoyage | Suppression du voyage de l'exécution |
+
+Chaque exécution crée deux comptes uniques et des dates relatives au jour même. Elle peut donc être relancée telle quelle. Elle envoie une dizaine de requêtes anonymes : avec la limite par défaut de 100/h, relevez `THROTTLE_ANON_RATE` dans `.env` pour enchaîner plus d'une dizaine d'exécutions par heure. Hors du Runner, le script de la collection rafraîchit `access` dès qu'il expire.
+
+En ligne de commande : `npx newman run postman/TravelHub.postman_collection.json -e postman/TravelHub.postman_environment.json`.

@@ -1,0 +1,2736 @@
+{
+  "info": {
+    "_postman_id": "e45157fe-2945-5cbb-92d3-88062f7ab8a3",
+    "name": "TravelHub API",
+    "description": "API REST et GraphQL de TravelHub.\n\n1. Importer cette collection et l'environnement `TravelHub.postman_environment.json`.\n2. Lancer le serveur (`python manage.py runserver`) ; ajuster `base_url` au besoin.\n3. *Run collection* : les dossiers s'exécutent dans l'ordre. Chaque exécution crée deux comptes uniques (Alice et Bob) ; « Connexion » stocke `access` et `refresh` dans l'environnement.\n\nHors du Runner, le script de la collection rafraîchit `access` s'il a expiré.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{access}}",
+        "type": "string"
+      }
+    ]
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Session manuelle de plus de 15 minutes : rafraîchit le jeton d'accès d'Alice",
+          "// s'il expire dans moins de 30 s (les requêtes /api/auth/ gèrent leurs jetons).",
+          "const access = pm.environment.get(\"access\");",
+          "const refresh = pm.environment.get(\"refresh\");",
+          "if (access && refresh && !pm.request.url.getPath().startsWith(\"/api/auth/\")) {",
+          "    let exp = 0;",
+          "    try {",
+          "        const payload = access.split(\".\")[1].replace(/-/g, \"+\").replace(/_/g, \"/\");",
+          "        exp = JSON.parse(require(\"atob\")(payload)).exp;",
+          "    } catch (e) {",
+          "        exp = 0;",
+          "    }",
+          "    if (exp * 1000 < Date.now() + 30000) {",
+          "        pm.sendRequest(",
+          "            {",
+          "                url: pm.environment.get(\"base_url\") + \"/api/auth/token/refresh/\",",
+          "                method: \"POST\",",
+          "                header: { \"Content-Type\": \"application/json\" },",
+          "                body: { mode: \"raw\", raw: JSON.stringify({ refresh }) },",
+          "            },",
+          "            (err, res) => {",
+          "                if (!err && res.code === 200) {",
+          "                    pm.environment.set(\"access\", res.json().access);",
+          "                    pm.environment.set(\"refresh\", res.json().refresh);",
+          "                }",
+          "            }",
+          "        );",
+          "    }",
+          "}"
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Vérifications communes à toutes les requêtes.",
+          "if (pm.response.code !== 204) {",
+          "    pm.test(\"Corps JSON\", () => pm.response.to.be.json);",
+          "}",
+          "pm.test(\"Aucune trace de pile\", () => pm.expect(pm.response.text()).to.not.include(\"Traceback\"));"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "run_id",
+      "value": "",
+      "description": "Suffixe unique de l'exécution (noms d'utilisateurs, titres)."
+    },
+    {
+      "key": "username_a",
+      "value": ""
+    },
+    {
+      "key": "email_a",
+      "value": ""
+    },
+    {
+      "key": "user_a_id",
+      "value": ""
+    },
+    {
+      "key": "username_b",
+      "value": ""
+    },
+    {
+      "key": "email_b",
+      "value": ""
+    },
+    {
+      "key": "user_b_id",
+      "value": ""
+    },
+    {
+      "key": "password",
+      "value": ""
+    },
+    {
+      "key": "access_b",
+      "value": "",
+      "description": "Jeton d'accès de Bob."
+    },
+    {
+      "key": "refresh_b",
+      "value": ""
+    },
+    {
+      "key": "old_refresh",
+      "value": ""
+    },
+    {
+      "key": "start_date",
+      "value": ""
+    },
+    {
+      "key": "end_date",
+      "value": ""
+    },
+    {
+      "key": "arrival_date",
+      "value": ""
+    },
+    {
+      "key": "departure_date",
+      "value": ""
+    },
+    {
+      "key": "arrival_date_2",
+      "value": ""
+    },
+    {
+      "key": "departure_date_2",
+      "value": ""
+    },
+    {
+      "key": "activity_date",
+      "value": ""
+    },
+    {
+      "key": "trip_id",
+      "value": ""
+    },
+    {
+      "key": "clone_id",
+      "value": ""
+    },
+    {
+      "key": "destination_id",
+      "value": ""
+    },
+    {
+      "key": "destination_2_id",
+      "value": ""
+    },
+    {
+      "key": "activity_id",
+      "value": ""
+    },
+    {
+      "key": "activity_2_id",
+      "value": ""
+    },
+    {
+      "key": "gql_trip_id",
+      "value": ""
+    },
+    {
+      "key": "gql_destination_id",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "description": "Inscription d'Alice et de Bob (noms uniques à chaque exécution), connexion, rotation du jeton de rafraîchissement, profil et déconnexion. Les jetons d'Alice sont stockés dans l'environnement (`access`, `refresh`), ceux de Bob dans les variables de collection.",
+      "item": [
+        {
+          "name": "Inscription — Alice",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/auth/register/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{username_a}}\",\n  \"email\": \"{{email_a}}\",\n  \"password\": \"{{password}}\",\n  \"first_name\": \"Alice\",\n  \"last_name\": \"Tremblay\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Identifiant de l'exécution : chaque passage du Runner crée de nouveaux comptes.",
+                  "const run = Date.now().toString(36);",
+                  "pm.collectionVariables.set(\"run_id\", run);",
+                  "pm.collectionVariables.set(\"username_a\", `alice_${run}`);",
+                  "pm.collectionVariables.set(\"email_a\", `alice_${run}@example.com`);",
+                  "pm.collectionVariables.set(\"username_b\", `bob_${run}`);",
+                  "pm.collectionVariables.set(\"email_b\", `bob_${run}@example.com`);",
+                  "pm.collectionVariables.set(\"password\", \"Voyage-Montreal-2027\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 201\", () => pm.response.to.have.status(201));",
+                  "",
+                  "                const body = pm.response.json();",
+                  "                pm.test(\"Utilisateur et jetons renvoyés\", () => {",
+                  "                    pm.expect(body.user.username).to.eql(pm.collectionVariables.get(\"username_a\"));",
+                  "                    pm.expect(body.tokens).to.have.all.keys(\"access\", \"refresh\");",
+                  "                });",
+                  "                pm.test(\"Mot de passe absent de la réponse\", () => pm.expect(body.user).to.not.have.property(\"password\"));",
+                  "                pm.collectionVariables.set(\"user_a_id\", body.user.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Inscription — Bob",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/auth/register/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{username_b}}\",\n  \"email\": \"{{email_b}}\",\n  \"password\": \"{{password}}\",\n  \"first_name\": \"Bob\",\n  \"last_name\": \"Gagnon\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 201\", () => pm.response.to.have.status(201));",
+                  "",
+                  "                const body = pm.response.json();",
+                  "                pm.collectionVariables.set(\"user_b_id\", body.user.id);",
+                  "                pm.collectionVariables.set(\"access_b\", body.tokens.access);",
+                  "                pm.collectionVariables.set(\"refresh_b\", body.tokens.refresh);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Connexion (obtenir les jetons)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/auth/token/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{username_a}}\",\n  \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 200\", () => pm.response.to.have.status(200));",
+                  "",
+                  "                const body = pm.response.json();",
+                  "                pm.test(\"Paire de jetons\", () => pm.expect(body).to.have.all.keys(\"access\", \"refresh\"));",
+                  "                // Stocke les jetons dans l'environnement : toutes les requêtes suivantes s'en servent.",
+                  "                pm.environment.set(\"access\", body.access);",
+                  "                pm.environment.set(\"refresh\", body.refresh);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Rafraîchir le jeton d'accès (rotation)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/auth/token/refresh/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refresh\": \"{{refresh}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Garde l'ancien refresh : « Cas d'erreur » vérifie qu'il ne sert plus.",
+                  "pm.collectionVariables.set(\"old_refresh\", pm.environment.get(\"refresh\"));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 200\", () => pm.response.to.have.status(200));",
+                  "",
+                  "                const body = pm.response.json();",
+                  "                pm.test(\"Nouveau refresh émis\", () => pm.expect(body.refresh).to.not.eql(pm.collectionVariables.get(\"old_refresh\")));",
+                  "                pm.environment.set(\"access\", body.access);",
+                  "                pm.environment.set(\"refresh\", body.refresh);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Profil de l'utilisateur connecté",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/auth/me/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 200\", () => pm.response.to.have.status(200));",
+                  "",
+                  "                const body = pm.response.json();",
+                  "                pm.test(\"C'est Alice\", () => pm.expect(body.username).to.eql(pm.collectionVariables.get(\"username_a\")));",
+                  "                pm.test(\"Courriel en minuscules\", () => pm.expect(body.email).to.eql(pm.collectionVariables.get(\"email_a\")));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Déconnexion — Bob",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/auth/logout/",
+            "description": "Met le refresh de Bob sur liste noire ; son jeton d'accès reste valable 15 minutes.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refresh\": \"{{refresh_b}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_b}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 204\", () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Trips",
+      "description": "CRUD des voyages, recherche, statistiques et duplication. Les dates sont calculées à partir d'aujourd'hui pour que la météo (16 jours de prévision) réponde dans « Externes ».",
+      "item": [
+        {
+          "name": "Créer un voyage",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/trips/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Voyage au Japon {{run_id}}\",\n  \"description\": \"Kyoto et Osaka à l'automne.\",\n  \"start_date\": \"{{start_date}}\",\n  \"end_date\": \"{{end_date}}\",\n  \"status\": \"draft\",\n  \"budget\": \"4500.00\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Voyage de J+1 à J+12 ; destinations et activités sont placées à l'intérieur.",
+                  "const day = (offset) => {",
+                  "    const d = new Date();",
+                  "    d.setDate(d.getDate() + offset);",
+                  "    return d.toISOString().slice(0, 10);",
+                  "};",
+                  "pm.collectionVariables.set(\"start_date\", day(1));",
+                  "pm.collectionVariables.set(\"end_date\", day(12));",
+                  "pm.collectionVariables.set(\"arrival_date\", day(2));",
+                  "pm.collectionVariables.set(\"departure_date\", day(6));",
+                  "pm.collectionVariables.set(\"arrival_date_2\", day(7));",
+                  "pm.collectionVariables.set(\"departure_date_2\", day(10));",
+                  "pm.collectionVariables.set(\"activity_date\", day(3));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 201\", () => pm.response.to.have.status(201));",
+                  "",
+                  "                const body = pm.response.json();",
+                  "                pm.test(\"Alice est propriétaire\", () => pm.expect(body.owner.username).to.eql(pm.collectionVariables.get(\"username_a\")));",
+                  "                pm.test(\"Totaux à zéro\", () => {",
+                  "                    pm.expect(body.destination_count).to.eql(0);",
+                  "                    pm.expect(body.total_cost).to.eql(\"0.00\");",
+                  "                });",
+                  "                pm.collectionVariables.set(\"trip_id\", body.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Lister mes voyages",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/trips/?ordering=-start_date"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 200\", () => pm.response.to.have.status(200));",
+                  "",
+                  "                const body = pm.response.json();",
+                  "                pm.test(\"Réponse paginée\", () => pm.expect(body).to.have.all.keys(\"count\", \"next\", \"previous\", \"results\"));",
+                  "                pm.test(\"Contient le voyage créé\", () => {",
+                  "                    pm.expect(body.results.map((t) => t.id)).to.include(pm.collectionVariables.get(\"trip_id\"));",
+                  "                });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Rechercher et filtrer",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/trips/?search=Japon {{run_id}}&status=draft&start_date__gte={{start_date}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 200\", () => pm.response.to.have.status(200));",
+                  "",
+                  "                const body = pm.response.json();",
+                  "                pm.test(\"Un seul résultat\", () => pm.expect(body.count).to.eql(1));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Détail d'un voyage",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/trips/{{trip_id}}/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 200\", () => pm.response.to.have.status(200));",
+                  "",
+                  "                const body = pm.response.json();",
+                  "                pm.test(\"Destinations imbriquées\", () => pm.expect(body.destinations).to.be.an(\"array\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Modifier un voyage (PATCH)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/trips/{{trip_id}}/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"planned\",\n  \"budget\": \"3500.00\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 200\", () => pm.response.to.have.status(200));",
+                  "",
+                  "                const body = pm.response.json();",
+                  "                pm.test(\"Statut et budget modifiés\", () => {",
+                  "                    pm.expect(body.status).to.eql(\"planned\");",
+                  "                    pm.expect(body.budget).to.eql(\"3500.00\");",
+                  "                });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Remplacer un voyage (PUT)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/trips/{{trip_id}}/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Voyage au Japon {{run_id}}\",\n  \"description\": \"Kyoto et Osaka à l'automne.\",\n  \"start_date\": \"{{start_date}}\",\n  \"end_date\": \"{{end_date}}\",\n  \"status\": \"planned\",\n  \"budget\": \"4000.00\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 200\", () => pm.response.to.have.status(200));",
+                  "",
+                  "                pm.test(\"Budget remplacé\", () => pm.expect(pm.response.json().budget).to.eql(\"4000.00\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Statistiques d'un voyage",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/trips/{{trip_id}}/stats/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 200\", () => pm.response.to.have.status(200));",
+                  "",
+                  "                const body = pm.response.json();",
+                  "                pm.test(\"Champs des statistiques\", () => {",
+                  "                    pm.expect(body).to.include.keys(\"total_cost\", \"remaining_budget\", \"average_cost\", \"by_category\");",
+                  "                });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Dupliquer un voyage",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/trips/{{trip_id}}/clone/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Copie {{run_id}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 201\", () => pm.response.to.have.status(201));",
+                  "",
+                  "                const body = pm.response.json();",
+                  "                pm.test(\"La copie est un brouillon\", () => pm.expect(body.status).to.eql(\"draft\"));",
+                  "                pm.collectionVariables.set(\"clone_id\", body.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Supprimer la copie",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{base_url}}/api/trips/{{clone_id}}/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 204\", () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Destinations",
+      "description": "Étapes du voyage. Le code pays est mis en majuscules ; les dates doivent rester dans celles du voyage.",
+      "item": [
+        {
+          "name": "Créer une destination",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/destinations/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"trip\": \"{{trip_id}}\",\n  \"order\": 1,\n  \"city\": \"Kyoto\",\n  \"country\": \"Japon\",\n  \"country_code\": \"jp\",\n  \"arrival_date\": \"{{arrival_date}}\",\n  \"departure_date\": \"{{departure_date}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 201\", () => pm.response.to.have.status(201));",
+                  "",
+                  "                const body = pm.response.json();",
+                  "                pm.test(\"Code pays normalisé\", () => pm.expect(body.country_code).to.eql(\"JP\"));",
+                  "                pm.collectionVariables.set(\"destination_id\", body.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Créer une deuxième destination",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/destinations/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"trip\": \"{{trip_id}}\",\n  \"order\": 2,\n  \"city\": \"Osaka\",\n  \"country\": \"Japon\",\n  \"country_code\": \"JP\",\n  \"arrival_date\": \"{{arrival_date_2}}\",\n  \"departure_date\": \"{{departure_date_2}}\",\n  \"latitude\": \"34.693738\",\n  \"longitude\": \"135.502165\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 201\", () => pm.response.to.have.status(201));",
+                  "",
+                  "                pm.collectionVariables.set(\"destination_2_id\", pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Lister les destinations du voyage",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/destinations/?trip={{trip_id}}&ordering=order"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 200\", () => pm.response.to.have.status(200));",
+                  "",
+                  "                const body = pm.response.json();",
+                  "                pm.test(\"Deux destinations dans l'ordre\", () => {",
+                  "                    pm.expect(body.results.map((d) => d.city)).to.eql([\"Kyoto\", \"Osaka\"]);",
+                  "                });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Détail d'une destination",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/destinations/{{destination_id}}/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 200\", () => pm.response.to.have.status(200));",
+                  "",
+                  "                pm.test(\"Kyoto\", () => pm.expect(pm.response.json().city).to.eql(\"Kyoto\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Modifier une destination",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/destinations/{{destination_id}}/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"country\": \"Japon (Kansai)\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Supprimer la deuxième destination",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{base_url}}/api/destinations/{{destination_2_id}}/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 204\", () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Activities",
+      "description": "Activités d'une destination ; leur date doit être comprise dans le séjour.",
+      "item": [
+        {
+          "name": "Créer une activité",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/activities/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"destination\": \"{{destination_id}}\",\n  \"name\": \"Cérémonie du thé\",\n  \"description\": \"Maison de thé à Gion.\",\n  \"category\": \"culture\",\n  \"date\": \"{{activity_date}}\",\n  \"start_time\": \"14:00\",\n  \"cost\": \"45.00\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 201\", () => pm.response.to.have.status(201));",
+                  "",
+                  "                const body = pm.response.json();",
+                  "                pm.test(\"Rattachée au voyage\", () => pm.expect(body.trip).to.eql(pm.collectionVariables.get(\"trip_id\")));",
+                  "                pm.collectionVariables.set(\"activity_id\", body.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Créer une deuxième activité",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/activities/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"destination\": \"{{destination_id}}\",\n  \"name\": \"Marché Nishiki\",\n  \"category\": \"food\",\n  \"date\": \"{{activity_date}}\",\n  \"cost\": \"30.50\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 201\", () => pm.response.to.have.status(201));",
+                  "",
+                  "                pm.collectionVariables.set(\"activity_2_id\", pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Lister les activités (filtre par catégorie)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/activities/?trip={{trip_id}}&category=culture"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 200\", () => pm.response.to.have.status(200));",
+                  "",
+                  "                const body = pm.response.json();",
+                  "                pm.test(\"Une activité culturelle\", () => pm.expect(body.count).to.eql(1));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Détail d'une activité",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/activities/{{activity_id}}/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Modifier une activité",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/activities/{{activity_id}}/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cost\": \"50.00\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 200\", () => pm.response.to.have.status(200));",
+                  "",
+                  "                pm.test(\"Coût modifié\", () => pm.expect(pm.response.json().cost).to.eql(\"50.00\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Statistiques après ajout des activités",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/trips/{{trip_id}}/stats/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 200\", () => pm.response.to.have.status(200));",
+                  "",
+                  "                const body = pm.response.json();",
+                  "                pm.test(\"Coût total 80.50 sur 2 activités\", () => {",
+                  "                    pm.expect(body.total_cost).to.eql(\"80.50\");",
+                  "                    pm.expect(body.activity_count).to.eql(2);",
+                  "                    pm.expect(body.remaining_budget).to.eql(\"3919.50\");",
+                  "                });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Supprimer la deuxième activité",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{base_url}}/api/activities/{{activity_2_id}}/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 204\", () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Participants",
+      "description": "Partage du voyage d'Alice avec Bob : lecteur, puis éditeur, puis retiré. Les requêtes « Bob … » utilisent le jeton de Bob (`access_b`).",
+      "item": [
+        {
+          "name": "Ajouter Bob comme lecteur",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/trips/{{trip_id}}/participants/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email_b}}\",\n  \"role\": \"viewer\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 201\", () => pm.response.to.have.status(201));",
+                  "",
+                  "                const body = pm.response.json();",
+                  "                pm.test(\"Bob lecteur, invité par Alice\", () => {",
+                  "                    pm.expect(body.role).to.eql(\"viewer\");",
+                  "                    pm.expect(body.invited_by.username).to.eql(pm.collectionVariables.get(\"username_a\"));",
+                  "                });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Lister les participants",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/trips/{{trip_id}}/participants/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 200\", () => pm.response.to.have.status(200));",
+                  "",
+                  "                const roles = pm.response.json().map((p) => p.role).sort();",
+                  "                pm.test(\"Propriétaire et lecteur\", () => pm.expect(roles).to.eql([\"owner\", \"viewer\"]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Bob lit le voyage (lecteur)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/trips/{{trip_id}}/",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_b}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Bob ne peut pas modifier (lecteur, 403)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/trips/{{trip_id}}/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Modifié par Bob\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_b}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 403\", () => pm.response.to.have.status(403));",
+                  "const error = pm.response.json().error;",
+                  "pm.test(\"Code d'erreur permission_denied\", () => pm.expect(error.code).to.eql(\"permission_denied\"));",
+                  "pm.test(\"Enveloppe {code, message, details}\", () => {",
+                  "    pm.expect(error).to.have.all.keys(\"code\", \"message\", \"details\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Promouvoir Bob éditeur",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/trips/{{trip_id}}/participants/{{user_b_id}}/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"editor\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 200\", () => pm.response.to.have.status(200));",
+                  "",
+                  "                pm.test(\"Bob éditeur\", () => pm.expect(pm.response.json().role).to.eql(\"editor\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Bob modifie le voyage (éditeur)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/trips/{{trip_id}}/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"description\": \"Itinéraire revu par Bob.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_b}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Bob ne peut pas supprimer (éditeur, 403)",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{base_url}}/api/trips/{{trip_id}}/",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_b}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 403\", () => pm.response.to.have.status(403));",
+                  "const error = pm.response.json().error;",
+                  "pm.test(\"Code d'erreur permission_denied\", () => pm.expect(error.code).to.eql(\"permission_denied\"));",
+                  "pm.test(\"Enveloppe {code, message, details}\", () => {",
+                  "    pm.expect(error).to.have.all.keys(\"code\", \"message\", \"details\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Retirer Bob",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{base_url}}/api/trips/{{trip_id}}/participants/{{user_b_id}}/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 204\", () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Bob ne voit plus le voyage (404)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/trips/{{trip_id}}/",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_b}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 404\", () => pm.response.to.have.status(404));",
+                  "const error = pm.response.json().error;",
+                  "pm.test(\"Code d'erreur not_found\", () => pm.expect(error.code).to.eql(\"not_found\"));",
+                  "pm.test(\"Enveloppe {code, message, details}\", () => {",
+                  "    pm.expect(error).to.have.all.keys(\"code\", \"message\", \"details\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Externes",
+      "description": "Open-Meteo (météo) et Countries GraphQL (pays), appelés par le serveur. Sans accès à Internet, météo et pays répondent 503 ou 504, et la vue d'ensemble reste un 200 avec des avertissements.",
+      "item": [
+        {
+          "name": "Météo de la destination (Open-Meteo)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/destinations/{{destination_id}}/weather/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Service externe : 200 s'il répond, sinon 503 ou 504 avec l'enveloppe d'erreur.",
+                  "const code = pm.response.code;",
+                  "pm.test(\"200, ou 503/504 si le service externe est indisponible\", () => {",
+                  "    pm.expect(code).to.be.oneOf([200, 503, 504]);",
+                  "});",
+                  "if (code !== 200) {",
+                  "    const error = pm.response.json().error;",
+                  "    pm.test(\"Erreur de service externe\", () => {",
+                  "        pm.expect(error.code).to.be.oneOf([\"external_service_unavailable\", \"external_service_timeout\"]);",
+                  "    });",
+                  "}",
+                  "",
+                  "            if (code === 200) {",
+                  "                const body = pm.response.json();",
+                  "                pm.test(\"Prévisions du séjour\", () => {",
+                  "                    pm.expect(body.timezone).to.eql(\"Asia/Tokyo\");",
+                  "                    pm.expect(body.daily).to.be.an(\"array\").that.is.not.empty;",
+                  "                });",
+                  "            }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Pays de la destination (Countries GraphQL)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/destinations/{{destination_id}}/country/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Service externe : 200 s'il répond, sinon 503 ou 504 avec l'enveloppe d'erreur.",
+                  "const code = pm.response.code;",
+                  "pm.test(\"200, ou 503/504 si le service externe est indisponible\", () => {",
+                  "    pm.expect(code).to.be.oneOf([200, 503, 504]);",
+                  "});",
+                  "if (code !== 200) {",
+                  "    const error = pm.response.json().error;",
+                  "    pm.test(\"Erreur de service externe\", () => {",
+                  "        pm.expect(error.code).to.be.oneOf([\"external_service_unavailable\", \"external_service_timeout\"]);",
+                  "    });",
+                  "}",
+                  "",
+                  "            if (code === 200) {",
+                  "                pm.test(\"Japon\", () => pm.expect(pm.response.json().capital).to.eql(\"Tokyo\"));",
+                  "            }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Vue d'ensemble de la destination",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/destinations/{{destination_id}}/overview/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 200\", () => pm.response.to.have.status(200));",
+                  "",
+                  "                const body = pm.response.json();",
+                  "                pm.test(\"Base de données et services réunis\", () => {",
+                  "                    pm.expect(body).to.include.keys(\"destination\", \"trip\", \"activities\", \"weather\", \"country\", \"warnings\");",
+                  "                    pm.expect(body.activity_count).to.eql(1);",
+                  "                    pm.expect(body.total_cost).to.eql(\"50.00\");",
+                  "                });",
+                  "                pm.test(\"Un avertissement par bloc vide\", () => {",
+                  "                    const empty = [\"weather\", \"country\"].filter((key) => body[key] === null);",
+                  "                    pm.expect(body.warnings.map((w) => w.source).sort()).to.eql(empty.sort());",
+                  "                });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "GraphQL",
+      "description": "Point d'entrée unique POST /graphql/, authentifié par le même jeton JWT que l'API REST.",
+      "item": [
+        {
+          "name": "Query — me",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/graphql/",
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query { me { id username email } }",
+                "variables": ""
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 200\", () => pm.response.to.have.status(200));",
+                  "",
+                  "                const me = pm.response.json().data.me;",
+                  "                pm.test(\"C'est Alice\", () => pm.expect(me.username).to.eql(pm.collectionVariables.get(\"username_a\")));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Query — myTrips",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/graphql/",
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query MyTrips($search: String) {\n  myTrips(search: $search, orderBy: START_DATE, limit: 5) { id title status totalCost }\n  myTripsCount(search: $search)\n}",
+                "variables": "{\"search\": \"{{run_id}}\"}"
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 200\", () => pm.response.to.have.status(200));",
+                  "",
+                  "                const result = pm.response.json().data;",
+                  "                pm.test(\"Le voyage d'Alice\", () => {",
+                  "                    pm.expect(result.myTripsCount).to.eql(1);",
+                  "                    pm.expect(result.myTrips[0].status).to.eql(\"PLANNED\");",
+                  "                });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Query — trip (relations imbriquées)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/graphql/",
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query Trip($id: ID!) {\n  trip(id: $id) {\n    title\n    totalCost\n    destinations { city countryCode activities { name category cost } }\n    participants { role user { username email } }\n  }\n}",
+                "variables": "{\"id\": \"{{trip_id}}\"}"
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 200\", () => pm.response.to.have.status(200));",
+                  "",
+                  "                const trip = pm.response.json().data.trip;",
+                  "                pm.test(\"Destination et activité\", () => {",
+                  "                    pm.expect(trip.destinations[0].city).to.eql(\"Kyoto\");",
+                  "                    pm.expect(trip.destinations[0].activities[0].category).to.eql(\"CULTURE\");",
+                  "                });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Mutation — createTrip",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/graphql/",
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation Create($input: TripCreateInput!) {\n  createTrip(input: $input) { trip { id title status owner { username } } }\n}",
+                "variables": "{\"input\": {\"title\": \"GraphQL {{run_id}}\", \"startDate\": \"{{start_date}}\", \"endDate\": \"{{end_date}}\", \"budget\": \"1200.00\"}}"
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 200\", () => pm.response.to.have.status(200));",
+                  "",
+                  "                const trip = pm.response.json().data.createTrip.trip;",
+                  "                pm.test(\"Brouillon d'Alice\", () => {",
+                  "                    pm.expect(trip.status).to.eql(\"DRAFT\");",
+                  "                    pm.expect(trip.owner.username).to.eql(pm.collectionVariables.get(\"username_a\"));",
+                  "                });",
+                  "                pm.collectionVariables.set(\"gql_trip_id\", trip.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Mutation — updateTrip",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/graphql/",
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation Update($id: ID!) {\n  updateTrip(id: $id, input: {status: PLANNED}) { trip { status } }\n}",
+                "variables": "{\"id\": \"{{gql_trip_id}}\"}"
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 200\", () => pm.response.to.have.status(200));",
+                  "",
+                  "                pm.test(\"Planifié\", () => pm.expect(pm.response.json().data.updateTrip.trip.status).to.eql(\"PLANNED\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Mutation — createDestination",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/graphql/",
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation Create($input: DestinationCreateInput!) {\n  createDestination(input: $input) { destination { id city countryCode } }\n}",
+                "variables": "{\"input\": {\"trip\": \"{{gql_trip_id}}\", \"order\": 1, \"city\": \"Osaka\", \"country\": \"Japon\", \"countryCode\": \"jp\", \"arrivalDate\": \"{{arrival_date}}\", \"departureDate\": \"{{departure_date}}\"}}"
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 200\", () => pm.response.to.have.status(200));",
+                  "",
+                  "                const destination = pm.response.json().data.createDestination.destination;",
+                  "                pm.test(\"Code pays normalisé\", () => pm.expect(destination.countryCode).to.eql(\"JP\"));",
+                  "                pm.collectionVariables.set(\"gql_destination_id\", destination.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Mutation — createActivity",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/graphql/",
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation Create($input: ActivityCreateInput!) {\n  createActivity(input: $input) { activity { id name category cost } }\n}",
+                "variables": "{\"input\": {\"destination\": \"{{gql_destination_id}}\", \"name\": \"Château d'Osaka\", \"category\": \"CULTURE\", \"date\": \"{{activity_date}}\", \"cost\": \"12.00\"}}"
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 200\", () => pm.response.to.have.status(200));",
+                  "",
+                  "                pm.test(\"Activité créée\", () => pm.expect(pm.response.json().data.createActivity.activity.cost).to.eql(\"12.00\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Query — destinationOverview",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/graphql/",
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query Overview($id: ID!) {\n  destinationOverview(id: $id) {\n    destination { city }\n    activityCount\n    totalCost\n    weather { timezone daily { date description } }\n    country { name capital emoji }\n    warnings { source code message }\n  }\n}",
+                "variables": "{\"id\": \"{{gql_destination_id}}\"}"
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 200\", () => pm.response.to.have.status(200));",
+                  "",
+                  "                const overview = pm.response.json().data.destinationOverview;",
+                  "                pm.test(\"Totaux de la destination\", () => {",
+                  "                    pm.expect(overview.activityCount).to.eql(1);",
+                  "                    pm.expect(overview.totalCost).to.eql(\"12.00\");",
+                  "                });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Mutation — deleteTrip",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/graphql/",
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation Delete($id: ID!) { deleteTrip(id: $id) { ok id } }",
+                "variables": "{\"id\": \"{{gql_trip_id}}\"}"
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 200\", () => pm.response.to.have.status(200));",
+                  "",
+                  "                pm.test(\"Supprimé\", () => pm.expect(pm.response.json().data.deleteTrip.ok).to.be.true);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Cas d'erreur",
+      "description": "401, 403, 404, 400, 405, 415 en REST et erreurs GraphQL. Toutes les erreurs REST ont la forme {\"error\": {\"code\", \"message\", \"details\"}}.",
+      "item": [
+        {
+          "name": "401 — sans jeton",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/trips/",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 401\", () => pm.response.to.have.status(401));",
+                  "const error = pm.response.json().error;",
+                  "pm.test(\"Code d'erreur not_authenticated\", () => pm.expect(error.code).to.eql(\"not_authenticated\"));",
+                  "pm.test(\"Enveloppe {code, message, details}\", () => {",
+                  "    pm.expect(error).to.have.all.keys(\"code\", \"message\", \"details\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "401 — jeton invalide",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/trips/",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "abc.def.ghi",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 401\", () => pm.response.to.have.status(401));",
+                  "const error = pm.response.json().error;",
+                  "pm.test(\"Code d'erreur token_not_valid\", () => pm.expect(error.code).to.eql(\"token_not_valid\"));",
+                  "pm.test(\"Enveloppe {code, message, details}\", () => {",
+                  "    pm.expect(error).to.have.all.keys(\"code\", \"message\", \"details\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "401 — refresh déjà utilisé (rotation)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/auth/token/refresh/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refresh\": \"{{old_refresh}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 401\", () => pm.response.to.have.status(401));",
+                  "const error = pm.response.json().error;",
+                  "pm.test(\"Code d'erreur token_not_valid\", () => pm.expect(error.code).to.eql(\"token_not_valid\"));",
+                  "pm.test(\"Enveloppe {code, message, details}\", () => {",
+                  "    pm.expect(error).to.have.all.keys(\"code\", \"message\", \"details\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "401 — refresh révoqué (déconnexion)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/auth/token/refresh/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refresh\": \"{{refresh_b}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 401\", () => pm.response.to.have.status(401));",
+                  "const error = pm.response.json().error;",
+                  "pm.test(\"Code d'erreur token_not_valid\", () => pm.expect(error.code).to.eql(\"token_not_valid\"));",
+                  "pm.test(\"Enveloppe {code, message, details}\", () => {",
+                  "    pm.expect(error).to.have.all.keys(\"code\", \"message\", \"details\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "401 — mauvais mot de passe",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/auth/token/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{username_a}}\",\n  \"password\": \"mauvais\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 401\", () => pm.response.to.have.status(401));",
+                  "const error = pm.response.json().error;",
+                  "pm.test(\"Code d'erreur no_active_account\", () => pm.expect(error.code).to.eql(\"no_active_account\"));",
+                  "pm.test(\"Enveloppe {code, message, details}\", () => {",
+                  "    pm.expect(error).to.have.all.keys(\"code\", \"message\", \"details\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "400 — dates incohérentes",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/trips/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Dates\",\n  \"start_date\": \"{{end_date}}\",\n  \"end_date\": \"{{start_date}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 400\", () => pm.response.to.have.status(400));",
+                  "const error = pm.response.json().error;",
+                  "pm.test(\"Code d'erreur validation_error\", () => pm.expect(error.code).to.eql(\"validation_error\"));",
+                  "pm.test(\"Enveloppe {code, message, details}\", () => {",
+                  "    pm.expect(error).to.have.all.keys(\"code\", \"message\", \"details\");",
+                  "});",
+                  "pm.test(\"Erreur sur le champ end_date\", () => pm.expect(error.details).to.have.property(\"end_date\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "400 — budget négatif",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/trips/{{trip_id}}/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"budget\": \"-10.00\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 400\", () => pm.response.to.have.status(400));",
+                  "const error = pm.response.json().error;",
+                  "pm.test(\"Code d'erreur validation_error\", () => pm.expect(error.code).to.eql(\"validation_error\"));",
+                  "pm.test(\"Enveloppe {code, message, details}\", () => {",
+                  "    pm.expect(error).to.have.all.keys(\"code\", \"message\", \"details\");",
+                  "});",
+                  "pm.test(\"Erreur sur le champ budget\", () => pm.expect(error.details).to.have.property(\"budget\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "400 — destination hors des dates du voyage",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/destinations/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"trip\": \"{{trip_id}}\",\n  \"order\": 9,\n  \"city\": \"Nara\",\n  \"country\": \"Japon\",\n  \"country_code\": \"JP\",\n  \"arrival_date\": \"2000-01-01\",\n  \"departure_date\": \"{{departure_date}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 400\", () => pm.response.to.have.status(400));",
+                  "const error = pm.response.json().error;",
+                  "pm.test(\"Code d'erreur validation_error\", () => pm.expect(error.code).to.eql(\"validation_error\"));",
+                  "pm.test(\"Enveloppe {code, message, details}\", () => {",
+                  "    pm.expect(error).to.have.all.keys(\"code\", \"message\", \"details\");",
+                  "});",
+                  "pm.test(\"Erreur sur le champ arrival_date\", () => pm.expect(error.details).to.have.property(\"arrival_date\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "400 — code pays invalide",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/destinations/{{destination_id}}/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"country_code\": \"JPN\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 400\", () => pm.response.to.have.status(400));",
+                  "const error = pm.response.json().error;",
+                  "pm.test(\"Code d'erreur validation_error\", () => pm.expect(error.code).to.eql(\"validation_error\"));",
+                  "pm.test(\"Enveloppe {code, message, details}\", () => {",
+                  "    pm.expect(error).to.have.all.keys(\"code\", \"message\", \"details\");",
+                  "});",
+                  "pm.test(\"Erreur sur le champ country_code\", () => pm.expect(error.details).to.have.property(\"country_code\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "400 — activité hors du séjour",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/activities/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"destination\": \"{{destination_id}}\",\n  \"name\": \"Trop tard\",\n  \"date\": \"{{end_date}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 400\", () => pm.response.to.have.status(400));",
+                  "const error = pm.response.json().error;",
+                  "pm.test(\"Code d'erreur validation_error\", () => pm.expect(error.code).to.eql(\"validation_error\"));",
+                  "pm.test(\"Enveloppe {code, message, details}\", () => {",
+                  "    pm.expect(error).to.have.all.keys(\"code\", \"message\", \"details\");",
+                  "});",
+                  "pm.test(\"Erreur sur le champ date\", () => pm.expect(error.details).to.have.property(\"date\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "400 — le propriétaire ne peut pas être retiré",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{base_url}}/api/trips/{{trip_id}}/participants/{{user_a_id}}/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 400\", () => pm.response.to.have.status(400));",
+                  "const error = pm.response.json().error;",
+                  "pm.test(\"Code d'erreur validation_error\", () => pm.expect(error.code).to.eql(\"validation_error\"));",
+                  "pm.test(\"Enveloppe {code, message, details}\", () => {",
+                  "    pm.expect(error).to.have.all.keys(\"code\", \"message\", \"details\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "200 — propriétaire en lecture seule (affectation de masse ignorée)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/trips/{{trip_id}}/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"owner\": \"{{user_b_id}}\",\n  \"id\": 1,\n  \"total_cost\": \"0.01\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 200\", () => pm.response.to.have.status(200));",
+                  "",
+                  "                const body = pm.response.json();",
+                  "                pm.test(\"Propriétaire, identifiant et total inchangés\", () => {",
+                  "                    pm.expect(body.owner.username).to.eql(pm.collectionVariables.get(\"username_a\"));",
+                  "                    pm.expect(body.id).to.eql(pm.collectionVariables.get(\"trip_id\"));",
+                  "                    pm.expect(body.total_cost).to.eql(\"50.00\");",
+                  "                });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "404 — Bob lit le voyage d'Alice",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/trips/{{trip_id}}/",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_b}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 404\", () => pm.response.to.have.status(404));",
+                  "const error = pm.response.json().error;",
+                  "pm.test(\"Code d'erreur not_found\", () => pm.expect(error.code).to.eql(\"not_found\"));",
+                  "pm.test(\"Enveloppe {code, message, details}\", () => {",
+                  "    pm.expect(error).to.have.all.keys(\"code\", \"message\", \"details\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "404 — Bob modifie le voyage d'Alice",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/trips/{{trip_id}}/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Piraté\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_b}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 404\", () => pm.response.to.have.status(404));",
+                  "const error = pm.response.json().error;",
+                  "pm.test(\"Code d'erreur not_found\", () => pm.expect(error.code).to.eql(\"not_found\"));",
+                  "pm.test(\"Enveloppe {code, message, details}\", () => {",
+                  "    pm.expect(error).to.have.all.keys(\"code\", \"message\", \"details\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "404 — Bob supprime une activité d'Alice",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{base_url}}/api/activities/{{activity_id}}/",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_b}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 404\", () => pm.response.to.have.status(404));",
+                  "const error = pm.response.json().error;",
+                  "pm.test(\"Code d'erreur not_found\", () => pm.expect(error.code).to.eql(\"not_found\"));",
+                  "pm.test(\"Enveloppe {code, message, details}\", () => {",
+                  "    pm.expect(error).to.have.all.keys(\"code\", \"message\", \"details\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "404 — Bob ajoute une destination au voyage d'Alice",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/destinations/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"trip\": \"{{trip_id}}\",\n  \"order\": 9,\n  \"city\": \"Nara\",\n  \"country\": \"Japon\",\n  \"country_code\": \"JP\",\n  \"arrival_date\": \"{{arrival_date}}\",\n  \"departure_date\": \"{{departure_date}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_b}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 404\", () => pm.response.to.have.status(404));",
+                  "const error = pm.response.json().error;",
+                  "pm.test(\"Code d'erreur not_found\", () => pm.expect(error.code).to.eql(\"not_found\"));",
+                  "pm.test(\"Enveloppe {code, message, details}\", () => {",
+                  "    pm.expect(error).to.have.all.keys(\"code\", \"message\", \"details\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "404 — Bob filtre sur le voyage d'Alice (liste vide)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/activities/?trip={{trip_id}}",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_b}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 200\", () => pm.response.to.have.status(200));",
+                  "",
+                  "                pm.test(\"Aucune activité d'Alice\", () => pm.expect(pm.response.json().count).to.eql(0));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "404 — identifiant inconnu",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/trips/999999999/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 404\", () => pm.response.to.have.status(404));",
+                  "const error = pm.response.json().error;",
+                  "pm.test(\"Code d'erreur not_found\", () => pm.expect(error.code).to.eql(\"not_found\"));",
+                  "pm.test(\"Enveloppe {code, message, details}\", () => {",
+                  "    pm.expect(error).to.have.all.keys(\"code\", \"message\", \"details\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "405 — méthode non permise",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{base_url}}/api/auth/me/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 405\", () => pm.response.to.have.status(405));",
+                  "const error = pm.response.json().error;",
+                  "pm.test(\"Code d'erreur method_not_allowed\", () => pm.expect(error.code).to.eql(\"method_not_allowed\"));",
+                  "pm.test(\"Enveloppe {code, message, details}\", () => {",
+                  "    pm.expect(error).to.have.all.keys(\"code\", \"message\", \"details\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "415 — type de contenu non pris en charge",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "text/plain"
+              }
+            ],
+            "url": "{{base_url}}/api/trips/",
+            "body": {
+              "mode": "raw",
+              "raw": "title=Voyage"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 415\", () => pm.response.to.have.status(415));",
+                  "const error = pm.response.json().error;",
+                  "pm.test(\"Code d'erreur unsupported_media_type\", () => pm.expect(error.code).to.eql(\"unsupported_media_type\"));",
+                  "pm.test(\"Enveloppe {code, message, details}\", () => {",
+                  "    pm.expect(error).to.have.all.keys(\"code\", \"message\", \"details\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GraphQL — not_found pour Bob",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/graphql/",
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query Trip($id: ID!) { trip(id: $id) { title } }",
+                "variables": "{\"id\": \"{{trip_id}}\"}"
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_b}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 200\", () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"Erreur GraphQL not_found\", () => pm.expect(body.errors[0].extensions.code).to.eql(\"not_found\"));",
+                  "",
+                  "                pm.test(\"Aucune donnée\", () => pm.expect(body.data.trip).to.be.null);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GraphQL — not_authenticated sans jeton",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/graphql/",
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query { me { username } }",
+                "variables": ""
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 200\", () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"Erreur GraphQL not_authenticated\", () => pm.expect(body.errors[0].extensions.code).to.eql(\"not_authenticated\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GraphQL — validation_error",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/graphql/",
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation Update($id: ID!, $end: Date!) {\n  updateTrip(id: $id, input: {endDate: $end}) { trip { id } }\n}",
+                "variables": "{\"id\": \"{{trip_id}}\", \"end\": \"2000-01-01\"}"
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 200\", () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"Erreur GraphQL validation_error\", () => pm.expect(body.errors[0].extensions.code).to.eql(\"validation_error\"));",
+                  "",
+                  "                pm.test(\"Détail en camelCase\", () => pm.expect(body.errors[0].extensions.details).to.have.property(\"endDate\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GraphQL — le propriétaire ne peut pas se retirer",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/graphql/",
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation Remove($trip: ID!, $user: ID!) { removeParticipant(tripId: $trip, userId: $user) { ok } }",
+                "variables": "{\"trip\": \"{{trip_id}}\", \"user\": \"{{user_a_id}}\"}"
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 200\", () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"Erreur GraphQL validation_error\", () => pm.expect(body.errors[0].extensions.code).to.eql(\"validation_error\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GraphQL — profondeur maximale dépassée (400)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/graphql/",
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query Deep($id: ID!) {\n  trip(id: $id) { destinations { trip { destinations { trip { destinations {\n    trip { destinations { city } }\n  } } } } } }\n}",
+                "variables": "{\"id\": \"{{trip_id}}\"}"
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 400\", () => pm.response.to.have.status(400));",
+                  "",
+                  "                pm.test(\"Message de profondeur\", () => pm.expect(pm.response.json().errors[0].message).to.match(/depth/i));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Nettoyage",
+      "description": "Supprime le voyage de l'exécution ; ses destinations, activités et participations suivent.",
+      "item": [
+        {
+          "name": "Supprimer le voyage",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{base_url}}/api/trips/{{trip_id}}/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 204\", () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Le voyage supprimé n'existe plus",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/trips/{{trip_id}}/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 404\", () => pm.response.to.have.status(404));",
+                  "const error = pm.response.json().error;",
+                  "pm.test(\"Code d'erreur not_found\", () => pm.expect(error.code).to.eql(\"not_found\"));",
+                  "pm.test(\"Enveloppe {code, message, details}\", () => {",
+                  "    pm.expect(error).to.have.all.keys(\"code\", \"message\", \"details\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
