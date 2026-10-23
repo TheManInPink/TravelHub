@@ -127,6 +127,27 @@ class TestRequestIdMiddleware:
         assert response["X-Request-ID"] != incoming
         assert len(response["X-Request-ID"]) == 32
 
+    def test_django_request_warnings_keep_the_id(self, client, request_logs):
+        """django.request journalise les 4xx après la chaîne de middlewares."""
+        response = client.get("/inconnu/", headers={"X-Request-ID": "req-404"})
+
+        (record,) = [r for r in request_logs.records if r.name == "django.request"]
+        assert response.status_code == 404
+        assert record.request_id == "req-404"
+
+    def test_server_errors_keep_the_id(self, client_a, trip_a, monkeypatch, request_logs):
+        def boom(*args, **kwargs):
+            raise RuntimeError("panne")
+
+        monkeypatch.setattr("apps.trips.views.TripViewSet.list", boom)
+        client_a.raise_request_exception = False
+
+        response = client_a.get(reverse("trip-list"), headers={"X-Request-ID": "req-500"})
+
+        (record,) = [r for r in request_logs.records if r.name == "django.request"]
+        assert response.status_code == 500
+        assert record.request_id == "req-500"
+
     def test_context_is_reset_after_the_request(self, client):
         client.get(reverse("health"))
 

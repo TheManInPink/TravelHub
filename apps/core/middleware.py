@@ -16,6 +16,9 @@ import re
 import time
 import uuid
 
+from django.core.signals import request_finished
+from django.dispatch import receiver
+
 from .logs import request_id_var
 
 logger = logging.getLogger("travelhub.request")
@@ -23,6 +26,13 @@ logger = logging.getLogger("travelhub.request")
 HEADER = "X-Request-ID"
 VALID_REQUEST_ID = re.compile(r"[A-Za-z0-9._-]{1,64}")
 QUIET_PATHS = frozenset({"/health/"})
+
+
+@receiver(request_finished, dispatch_uid="travelhub.clear_request_id")
+def clear_request_id(**kwargs):
+    """Fin de requête (fermeture de la réponse, après django.request et django.server) :
+    les journaux suivants de ce fil ne portent plus l'identifiant."""
+    request_id_var.set(None)
 
 
 class RequestIdMiddleware:
@@ -34,15 +44,14 @@ class RequestIdMiddleware:
         if not VALID_REQUEST_ID.fullmatch(request_id):
             request_id = uuid.uuid4().hex
         request.request_id = request_id
-        token = request_id_var.set(request_id)
+        # Pas de remise à zéro en sortie : Django journalise les 4xx et 5xx (django.request)
+        # après toute la chaîne de middlewares. clear_request_id() s'en charge à la fin.
+        request_id_var.set(request_id)
         started = time.perf_counter()
-        try:
-            response = self.get_response(request)
-            response[HEADER] = request_id
-            self.log(request, response.status_code, started)
-            return response
-        finally:
-            request_id_var.reset(token)
+        response = self.get_response(request)
+        response[HEADER] = request_id
+        self.log(request, response.status_code, started)
+        return response
 
     @staticmethod
     def log(request, status, started):
