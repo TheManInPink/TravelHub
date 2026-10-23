@@ -1,0 +1,29 @@
+# Secrets et environnements locaux : jamais dans l'image.
+.env
+.venv/
+venv/
+
+# Git, CI et outils
+.git/
+.github/
+.vscode/
+.idea/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+staticfiles/
+media/
+backups/
+
+# Hors du service web
+Dockerfile
+docker-compose.yml
+.dockerignore
+Modèle_de_Rapport_LaTex/
+postman/
+scripts/
+*.md

@@ -1,0 +1,115 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+permissions:
+  contents: read
+
+# Un nouveau push sur la même branche annule l'exécution en cours.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Lint et tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: travelhub
+          POSTGRES_PASSWORD: travelhub
+          POSTGRES_DB: travelhub
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U travelhub -d travelhub"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # Clé jetable d'au moins 50 caractères (test_secret_key_comes_from_environment).
+      SECRET_KEY: ci-cle-secrete-jetable-pour-les-tests-uniquement-0123456789
+      # Superutilisateur du service : pytest crée et supprime test_travelhub.
+      DATABASE_URL: postgres://travelhub:travelhub@localhost:5432/travelhub
+      ALLOWED_HOSTS: localhost
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+          cache: pip
+          cache-dependency-path: requirements*.txt
+
+      - name: Installer les dépendances
+        run: pip install -r requirements-dev.txt
+
+      - name: Ruff (analyse statique)
+        run: ruff check --output-format=github .
+
+      - name: Ruff (formatage)
+        run: ruff format --check .
+
+      - name: Pytest avec couverture
+        run: pytest --cov-fail-under=80 --cov-report=xml
+
+      - name: Résumé de la couverture
+        if: ${{ !cancelled() }}
+        run: coverage report --format=markdown >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publier les rapports de couverture
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: |
+            coverage.xml
+            htmlcov/
+          retention-days: 14
+
+  docker:
+    name: Image Docker
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Construire l'image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          push: false
+          tags: travelhub:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Même démarrage qu'en local : migrations, Gunicorn, puis /api/docs/ doit répondre.
+      - name: Démarrer docker compose
+        run: |
+          {
+            echo "SECRET_KEY=ci-cle-secrete-jetable-pour-le-test-de-l-image-0123456789"
+            echo "ALLOWED_HOSTS=localhost,127.0.0.1"
+            echo "POSTGRES_PASSWORD=travelhub-ci"
+            echo "PGADMIN_DEFAULT_PASSWORD=travelhub-ci"
+          } > .env
+          docker compose up --no-build --detach --wait --wait-timeout 120 web
+
+      - name: Vérifier /api/docs/ et /api/schema/
+        run: |
+          curl --fail --silent --show-error http://localhost:8000/api/docs/ > /dev/null
+          curl --fail --silent --show-error http://localhost:8000/api/schema/ > /dev/null
+
+      - name: Journaux des conteneurs
+        if: ${{ failure() }}
+        run: docker compose logs
+
+      - name: Arrêter docker compose
+        if: ${{ always() }}
+        run: docker compose down --volumes

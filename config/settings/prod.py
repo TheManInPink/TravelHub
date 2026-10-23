@@ -5,9 +5,22 @@ Vérification : python manage.py check --deploy --settings=config.settings.prod
 """
 
 from .base import *  # noqa: F403
-from .base import REST_FRAMEWORK, env
+from .base import MIDDLEWARE, REST_FRAMEWORK, env
 
 DEBUG = False
+
+# Fichiers statiques servis par Gunicorn via WhiteNoise, juste après SecurityMiddleware :
+# noms hachés et versions compressées produits par collectstatic (voir Dockerfile).
+_after_security = MIDDLEWARE.index("django.middleware.security.SecurityMiddleware") + 1
+MIDDLEWARE = [
+    *MIDDLEWARE[:_after_security],
+    "whitenoise.middleware.WhiteNoiseMiddleware",
+    *MIDDLEWARE[_after_security:],
+]
+STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"},
+}
 
 # Derrière un proxy inverse (nginx, plateforme cloud) qui termine le HTTPS.
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")

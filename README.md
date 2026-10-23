@@ -57,6 +57,34 @@ powershell -ExecutionPolicy Bypass -File .\scripts\db\reset_postgres_password.ps
 
 Le script sauvegarde `pg_hba.conf`, autorise temporairement les connexions locales sans mot de passe, définit le nouveau mot de passe, restaure toujours la configuration d'origine, puis crée le rôle et la base de TravelHub.
 
+## Docker
+
+Prérequis : Docker Desktop (Compose v2.23 ou plus récent). Le fichier `.env` sert aussi à Compose : ajoutez-y `POSTGRES_PASSWORD` et `PGADMIN_DEFAULT_PASSWORD` (voir `.env.example`).
+
+```powershell
+docker compose up --build        # web (Gunicorn), db (PostgreSQL 18), pgadmin
+docker compose exec web python manage.py createsuperuser
+docker compose exec web python manage.py seed_demo
+docker compose down              # arrête ; --volumes efface aussi la base
+```
+
+| Service | Adresse | Rôle |
+| --- | --- | --- |
+| `web` | http://localhost:8000/api/docs/ | Image du `Dockerfile`, paramètres `config.settings.prod` ; applique les migrations à chaque démarrage |
+| `db` | `db:5432`, réseau interne seulement | `postgres:18`, données dans le volume `postgres-data`, contrôle `pg_isready` |
+| `pgadmin` | http://localhost:5050 | Connexion avec `PGADMIN_DEFAULT_EMAIL` / `PGADMIN_DEFAULT_PASSWORD` ; le serveur « TravelHub (Docker) » est déjà déclaré |
+
+Le `Dockerfile` construit les dépendances dans une première étape (`python:3.14-slim`), puis copie l'environnement virtuel dans l'image finale. Il exécute `collectstatic` (fichiers servis par WhiteNoise) et lance Gunicorn (`gunicorn.conf.py`, `WEB_CONCURRENCY` processus) sous un utilisateur non root. Son `HEALTHCHECK` interroge `/admin/login/`. Le service `web` remplace `DATABASE_URL` par l'hôte `db` et désactive la redirection HTTPS et HSTS pour l'accès local en HTTP. En production, derrière un proxy HTTPS, on garde les valeurs par défaut.
+
+## Intégration continue
+
+`.github/workflows/ci.yml`, à chaque push sur `master` et à chaque pull request :
+
+- **Lint et tests** : service PostgreSQL 18, cache pip, `ruff check`, `ruff format --check`, puis `pytest --cov-fail-under=80`. Le résumé de couverture s'affiche dans la page de l'exécution, et `coverage.xml` et `htmlcov/` sont publiés comme artefact `coverage`.
+- **Image Docker** : construction de l'image (cache GitHub Actions), puis `docker compose up --wait web` et vérification de `/api/docs/` et `/api/schema/`.
+
+Dependabot (`.github/dependabot.yml`) propose chaque semaine les mises à jour pip et GitHub Actions.
+
 ## Données de démonstration
 
 ```powershell
@@ -73,7 +101,7 @@ La commande est idempotente : la relancer ne crée pas de doublons. Les comptes 
 | --- | --- |
 | `config.settings.dev` | Développement (`manage.py` par défaut) |
 | `config.settings.test` | Tests (`pytest.ini`) |
-| `config.settings.prod` | Production (`wsgi.py`, `asgi.py`) ; vérifier avec `python manage.py check --deploy --settings=config.settings.prod` |
+| `config.settings.prod` | Production (`wsgi.py`, `asgi.py`, image Docker) ; vérifier avec `python manage.py check --deploy --settings=config.settings.prod` |
 
 Variables d'environnement (voir `.env.example`) : `SECRET_KEY`, `DEBUG`, `ALLOWED_HOSTS`, `DATABASE_URL`, `CORS_ALLOWED_ORIGINS`, et facultativement `THROTTLE_ANON_RATE` (défaut `100/hour`) et `THROTTLE_USER_RATE` (défaut `1000/hour`). En production seulement : `CSRF_TRUSTED_ORIGINS`, `SECURE_SSL_REDIRECT` (défaut `True`), `SECURE_HSTS_SECONDS` (défaut 30 jours) et `DJANGO_LOG_LEVEL` (défaut `INFO`).
 
@@ -247,6 +275,7 @@ apps/trips/        voyages et participants
 apps/itinerary/    destinations et activités
 apps/integrations/ services Open-Meteo et Countries GraphQL
 scripts/db/        création, sauvegarde et restauration de la base
+.github/           CI (workflows/ci.yml) et Dependabot
 postman/           collection Postman v2.1 et environnement local
 ```
 
