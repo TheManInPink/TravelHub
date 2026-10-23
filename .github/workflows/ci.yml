@@ -16,7 +16,7 @@ concurrency:
 jobs:
   test:
     name: Lint et tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     services:
       postgres:
         image: postgres:18
@@ -38,9 +38,9 @@ jobs:
       DATABASE_URL: postgres://travelhub:travelhub@localhost:5432/travelhub
       ALLOWED_HOSTS: localhost
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.14"
           cache: pip
@@ -64,7 +64,7 @@ jobs:
 
       - name: Publier les rapports de couverture
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: coverage
           path: |
@@ -74,14 +74,14 @@ jobs:
 
   docker:
     name: Image Docker
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v4
 
       - name: Construire l'image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           load: true
