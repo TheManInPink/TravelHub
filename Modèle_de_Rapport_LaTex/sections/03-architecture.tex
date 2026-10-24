@@ -1,0 +1,89 @@
+%========================================================================================
+\section{Architecture}
+\label{sec:architecture}
+%========================================================================================
+
+\subsection{Applications Django}
+
+Le projet suit la structure recommandée par Django : un projet de configuration (\code{config}) et des applications à responsabilité unique, regroupées sous \code{apps/} (tableau~\ref{tab:apps}).
+
+\begin{table}[H]
+  \centering
+  \small
+  \caption{Applications du projet.}
+  \label{tab:apps}
+  \begin{tabularx}{\linewidth}{@{}l X@{}}
+    \toprule
+    \textbf{Application} & \textbf{Responsabilité} \\
+    \midrule
+    \code{config} & Paramètres, routage principal, schéma GraphQL racine, points d'entrée WSGI et ASGI \\
+    \code{apps.core} & Éléments transversaux : \code{TimeStampedModel}, permissions par rôle, gestionnaire d'exceptions, vue GraphQL, journaux, contrôle de santé \\
+    \code{apps.accounts} & Utilisateur personnalisé, inscription, jetons JWT, profil \\
+    \code{apps.trips} & Voyages et participants, services métier (création, clonage, statistiques) \\
+    \code{apps.itinerary} & Destinations et activités, coordonnées géographiques \\
+    \code{apps.integrations} & Clients Open-Meteo et Countries, couche HTTP commune, agrégateur \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+Chaque application métier contient les mêmes fichiers : \code{models.py}, \code{serializers.py}, \code{views.py}, \code{urls.py}, \code{filters.py}, \code{schema.py} (GraphQL), \code{admin.py}, \code{services.py} et un dossier \code{tests/}. Cette régularité facilite la navigation dans le code.
+
+\subsection{Arborescence}
+
+\begin{lstlisting}[language={},caption={Arborescence du dépôt (simplifiée).},label={lst:arbo}]
+TravelHub/
+|-- config/              settings/ (base, dev, test, prod), urls.py, schema.py
+|-- apps/
+|   |-- core/            permissions, exceptions, vue GraphQL, journaux
+|   |-- accounts/        User, inscription, JWT
+|   |-- trips/           Trip, TripParticipant, services
+|   |-- itinerary/       Destination, Activity
+|   `-- integrations/    services/ (http, open_meteo, countries, aggregator)
+|-- postman/             collection v2.1 et environnement
+|-- scripts/             backup.ps1, restore.ps1, db/
+|-- .github/workflows/   ci.yml
+|-- Dockerfile  docker-compose.yml  gunicorn.conf.py
+`-- requirements.txt  requirements-dev.txt  pytest.ini  .env.example
+\end{lstlisting}
+
+\subsection{Répartition des responsabilités}
+
+Le code respecte quatre principes.
+\begin{enumerate}
+  \item \textbf{Des vues minces.} Une vue authentifie, choisit le queryset, applique la permission, puis délègue. Elle ne contient pas de règle métier.
+  \item \textbf{Des services explicites.} Les opérations qui touchent plusieurs tables (\code{create_trip}, \code{clone_trip}, \code{add_participant}) vivent dans \code{services.py}. Les API REST et GraphQL les appellent toutes deux.
+  \item \textbf{Des règles portées par le modèle et par la base.} Les règles de dates sont écrites dans \code{Model.clean()}. Les invariants sont doublés par des contraintes PostgreSQL.
+  \item \textbf{Des erreurs centralisées.} Un gestionnaire unique (\code{apps/core/exceptions.py}) produit la même enveloppe JSON pour toutes les erreurs.
+\end{enumerate}
+
+\subsection{Flux d'une requête}
+
+La figure~\ref{fig:flux} suit une requête \code{PATCH /api/trips/12/} de bout en bout.
+
+\begin{figure}[tbp]
+  \centering
+  \begin{tikzpicture}[node distance=0.32cm]
+    \node[etape] (client) {Client HTTP (\texttt{Authorization: Bearer} \ldots)};
+    \node[etape, below=of client] (mw) {Intergiciels : \texttt{RequestIdMiddleware}, sécurité, CORS};
+    \node[etape, below=of mw] (url) {Routage : \texttt{config/urls.py} $\rightarrow$ routeur DRF};
+    \node[etape, below=of url] (auth) {\texttt{TripViewSet} : authentification JWT, limites de requêtes, \texttt{IsAuthenticated}};
+    \node[etape, below=of auth] (qs) {\texttt{get\_queryset()} : \texttt{Trip.objects.visible\_to(user)}};
+    \node[etape, below=of qs] (perm) {Permission objet : \texttt{IsTripEditor}};
+    \node[etape, below=of perm] (ser) {Serializer : \texttt{validate()}, puis \texttt{Model.clean()} et contraintes};
+    \node[etape, below=of ser] (db) {ORM $\rightarrow$ PostgreSQL (contraintes \texttt{CHECK}, \texttt{UNIQUE})};
+    \node[etape, below=of db] (rep) {Réponse JSON, en-tête \texttt{X-Request-ID}, ligne de journal};
+
+    \foreach \a/\b in {client/mw, mw/url, url/auth, auth/qs, qs/perm, perm/ser, ser/db, db/rep}
+      \draw[rel] (\a) -- (\b);
+
+    \node[note, right=0.5cm of auth] {Jeton absent ou invalide : \textbf{401}. Quota dépassé : \textbf{429}.};
+    \node[note, right=0.5cm of qs] {Voyage d'un autre utilisateur : absent du queryset, donc \textbf{404}.};
+    \node[note, right=0.5cm of perm] {Lecteur qui tente une modification : \textbf{403}.};
+    \node[note, right=0.5cm of ser] {Dates incohérentes : \textbf{400} avec le détail par champ.};
+    \node[note, right=0.5cm of db] {Contrainte violée (accès concurrent) : \code{IntegrityError} convertie en \textbf{400}.};
+  \end{tikzpicture}
+  \caption{Traitement d'une modification de voyage. Toute exception est convertie par \texttt{exception\_handler} en enveloppe \texttt{\{"error": \ldots\}}.}
+  \label{fig:flux}
+\end{figure}
+
+L'ordre de ces étapes porte la sécurité. Le filtrage par \code{visible_to()} précède la permission objet. Un voyage d'autrui n'existe donc pas pour l'utilisateur : il reçoit 404, et non 403, ce qui ne révèle pas l'existence de la ressource.

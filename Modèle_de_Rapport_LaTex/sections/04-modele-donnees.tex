@@ -1,0 +1,205 @@
+%========================================================================================
+\section{Modèle de données}
+\label{sec:modele}
+%========================================================================================
+
+\subsection{Diagramme entité-association}
+
+Le modèle compte cinq tables métier (figure~\ref{fig:erd}). Les tables techniques de Django et de SimpleJWT (sessions, permissions, liste noire des jetons) n'y figurent pas. Les champs \code{created_at} et \code{updated_at} proviennent du modèle abstrait \code{TimeStampedModel} de \code{apps.core}.
+
+\begin{figure}[tbp]
+  \centering
+  \resizebox{\linewidth}{!}{%
+  \begin{tikzpicture}
+    \node[entite] (trip) at (0,0) {%
+      \textbf{trips\_trip}
+      \nodepart{two}
+      id \hfill bigint PK\\
+      owner\_id \hfill FK user\\
+      title \hfill varchar(200)\\
+      description \hfill text\\
+      start\_date \hfill date\\
+      end\_date \hfill date\\
+      status \hfill varchar(20)\\
+      budget \hfill numeric(10,2) NULL\\
+      created\_at, updated\_at};
+
+    \node[entite, right=1.3cm of trip.north east, anchor=north west] (dest) {%
+      \textbf{itinerary\_destination}
+      \nodepart{two}
+      id \hfill bigint PK\\
+      trip\_id \hfill FK trip\\
+      city, country \hfill varchar(120)\\
+      country\_code \hfill varchar(2)\\
+      arrival\_date \hfill date\\
+      departure\_date \hfill date\\
+      order \hfill smallint\\
+      latitude \hfill numeric(9,6) NULL\\
+      longitude \hfill numeric(9,6) NULL\\
+      created\_at, updated\_at};
+
+    \node[entite, below=1.9cm of trip] (part) {%
+      \textbf{trips\_tripparticipant}
+      \nodepart{two}
+      id \hfill bigint PK\\
+      trip\_id \hfill FK trip\\
+      user\_id \hfill FK user\\
+      role \hfill varchar(10)\\
+      joined\_at \hfill timestamptz\\
+      invited\_by\_id \hfill FK user NULL};
+
+    \node[entite, below=1.9cm of dest] (act) {%
+      \textbf{itinerary\_activity}
+      \nodepart{two}
+      id \hfill bigint PK\\
+      destination\_id \hfill FK destination\\
+      name \hfill varchar(200)\\
+      description \hfill text\\
+      category \hfill varchar(20)\\
+      date \hfill date\\
+      start\_time \hfill time NULL\\
+      cost \hfill numeric(10,2)\\
+      created\_at, updated\_at};
+
+    \node[entite, left=1.3cm of trip.south west, anchor=east, yshift=-1.2cm] (user) {%
+      \textbf{accounts\_user}
+      \nodepart{two}
+      id \hfill bigint PK\\
+      username \hfill varchar(150) UQ\\
+      email \hfill UQ sur lower(email)\\
+      password \hfill varchar(128)\\
+      first\_name, last\_name\\
+      is\_active, is\_staff,\\
+      is\_superuser\\
+      date\_joined, last\_login};
+
+    % User 1 -- N Trip (propriétaire)
+    \draw[rel] (user.north) |- node[card, pos=0.94, above] {0..*} node[card, pos=0.06, left] {1}
+      node[card, pos=0.75, above] {owner} (trip.west);
+    % User 1 -- N TripParticipant (participant)
+    \draw[rel] (user.east) -- node[card, pos=0.5, above] {1} ++(0.6,0)
+      |- node[card, pos=0.25, right] {user} node[card, pos=0.93, above] {0..*}
+      ([yshift=0.3cm]part.west);
+    % User 0..1 -- N TripParticipant (invité par)
+    \draw[rel, dashed] (user.south) |- node[card, pos=0.06, left] {0..1}
+      node[card, pos=0.7, below] {invited\_by} node[card, pos=0.95, below] {0..*}
+      ([yshift=-0.4cm]part.west);
+    % Trip 1 -- N TripParticipant
+    \draw[rel] (trip.south) -- node[card, pos=0.12, right] {1} node[card, pos=0.88, right] {0..*}
+      node[card, pos=0.5, left] {trip} (part.north);
+    % Trip 1 -- N Destination
+    \draw[rel] (trip.east) -- node[card, pos=0.15, above] {1} node[card, pos=0.75, above] {0..*}
+      node[card, pos=0.45, below] {trip} (trip.east -| dest.west);
+    % Destination 1 -- N Activity
+    \draw[rel] (dest.south) -- node[card, pos=0.12, right] {1} node[card, pos=0.88, right] {0..*}
+      node[card, pos=0.5, left] {destination} (act.north);
+  \end{tikzpicture}}
+  \caption{Modèle de données de TravelHub. Les flèches vont de la table référencée vers la table qui porte la clé étrangère. La relation N-N entre utilisateurs et voyages passe par \texttt{trips\_tripparticipant}.}
+  \label{fig:erd}
+\end{figure}
+
+La figure~\ref{fig:erd-pgadmin} montre le même schéma, produit par l'outil ERD de pgAdmin à partir de la base réelle.
+
+\capture{erd-pgadmin.png}{Diagramme ERD généré par pgAdmin~4 (\emph{Tools} $\rightarrow$ \emph{ERD Tool}) sur la base \texttt{travelhub}.}{fig:erd-pgadmin}
+
+\subsection{Relations}
+
+Le tableau~\ref{tab:relations} détaille chaque relation. Le nom inverse (\code{related_name}) est choisi pour se lire naturellement : \code{user.owned_trips}, \code{trip.destinations}, \code{destination.activities}.
+
+\begin{table}[H]
+  \centering
+  \small
+  \caption{Relations du modèle.}
+  \label{tab:relations}
+  \begin{tabularx}{\linewidth}{@{}l l l X@{}}
+    \toprule
+    \textbf{Relation} & \textbf{Type} & \textbf{Suppression} & \textbf{Accès inverse} \\
+    \midrule
+    \code{Trip.owner} $\rightarrow$ \code{User} & 1-N & \code{CASCADE} & \code{user.owned_trips} \\
+    \code{Trip.participants} $\leftrightarrow$ \code{User} & N-N & --- & \code{user.trips}, via \code{TripParticipant} \\
+    \code{TripParticipant.trip} $\rightarrow$ \code{Trip} & 1-N & \code{CASCADE} & \code{trip.memberships} \\
+    \code{TripParticipant.user} $\rightarrow$ \code{User} & 1-N & \code{CASCADE} & \code{user.trip_memberships} \\
+    \code{TripParticipant.invited_by} $\rightarrow$ \code{User} & 1-N & \code{SET_NULL} & \code{user.sent_trip_invitations} \\
+    \code{Destination.trip} $\rightarrow$ \code{Trip} & 1-N & \code{CASCADE} & \code{trip.destinations} \\
+    \code{Activity.destination} $\rightarrow$ \code{Destination} & 1-N & \code{CASCADE} & \code{destination.activities} \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+La relation N-N mérite une précision. Une simple table de jointure ne suffit pas : l'association porte des attributs (rôle, date d'ajout, auteur de l'invitation). Elle est donc modélisée par un modèle intermédiaire explicite, déclaré avec \code{through}. Comme \code{TripParticipant} possède deux clés étrangères vers \code{User}, l'option \code{through_fields} désigne celles qui relient le voyage à ses participants.
+
+\begin{lstlisting}[language=Python,caption={Relation N-N avec modèle intermédiaire (\texttt{apps/trips/models.py}, extrait).},label={lst:m2m}]
+participants = models.ManyToManyField(
+    settings.AUTH_USER_MODEL,
+    through="TripParticipant",
+    # TripParticipant a deux FK vers User (user, invited_by) : on indique lesquelles
+    # relient le voyage à ses participants.
+    through_fields=("trip", "user"),
+    related_name="trips",
+)
+\end{lstlisting}
+
+La suppression en cascade suit la composition : un voyage possède ses destinations, qui possèdent leurs activités. En revanche, la suppression de l'auteur d'une invitation ne doit pas retirer le participant invité ; \code{invited_by} passe alors à \code{NULL}.
+
+\subsection{Utilisateur personnalisé}
+
+Le modèle \code{accounts.User} hérite d'\code{AbstractUser}. Il a été déclaré dans \code{AUTH_USER_MODEL} avant la première migration, comme le recommande Django : changer de modèle utilisateur après coup est très coûteux. Le courriel est obligatoire et unique sans tenir compte de la casse, grâce à une contrainte d'unicité sur l'expression \code{Lower("email")}. Le courriel est aussi normalisé en minuscules dans \code{save()}, car \code{createsuperuser} n'appelle pas \code{clean()}.
+
+\subsection{Contraintes d'intégrité}
+
+Les règles essentielles sont vérifiées par PostgreSQL lui-même (tableau~\ref{tab:contraintes}). La base reste ainsi cohérente même si une écriture contourne la validation applicative, par exemple lors de deux requêtes simultanées. Chaque contrainte porte un nom et un message d'erreur en français, réutilisé par le gestionnaire d'exceptions (section~\ref{sec:validation}).
+
+\begin{table}[H]
+  \centering
+  \small
+  \caption{Contraintes déclarées dans les modèles.}
+  \label{tab:contraintes}
+  \begin{tabularx}{\linewidth}{@{}l l X@{}}
+    \toprule
+    \textbf{Nom} & \textbf{Type} & \textbf{Règle} \\
+    \midrule
+    \code{accounts_user_email_ci_unique} & \code{UNIQUE} & \code{lower(email)} unique \\
+    \code{trips_trip_end_after_start} & \code{CHECK} & \code{end_date >= start_date} \\
+    \code{trips_trip_budget_non_negative} & \code{CHECK} & budget nul ou positif \\
+    \code{trips_trip_status_valid} & \code{CHECK} & statut parmi les cinq valeurs \\
+    \code{trips_participant_unique_trip_user} & \code{UNIQUE} & un utilisateur au plus une fois par voyage \\
+    \code{trips_participant_single_owner} & \code{UNIQUE} partiel & un seul \code{owner} par voyage (\code{WHERE role = 'owner'}) \\
+    \code{trips_participant_role_valid} & \code{CHECK} & rôle parmi \code{owner}, \code{editor}, \code{viewer} \\
+    \code{itinerary_destination_unique_trip_order} & \code{UNIQUE} & une position par destination dans un voyage \\
+    \code{itinerary_destination_departure_after_arrival} & \code{CHECK} & \code{departure_date >= arrival_date} \\
+    \code{itinerary_destination_country_code_iso2} & \code{CHECK} & code pays conforme à \code{^[A-Z]{2}$} \\
+    \code{itinerary_destination_coordinates_valid} & \code{CHECK} & latitude et longitude fournies ensemble, dans leurs bornes \\
+    \code{itinerary_activity_cost_non_negative} & \code{CHECK} & \code{cost >= 0} \\
+    \code{itinerary_activity_category_valid} & \code{CHECK} & catégorie parmi les huit valeurs \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+Deux points de conception méritent d'être relevés. D'abord, la contrainte \code{trips_participant_single_owner} est un index unique \emph{partiel} : il ne porte que sur les lignes où \code{role = 'owner'}. Ensuite, la contrainte sur les coordonnées teste explicitement \code{IS NOT NULL}. En SQL, une condition \code{CHECK} évaluée à \code{NULL} est considérée comme respectée ; sans ce test, une latitude seule passerait.
+
+\begin{lstlisting}[language=Python,caption={Contraintes du voyage (\texttt{apps/trips/models.py}, extrait).},label={lst:contraintes}]
+class Meta:
+    ordering = ["start_date", "pk"]
+    indexes = [models.Index(fields=["start_date"], name="trips_trip_start_date_idx")]
+    constraints = [
+        models.CheckConstraint(
+            condition=Q(end_date__gte=F("start_date")),
+            name="trips_trip_end_after_start",
+            violation_error_message=(
+                "La date de fin doit être postérieure ou égale à la date de début."
+            ),
+        ),
+        models.CheckConstraint(
+            condition=Q(budget__isnull=True) | Q(budget__gte=0),
+            name="trips_trip_budget_non_negative",
+            violation_error_message="Le budget ne peut pas être négatif.",
+        ),
+        # ... trips_trip_status_valid
+    ]
+\end{lstlisting}
+
+Les montants utilisent \code{DecimalField} (\code{numeric} en SQL) et jamais \code{float} : un coût de 0,10~\$ doit rester exact. Les choix (statut, rôle, catégorie) sont des \code{TextChoices} ; ils sont doublés d'une contrainte \code{CHECK}, car Django ne vérifie les choix qu'à la validation, jamais en base.
+
+\subsection{Migrations}
+
+Chaque application possède une migration initiale (\code{0001_initial.py}), générée par Django 5.2.18 avec \code{makemigrations}. La commande \code{sqlmigrate} permet de relire le SQL produit, notamment les contraintes et l'index partiel. La commande \code{migrate --check} sert à vérifier qu'une base restaurée est à jour (section~\ref{sec:industrialisation}). Dans Docker, le service \code{web} applique les migrations à chaque démarrage, avant de lancer Gunicorn.

@@ -1,0 +1,109 @@
+%----------------------------------------------------------------------------------------
+%	Paquets et macros du contenu du rapport TravelHub.
+%	Chargé après includes.tex : la mise en page du modèle reste inchangée.
+%----------------------------------------------------------------------------------------
+\usepackage{listings}
+\usepackage{booktabs}
+% Colonnes X alignées à gauche : pas d'espaces étirés dans les cellules étroites.
+\renewcommand{\tabularxcolumn}[1]{>{\raggedright\arraybackslash}p{#1}}
+\usepackage{tikz}
+% babel : neutralise les caractères actifs du français (: ; ! ?) dans les figures TikZ.
+\usetikzlibrary{positioning,arrows.meta,shapes.multipart,babel}
+
+% Code en ligne : identifiants, chemins, noms de contraintes (_ { } sans échappement).
+% Coupure de ligne permise après « _ », « . » et « / » : les longs identifiants
+% (trips_participant_single_owner, apps.core.exceptions…) ne débordent pas.
+\ExplSyntaxOn
+\tl_new:N \l__th_code_tl
+\NewDocumentCommand{\code}{m}{
+  \tl_set:Ne \l__th_code_tl { \tl_to_str:n {#1} }
+  \regex_replace_all:nnN { ([\_\./]) } { \1 \c{allowbreak} } \l__th_code_tl
+  \regex_replace_once:nnN { \c{allowbreak} \Z } { } \l__th_code_tl
+  \texttt{ \l__th_code_tl }
+}
+\ExplSyntaxOff
+% Les mots en chasse fixe sont larges : souplesse supplémentaire pour les seuls
+% paragraphes qui déborderaient sinon.
+\setlength{\emergencystretch}{3em}
+
+% Capture d'écran : l'image figures/<fichier> si elle existe, sinon un cadre qui
+% indique le fichier attendu (le document compile avant l'ajout des captures).
+\newcommand{\capture}[3]{%
+  \begin{figure}[H]
+    \centering
+    \IfFileExists{figures/#1}{%
+      \includegraphics[width=\linewidth,height=0.42\textheight,keepaspectratio]{figures/#1}%
+    }{%
+      \fbox{\parbox[c][4cm][c]{0.9\linewidth}{\centering\small
+        Capture à insérer :\\[2pt] \texttt{figures/#1}}}%
+    }
+    \caption{#2}\label{#3}
+  \end{figure}}
+
+% Extraits de code
+\definecolor{codegris}{gray}{0.45}
+\definecolor{codebleu}{rgb}{0.10,0.25,0.55}
+\definecolor{codevert}{rgb}{0.10,0.45,0.20}
+\definecolor{codefond}{gray}{0.97}
+
+\renewcommand{\lstlistingname}{Extrait}
+% Un extrait n'est jamais coupé entre deux pages (ils font tous moins d'une page).
+\BeforeBeginEnvironment{lstlisting}{\par\noindent\begin{minipage}{\linewidth}}
+\AfterEndEnvironment{lstlisting}{\end{minipage}\par\smallskip}
+\renewcommand{\lstlistlistingname}{Liste des extraits}
+
+\lstdefinelanguage{json}{
+  morestring=[b]",
+  sensitive=true,
+}
+\lstdefinelanguage{graphql}{
+  morekeywords={query,mutation,fragment,on,true,false,null},
+  sensitive=true,
+  morecomment=[l]{\#},
+  morestring=[b]",
+}
+
+\lstset{
+  basicstyle=\ttfamily\scriptsize,
+  keywordstyle=\color{codebleu},
+  commentstyle=\color{codegris}\itshape,
+  stringstyle=\color{codevert},
+  backgroundcolor=\color{codefond},
+  frame=single,
+  rulecolor=\color{black!25},
+  framesep=3pt,
+  xleftmargin=4pt,
+  xrightmargin=4pt,
+  columns=fullflexible,
+  keepspaces=true,
+  showstringspaces=false,
+  breaklines=true,
+  breakatwhitespace=true,
+  tabsize=4,
+  captionpos=t,
+  aboveskip=8pt,
+  belowskip=6pt,
+  upquote=false,
+  extendedchars=true,
+  literate=
+    {é}{{\'e}}1 {è}{{\`e}}1 {ê}{{\^e}}1 {ë}{{\"e}}1
+    {à}{{\`a}}1 {â}{{\^a}}1 {ç}{{\c{c}}}1 {î}{{\^i}}1 {ï}{{\"i}}1
+    {ô}{{\^o}}1 {ù}{{\`u}}1 {û}{{\^u}}1
+    {É}{{\'E}}1 {À}{{\`A}}1 {Ç}{{\c{C}}}1
+    {«}{{\guillemotleft}}1 {»}{{\guillemotright}}1
+    {’}{{'}}1 {—}{{---}}1 {…}{{...}}1 {→}{{$\rightarrow$}}1,
+}
+
+% Diagrammes
+\tikzset{
+  entite/.style={
+    draw, thick, rectangle split, rectangle split parts=2,
+    rectangle split part fill={black!10,white},
+    rectangle split part align={center,left},
+    text width=4.3cm, inner sep=3pt, font=\scriptsize\ttfamily},
+  rel/.style={thick, -{Latex[length=2mm]}},
+  card/.style={font=\scriptsize, inner sep=1.5pt},
+  etape/.style={draw, rounded corners=2pt, fill=black!4, text width=6.2cm,
+    align=center, font=\small, minimum height=0.75cm},
+  note/.style={font=\scriptsize, text width=6.4cm, align=left},
+}

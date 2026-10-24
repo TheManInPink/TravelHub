@@ -1,0 +1,11 @@
+Captures attendues par le rapport (PNG). Tant qu'un fichier manque, le PDF affiche
+un cadre « Capture à insérer » à sa place ; il suffit de déposer le fichier ici et de
+recompiler.
+
+erd-pgadmin.png     pgAdmin 4 : Tools > ERD Tool sur la base travelhub (figure 3, section 4.1)
+admin.png           /admin/ : fiche d'un voyage avec participants et destinations en ligne (figure 4, section 5.5)
+swagger.png         /api/docs/ : opérations sur les voyages (figure 5, section 7.6)
+graphiql.png        /graphql/ en développement : requête myTrips avec l'en-tête Authorization (figure 6, section 8.5)
+couverture.png      htmlcov/index.html après « pytest » (figure 7, section 11.3)
+postman-runner.png  Runner Postman : collection TravelHub API, toutes les assertions vertes (figure 8, section 11.4)
+ci-github.png       GitHub Actions : exécution réussie du flux CI, deux tâches (figure 9, section 12.2)

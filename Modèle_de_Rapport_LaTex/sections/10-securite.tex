@@ -1,0 +1,97 @@
+%========================================================================================
+\section{Sécurité}
+\label{sec:securite}
+%========================================================================================
+
+\subsection{Authentification par JWT}
+
+L'API est sans état : chaque requête porte un jeton JWT~\cite{rfc7519}, émis par SimpleJWT~\cite{simplejwt}. Le jeton d'accès expire après 15~minutes, ce qui limite l'effet d'un vol. Le jeton de rafraîchissement dure un jour et ne sert qu'une fois : chaque rafraîchissement en émet un nouveau et place l'ancien sur une liste noire. La déconnexion révoque le jeton fourni, à condition qu'il appartienne à l'utilisateur connecté.
+
+\begin{lstlisting}[language=Python,caption={Paramètres JWT (\texttt{config/settings/base.py}).},label={lst:jwt}]
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=15),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=1),
+    # Chaque rafraîchissement émet un nouveau refresh et met l'ancien sur liste noire.
+    "ROTATE_REFRESH_TOKENS": True,
+    "BLACKLIST_AFTER_ROTATION": True,
+    "UPDATE_LAST_LOGIN": True,
+    "AUTH_HEADER_TYPES": ("Bearer",),
+}
+\end{lstlisting}
+
+Les mots de passe passent les quatre validateurs de Django : longueur minimale, similarité avec le profil, mots de passe courants, valeurs entièrement numériques.
+
+\subsection{Permissions par rôle}
+
+DRF refuse par défaut toute requête anonyme (\code{IsAuthenticated}). Trois permissions objet (\code{apps/core/permissions.py}) traduisent ensuite les rôles : \code{IsTripMember}, \code{IsTripEditor} et \code{IsTripOwner}. Elles acceptent un voyage ou tout objet qui s'y rattache ; une activité remonte à son voyage par \code{activity.destination.trip}.
+
+\begin{table}[H]
+  \centering
+  \small
+  \caption{Matrice d'accès à un voyage (codes HTTP).}
+  \label{tab:matrice}
+  \begin{tabularx}{\linewidth}{@{}X c c c c@{}}
+    \toprule
+    \textbf{Opération} & \textbf{Propriétaire} & \textbf{Éditeur} & \textbf{Lecteur} & \textbf{Non participant} \\
+    \midrule
+    Lire le voyage, \code{stats}, \code{clone} & 200 / 201 & 200 / 201 & 200 / 201 & 404 \\
+    Modifier le voyage, ses destinations, ses activités & 200 & 200 & 403 & 404 \\
+    Supprimer le voyage & 204 & 403 & 403 & 404 \\
+    Gérer les participants & 201 / 200 / 204 & 403 & 403 & 404 \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\subsection{Contrôle d'accès au niveau objet}
+
+Le risque principal d'une API est le contrôle d'accès défaillant au niveau objet (\emph{Broken Object Level Authorization}, API1 de l'OWASP~\cite{owasp}) : modifier l'identifiant dans l'URL pour atteindre l'objet d'autrui. TravelHub s'en protège par construction. Chaque vue, chaque resolver et chaque filtre part de \code{visible_to(user)}. Un voyage d'autrui est absent du queryset, et la réponse est 404. Le même principe s'applique au parent d'une création : une destination créée sur le voyage d'autrui donne 404, sur un voyage visible sans droit d'écriture 403.
+
+\subsection{Configuration de production}
+
+Le module \code{config.settings.prod} active les protections du transport et du navigateur : redirection HTTPS, HSTS de 30 jours, cookies \code{Secure}, \code{X-Frame-Options: DENY}, \code{nosniff}, politique de référent et COOP. L'API navigable de DRF y est désactivée : seul le JSON est servi. GraphiQL et l'introspection y sont fermés. La commande suivante, exécutée par un test, ne produit aucun avertissement~\cite{djangodeploy} :
+
+\begin{lstlisting}[language={},caption={Vérification de la configuration de production.},label={lst:deploy}]
+python manage.py check --deploy --settings=config.settings.prod
+\end{lstlisting}
+
+\paragraph{CORS.} Seules les origines listées dans \code{CORS_ALLOWED_ORIGINS} sont acceptées, sans transmission des identifiants. La liste est vide par défaut ; le TP2 y ajoutera l'origine du front-end.
+
+\paragraph{Secrets.} La clé secrète et l'accès à la base sont lus dans l'environnement. Le fichier \code{.env} est ignoré par Git ; \code{.env.example} ne contient que des valeurs fictives. Un test vérifie que \code{SECRET_KEY} provient bien de l'environnement. Les journaux ne contiennent ni corps de requête, ni en-têtes, ni chaîne de requête. En filet de sécurité, le formateur masque tout champ dont le nom évoque un secret, ainsi que tout JWT présent dans un message.
+
+\subsection{OWASP API Security Top 10}
+
+Le tableau~\ref{tab:owasp} résume la couverture des dix risques de l'édition 2023.
+
+\begin{table}[H]
+  \centering
+  \small
+  \caption{Mesures face à l'OWASP API Security Top 10 (2023).}
+  \label{tab:owasp}
+  \begin{tabularx}{\linewidth}{@{}>{\raggedright\arraybackslash}p{4.2cm} X@{}}
+    \toprule
+    \textbf{Risque} & \textbf{Mesures} \\
+    \midrule
+    API1 Object Level Authorization & \code{visible_to()} partout ; 404 plutôt que 403 ; parent cherché parmi les objets visibles \\
+    API2 Authentication & Accès de 15 min, rotation et liste noire, validateurs de mot de passe, cookie de session ignoré par GraphQL \\
+    API3 Object Property Level Authorization & Listes blanches de champs ; \code{owner}, totaux et horodatages en lecture seule ; pas de \code{is_staff} à l'inscription \\
+    API4 Resource Consumption & 100 requêtes/h en anonyme, 1000/h par utilisateur ; pagination ; profondeur GraphQL limitée ; délai de 5 s vers l'extérieur \\
+    API5 Function Level Authorization & Permissions par rôle ; seul le propriétaire gère les participants \\
+    API6 Sensitive Business Flows & Inscription, connexion et clonage soumis aux limites de requêtes \\
+    API7 Server Side Request Forgery & URL externes constantes ; ville en paramètre, code pays en variable GraphQL \\
+    API8 Security Misconfiguration & \code{check --deploy} propre ; en-têtes de sécurité ; erreurs JSON sans trace \\
+    API9 Inventory Management & Une seule version, décrite par OpenAPI et par la collection Postman \\
+    API10 Unsafe Consumption of APIs & Réponses externes validées et converties en \code{dataclasses} ; erreurs 502, 503, 504 \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+Chaque ligne est couverte par des tests dédiés. La matrice d'accès croisés de \code{test_object_level_authorization.py} vérifie, pour chaque point d'accès REST et chaque opération GraphQL, qu'un non-participant, un lecteur et un anonyme sont refusés, et que la base reste inchangée après le refus.
+
+\subsection{Risques résiduels}
+
+Trois risques sont connus et acceptés.
+\begin{itemize}
+  \item L'inscription et l'ajout d'un participant indiquent si un courriel est inscrit. L'énumération reste possible, freinée par les limites de requêtes.
+  \item GraphQL limite la profondeur des requêtes, mais pas leur largeur (alias multiples).
+  \item La documentation OpenAPI reste publique en production, alors que l'introspection GraphQL y est fermée.
+\end{itemize}

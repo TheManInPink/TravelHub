@@ -1,7 +1,7 @@
 \documentclass[12pt,twoside,letterpaper]{article}
-%NOTE: This report format is 
+%NOTE: This report format is
 
-\newcommand{\reporttitle}{{\huge \textsc{Rapport} \\ \vspace{0.5cm} {\Large Travail Pratique}}}
+\newcommand{\reporttitle}{{\huge \textsc{Rapport} \\ \vspace{0.5cm} {\Large Travail Pratique 1 : TravelHub}}}
 
 \newcommand{\reportauthorOne}{Nom \& Prénom}
 \newcommand{\reportauthorTwo}{Nom \& Prénom}
@@ -12,8 +12,15 @@
 \newcommand{\reporttype}{Coursework}
 \bibliographystyle{plain}
 
+% Codage T1 : césure du français, guillemets et soulignés dans le code.
+\usepackage[T1]{fontenc}
+
 % include files that load packages and define macros
 \input{includes} % various packages needed for maths etc.
+
+% Paquets et macros du contenu (listings, TikZ, tableaux, captures) ;
+% la mise en page du modèle n'est pas modifiée.
+\input{ajouts}
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -29,8 +36,19 @@
 \newpage
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%% Main document
-\section{Introduction}
-\cite{ref_01}
+\input{sections/01-introduction}
+\input{sections/02-environnement}
+\input{sections/03-architecture}
+\input{sections/04-modele-donnees}
+\input{sections/05-gestion-voyages}
+\input{sections/06-integrations}
+\input{sections/07-api-rest}
+\input{sections/08-api-graphql}
+\input{sections/09-validation-transactions}
+\input{sections/10-securite}
+\input{sections/11-tests}
+\input{sections/12-industrialisation}
+\input{sections/13-conclusion}
 
 \newpage
 \bibliography{report_v1.0}

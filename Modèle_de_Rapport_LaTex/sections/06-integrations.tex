@@ -1,0 +1,124 @@
+%========================================================================================
+\section{Intégrations externes}
+\label{sec:integrations}
+%========================================================================================
+
+TravelHub consomme deux API publiques, sans clé d'accès. Open-Meteo~\cite{openmeteo,openmeteogeo} fournit le géocodage et la météo par une interface REST. Countries~\cite{countries} décrit les pays par une interface GraphQL. Le code d'intégration est isolé dans \code{apps/integrations/services/}. Les clients renvoient des \code{dataclasses} immuables, jamais le JSON brut du fournisseur.
+
+\subsection{Open-Meteo (REST)}
+
+La météo d'une destination demande deux appels.
+\begin{enumerate}
+  \item \textbf{Géocodage.} Une destination saisie sans coordonnées est d'abord localisée par \code{geocoding-api.open-meteo.com/v1/search}, à partir de la ville et du code pays. Les coordonnées trouvées sont enregistrées dans la destination : les appels suivants s'en passent.
+  \item \textbf{Prévisions.} L'appel \code{api.open-meteo.com/v1/forecast} renvoie les conditions actuelles et les prévisions quotidiennes des 16 prochains jours. Le service les filtre sur les dates du séjour.
+\end{enumerate}
+
+Les codes météo WMO sont traduits en libellés français (\og{}Pluie modérée\fg{}, \og{}Orage\fg{}\ldots). Un séjour entièrement hors de la fenêtre de 16 jours produit l'erreur \code{no_data_available}. Une marge d'un jour absorbe l'écart entre la date du serveur et la date locale de la destination.
+
+L'enregistrement des coordonnées utilise \code{update()} filtré sur \code{latitude IS NULL}, et non \code{save()}. Cette écriture ne touche que les deux colonnes concernées. Elle n'écrase pas une modification concurrente de la destination.
+
+\subsection{Countries (GraphQL)}
+
+Le client Countries envoie une requête GraphQL par \code{POST} à \code{countries.trevorblades.com/graphql}. Le code pays passe dans \code{variables}, jamais par concaténation dans le texte de la requête. Cette pratique ferme la porte à l'injection, de la même manière qu'une requête SQL paramétrée.
+
+\begin{lstlisting}[language=Python,caption={Requête GraphQL paramétrée (\texttt{apps/integrations/services/countries.py}, extrait condensé).},label={lst:countries}]
+COUNTRY_QUERY = """
+query Country($code: ID!) {
+  country(code: $code) {
+    code name native capital emoji currency
+    continent { name }
+    languages { name native }
+  }
+}
+"""
+body = {"query": COUNTRY_QUERY, "variables": {"code": code}}
+\end{lstlisting}
+
+Un serveur GraphQL répond généralement 200, même en cas d'erreur. Le client examine donc la liste \code{errors} avant le champ \code{data}. Une liste non vide donne une erreur 502. Un code inconnu donne \code{{"country": null}}, traduit en \code{country_not_found} (404).
+
+\subsection{Couche HTTP commune}
+
+Les deux clients partagent \code{apps/integrations/services/http.py}. Chaque requête a un délai de 5~secondes et dispose de deux essais. Le second essai n'a lieu que si l'échec est transitoire.
+
+\begin{table}[H]
+  \centering
+  \small
+  \caption{Politique de nouvel essai et traduction des échecs.}
+  \label{tab:retry}
+  \begin{tabularx}{\linewidth}{@{}l c X l@{}}
+    \toprule
+    \textbf{Situation} & \textbf{Nouvel essai} & \textbf{Exception} & \textbf{HTTP} \\
+    \midrule
+    Délai dépassé & oui & \code{ExternalServiceTimeout} & 504 \\
+    Erreur réseau & oui & \code{ExternalServiceUnavailable} & 503 \\
+    Réponse 5xx & oui & \code{ExternalServiceUnavailable} & 503 \\
+    Réponse 4xx & non & \code{ExternalServiceUnavailable} & 503 \\
+    JSON illisible ou de forme inattendue & non & \code{ExternalServiceBadResponse} & 502 \\
+    Ville ou pays inconnu & non & \code{LocationNotFound}, \code{CountryNotFound} & 404 \\
+    Séjour hors des 16 jours & non & \code{NoDataAvailable} & 404 \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+Une réponse 4xx n'est pas retentée : la requête serait refusée de nouveau, à l'identique. Les exceptions de \code{apps/integrations/exceptions.py} ne dépendent pas de DRF. Elles portent un statut HTTP et un code stable. Les API REST et GraphQL les traduisent chacune à leur façon. Chaque essai est journalisé avec le service, l'URL sans paramètres, le statut, la durée et le numéro d'essai.
+
+\subsection{Cache}
+
+Les réponses sont conservées dans le cache de Django. Seule une réponse jugée exploitable par l'analyseur est mise en cache : une erreur transitoire ne reste pas \og{}collée\fg{} pendant toute la durée de vie de l'entrée.
+
+\begin{table}[H]
+  \centering
+  \small
+  \caption{Durées de mise en cache.}
+  \label{tab:cache}
+  \begin{tabularx}{\linewidth}{@{}l l X@{}}
+    \toprule
+    \textbf{Donnée} & \textbf{Durée} & \textbf{Clé} \\
+    \midrule
+    Géocodage & 7 jours & code pays et condensat SHA-256 du nom de ville \\
+    Prévisions & 30 minutes & position arrondie à 4 décimales (environ 10~m) \\
+    Pays & 24 heures & code pays \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+Le condensat du nom de ville garantit une clé valide pour tout moteur de cache, quels que soient les caractères saisis. L'arrondi de la position permet à des destinations voisines de partager une entrée.
+
+\subsection{Agrégation et dégradation partielle}
+
+L'action \code{GET /api/destinations/{id}/overview/} réunit en une réponse la destination, son voyage, ses activités, le coût total, la météo et le pays. Les deux services externes sont interrogés en parallèle par un \code{ThreadPoolExecutor}, pendant que le fil principal lit la base.
+
+\begin{lstlisting}[language=Python,caption={Appels parallèles (\texttt{apps/integrations/services/aggregator.py}, extrait).},label={lst:aggregator}]
+with ThreadPoolExecutor(max_workers=len(SOURCES), thread_name_prefix="overview") as pool:
+    futures = {
+        WEATHER: pool.submit(contextvars.copy_context().run, fetch_forecast, destination),
+        COUNTRY: pool.submit(
+            contextvars.copy_context().run, countries.get_country, destination.country_code
+        ),
+    }
+    activities = list(destination.activities.all())  # pendant les appels externes
+    results, warnings = {}, []
+    for source, future in futures.items():
+        try:
+            results[source] = future.result()
+        except IntegrationError as exc:
+            results[source] = None
+            warnings.append(SourceWarning(source, exc.code, exc.message))
+\end{lstlisting}
+
+Trois choix encadrent ce parallélisme.
+\begin{itemize}
+  \item Les fils secondaires n'exécutent aucune requête SQL. Chacun ouvrirait sa propre connexion, jamais fermée, et ne verrait pas la transaction du fil principal. Le géocodage calcule les coordonnées sans les écrire ; le fil principal les enregistre ensuite.
+  \item Chaque tâche s'exécute dans une copie du contexte (\code{contextvars}). Ses journaux portent ainsi l'identifiant de la requête en cours.
+  \item Une source en échec ne fait pas échouer la réponse, qui reste un 200. Son bloc vaut \code{null}, et la liste \code{warnings} explique pourquoi (extrait~\ref{lst:warnings}).
+\end{itemize}
+
+\begin{lstlisting}[language=json,caption={Dégradation partielle : Open-Meteo indisponible.},label={lst:warnings}]
+"weather": null,
+"warnings": [
+  {"source": "weather", "code": "external_service_unavailable",
+   "message": "Open-Meteo est momentanément indisponible (erreur 503)."}
+]
+\end{lstlisting}
+
+Cette dégradation partielle sert directement le futur front-end : la page d'une destination reste affichable quand un fournisseur tombe.

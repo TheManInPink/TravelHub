@@ -1,0 +1,66 @@
+%========================================================================================
+\section{Environnement et technologies}
+\label{sec:environnement}
+%========================================================================================
+
+\subsection{Versions retenues}
+
+Le tableau~\ref{tab:versions} reprend les versions figées dans \code{requirements.txt} et \code{requirements-dev.txt}. Chaque dépendance est épinglée à une version exacte : deux installations produisent le même environnement.
+
+\begin{table}[H]
+  \centering
+  \small
+  \caption{Versions des outils et des bibliothèques.}
+  \label{tab:versions}
+  \begin{tabularx}{\linewidth}{@{}l l X@{}}
+    \toprule
+    \textbf{Composant} & \textbf{Version} & \textbf{Rôle} \\
+    \midrule
+    Python & 3.14 & Langage d'exécution \\
+    PostgreSQL & 18 & Base de données relationnelle~\cite{postgresql} \\
+    Django & 5.2.18 (LTS) & Cadriciel web, ORM, administration~\cite{django} \\
+    Django REST Framework & 3.18.3 & API REST~\cite{drf} \\
+    SimpleJWT & 5.5.1 & Jetons JWT, liste noire des jetons révoqués~\cite{simplejwt} \\
+    drf-spectacular & 0.30.0 & Schéma OpenAPI 3, Swagger UI, ReDoc~\cite{spectacular} \\
+    Graphene-Django & 3.2.3 & API GraphQL~\cite{graphene} \\
+    django-filter & 26.2 & Filtres des listes \\
+    django-cors-headers & 4.9.0 & Politique CORS \\
+    django-environ & 0.14.0 & Configuration par variables d'environnement \\
+    psycopg & 3.3.6 & Pilote PostgreSQL \\
+    requests & 2.34.2 & Client HTTP des services externes \\
+    Gunicorn, WhiteNoise & 26.2.0, 6.12.0 & Serveur WSGI et fichiers statiques (production) \\
+    \midrule
+    pytest, pytest-django & 9.1.1, 4.14.0 & Tests \\
+    pytest-cov & 7.1.0 & Couverture de code \\
+    responses & 0.26.3 & Simulation des appels HTTP externes \\
+    Ruff & 0.17.1 & Analyse statique et formatage \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+Le poste de développement fonctionne sous Windows 11. Les scripts d'exploitation sont écrits en PowerShell. La base est administrée avec pgAdmin~4.
+
+\subsection{Justification de Django 5.2 LTS}
+
+Le critère de choix était la dernière version stable \emph{et compatible} avec l'ensemble des dépendances. Django 6.1 existait au moment du choix. Cependant, Graphene-Django 3.2.3 et SimpleJWT 5.5.1 ne déclarent pas encore la prise en charge de Django~6. Django 5.2 est une version à support étendu (LTS), maintenue jusqu'en avril 2028, et prend officiellement en charge Python 3.14. Ce choix privilégie la stabilité de l'ensemble sur la nouveauté du cadriciel.
+
+\subsection{Configuration}
+
+Les paramètres sont découpés en quatre modules (tableau~\ref{tab:settings}). Les valeurs sensibles ne figurent jamais dans le code : \code{django-environ} les lit dans l'environnement, puis dans un fichier \code{.env} ignoré par Git. Le fichier \code{.env.example} documente chaque variable.
+
+\begin{table}[H]
+  \centering
+  \small
+  \caption{Modules de paramètres.}
+  \label{tab:settings}
+  \begin{tabularx}{\linewidth}{@{}l X@{}}
+    \toprule
+    \textbf{Module} & \textbf{Usage} \\
+    \midrule
+    \code{config.settings.base} & Paramètres communs : applications, DRF, JWT, GraphQL, journaux \\
+    \code{config.settings.dev} & Développement : \code{DEBUG}, GraphiQL et introspection activés \\
+    \code{config.settings.test} & Tests : hachage rapide des mots de passe, cache en mémoire, journaux sur la console \\
+    \code{config.settings.prod} & Production : HTTPS, HSTS, cookies sécurisés, JSON seulement, WhiteNoise \\
+    \bottomrule
+  \end{tabularx}
+\end{table}

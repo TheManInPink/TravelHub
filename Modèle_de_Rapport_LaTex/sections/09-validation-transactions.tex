@@ -1,0 +1,100 @@
+%========================================================================================
+\section{Validation, transactions et intégrité}
+\sectionmark{Validation et intégrité}
+\label{sec:validation}
+%========================================================================================
+
+\subsection{Trois niveaux de validation}
+
+Une donnée franchit trois contrôles successifs avant d'être écrite (tableau~\ref{tab:niveaux}). Chaque niveau a un rôle propre ; aucun ne suffit seul.
+
+\begin{table}[H]
+  \centering
+  \small
+  \caption{Niveaux de validation.}
+  \label{tab:niveaux}
+  \begin{tabularx}{\linewidth}{@{}l X X@{}}
+    \toprule
+    \textbf{Niveau} & \textbf{Règles} & \textbf{Raison d'être} \\
+    \midrule
+    Serializer & Types, longueurs, choix, champs en lecture seule ; cohérence des dates en \code{PATCH} & Refuser tôt, avec un message par champ \\
+    \code{Model.clean()} & Destination dans les dates du voyage ; activité dans les dates de la destination ; pas de raccourcissement qui laisserait un enfant hors période & Règles métier qui lisent d'autres lignes \\
+    Contraintes PostgreSQL & \code{CHECK} et \code{UNIQUE} du tableau~\ref{tab:contraintes} & Dernier rempart, valable même en cas d'accès concurrent \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+En \code{PATCH}, une seule des deux dates peut être envoyée. Le serializer complète alors la paire avec la valeur enregistrée avant de la comparer. Sans cette précaution, une date de fin antérieure à la date de début existante passerait la validation et échouerait seulement en base.
+
+\subsection{Appliquer \texttt{Model.clean()} depuis DRF}
+
+DRF n'appelle ni \code{Model.clean()} ni \code{validate_constraints()}. Sans intervention, une règle de \code{clean()} serait ignorée par l'API, et une contrainte violée produirait une \code{IntegrityError} au moment de l'écriture. Le mixin \code{ModelCleanMixin} comble ce manque.
+
+\begin{lstlisting}[language=Python,caption={Validation par le modèle (\texttt{apps/core/serializers.py}, extrait).},label={lst:modelclean}]
+class ModelCleanMixin:
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        if self.instance is not None:
+            candidate = copy.copy(self.instance)
+        else:
+            candidate = self.Meta.model()
+        for field, value in attrs.items():
+            setattr(candidate, field, value)
+        try:
+            candidate.clean()
+            candidate.validate_constraints()
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(django_error_detail(exc)) from exc
+        return attrs
+\end{lstlisting}
+
+Les règles sont évaluées sur une \emph{copie} de l'instance. Si la validation échoue, l'objet chargé par la vue reste intact. Les messages de Django sont ramenés au format de DRF : la clé \code{__all__} devient \code{non_field_errors}.
+
+\subsection{Contraintes violées malgré la validation}
+
+Deux requêtes simultanées peuvent passer la validation, puis entrer en conflit à l'écriture. Par exemple, deux éditeurs placent chacun une destination en position 2. La contrainte \code{itinerary_destination_unique_trip_order} rejette la seconde écriture. Le gestionnaire d'exceptions convertit alors l'\code{IntegrityError} en réponse 400. Il retrouve le message de la contrainte grâce au nom que PostgreSQL renvoie dans son diagnostic.
+
+\begin{lstlisting}[language=Python,caption={Message de la contrainte violée (\texttt{apps/core/exceptions.py}, extrait).},label={lst:integrity}]
+def integrity_error_message(exc):
+    """Message de la contrainte violée, retrouvé grâce au nom que remonte PostgreSQL."""
+    diag = getattr(exc.__cause__, "diag", None)  # psycopg expose le diagnostic du serveur
+    name = getattr(diag, "constraint_name", None)
+    return _constraint_messages().get(name, INTEGRITY_MESSAGE)
+\end{lstlisting}
+
+Le client reçoit ainsi \og{}Une destination occupe déjà cette position dans le voyage.\fg{}, avec le code \code{integrity_error}, au lieu d'une erreur 500.
+
+\subsection{Transactions}
+
+Les opérations qui écrivent plusieurs lignes sont atomiques. Les services \code{create_trip}, \code{clone_trip} et \code{change_participant_role} sont décorés par \code{@transaction.atomic}, de même que chaque mutation GraphQL. Le service \code{add_participant} ouvre un point de sauvegarde (\code{transaction.atomic()} imbriqué) autour de l'insertion : une violation d'unicité y est rattrapée sans rendre inutilisable la transaction englobante.
+
+\subsection{Démonstration du rollback}
+
+Le clonage d'un voyage écrit dans quatre tables : voyage, participant, destinations, puis activités. Le test de l'extrait~\ref{lst:rollback} provoque une panne au dernier moment, pendant la copie des activités. Il compare ensuite le contenu des quatre tables avant et après la requête.
+
+\begin{lstlisting}[language=Python,caption={Panne simulée pendant le clonage (\texttt{test\_trip\_actions.py}, extrait).},label={lst:rollback}]
+def test_failure_midway_gives_500_and_leaves_database_unchanged(
+    self, client_for, owner, source, monkeypatch
+):
+    def snapshot():
+        return [
+            list(model.objects.order_by("pk").values())
+            for model in (Trip, TripParticipant, Destination, Activity)
+        ]
+
+    def failing_bulk_create(objs, *args, **kwargs):
+        raise RuntimeError("panne simulée pendant la copie des activités")
+
+    before = snapshot()
+    monkeypatch.setattr(Activity.objects, "bulk_create", failing_bulk_create)
+    client = client_for(owner)
+    client.raise_request_exception = False
+
+    response = client.post(clone_url(source))
+
+    assert response.status_code == 500
+    assert response.json() == {"error": INTERNAL_ERROR}
+    assert snapshot() == before
+\end{lstlisting}
+
+Au moment de la panne, le nouveau voyage, son participant et ses destinations ont déjà été insérés. La transaction les annule tous. Le client reçoit une erreur 500 au format JSON, sans trace de pile, et la base est identique à son état initial. Le même scénario est vérifié pour la mutation GraphQL \code{cloneTrip} (\code{apps/trips/tests/test_graphql.py}) et pour le service seul (\code{test_services.py}).
