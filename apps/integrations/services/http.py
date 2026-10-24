@@ -10,7 +10,8 @@ durée en millisecondes et numéro d'essai. Ces services n'ont pas de clé d'API
 donnée d'authentification ne transite, et les paramètres ne sont pas journalisés.
 
 Les échecs deviennent les exceptions de apps.integrations.exceptions, avec le nom du
-service dans le message.
+service dans le message : injoignable ou 4xx/5xx → 503, délai dépassé → 504, réponse
+inexploitable → 502.
 """
 
 import logging
@@ -19,7 +20,11 @@ import time
 import requests
 from django.core.cache import cache
 
-from apps.integrations.exceptions import ExternalServiceTimeout, ExternalServiceUnavailable
+from apps.integrations.exceptions import (
+    ExternalServiceBadResponse,
+    ExternalServiceTimeout,
+    ExternalServiceUnavailable,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +53,7 @@ def cached(service, cache_key, cache_seconds, load, parse):
         result = parse(payload)
     except PARSE_ERRORS as exc:
         logger.error("Réponse inattendue de %s (%s) : %r", service, cache_key, exc)
-        raise ExternalServiceUnavailable(f"{service} a renvoyé une réponse inattendue.") from exc
+        raise ExternalServiceBadResponse(f"{service} a renvoyé une réponse inattendue.") from exc
     if not from_cache:
         cache.set(cache_key, payload, cache_seconds)
     return result
@@ -90,7 +95,7 @@ def request_json(session, service, method, url, **kwargs):
     try:
         return response.json()
     except ValueError as exc:
-        raise ExternalServiceUnavailable(f"{service} a renvoyé une réponse illisible.") from exc
+        raise ExternalServiceBadResponse(f"{service} a renvoyé une réponse illisible.") from exc
 
 
 def log_call(service, method, url, status, started, attempt):

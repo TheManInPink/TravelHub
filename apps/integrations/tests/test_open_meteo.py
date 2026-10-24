@@ -9,6 +9,7 @@ from django.utils import timezone
 from responses import matchers
 
 from apps.integrations.exceptions import (
+    ExternalServiceBadResponse,
     ExternalServiceTimeout,
     ExternalServiceUnavailable,
     LocationNotFound,
@@ -207,10 +208,10 @@ class TestRemoteFailures:
             {"json": [1, 2, 3]},
         ],
     )
-    def test_unexpected_body_raises_unavailable_and_is_not_cached(self, mock_http, response):
+    def test_unexpected_body_raises_bad_response_and_is_not_cached(self, mock_http, response):
         mock_http.get(FORECAST_URL, **response)
 
         for _ in range(2):
-            with pytest.raises(ExternalServiceUnavailable):
+            with pytest.raises(ExternalServiceBadResponse):
                 kyoto_forecast()
         assert len(mock_http.calls) == 2

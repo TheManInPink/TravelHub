@@ -170,7 +170,7 @@ class TestWeather:
     def test_schema_documents_remote_errors(self, api_client):
         paths = api_client.get(reverse("schema"), {"format": "json"}).json()["paths"]
         responses = paths["/api/destinations/{id}/weather/"]["get"]["responses"]
-        assert {"200", "401", "404", "503", "504"} <= set(responses)
+        assert {"200", "401", "404", "502", "503", "504"} <= set(responses)
 
 
 @pytest.mark.django_db

@@ -5,7 +5,8 @@ import pytest
 from django.urls import reverse
 
 from apps.core.testing import error_of
-from apps.itinerary.models import Activity
+from apps.core.views import INTERNAL_ERROR
+from apps.itinerary.models import Activity, Destination
 from apps.trips.models import Trip, TripParticipant
 from apps.trips.services import LAST_OWNER_MESSAGE
 
@@ -156,6 +157,32 @@ class TestClone:
     def test_stranger_gets_404(self, client_for, members, source):
         assert client_for(members["stranger"]).post(clone_url(source)).status_code == 404
         assert Trip.objects.count() == 1
+
+    def test_failure_midway_gives_500_and_leaves_database_unchanged(
+        self, client_for, owner, source, monkeypatch
+    ):
+        """Panne forcée pendant la copie des activités, après l'insertion du voyage, de
+        son participant et des destinations : la transaction annule tout."""
+
+        def snapshot():
+            return [
+                list(model.objects.order_by("pk").values())
+                for model in (Trip, TripParticipant, Destination, Activity)
+            ]
+
+        def failing_bulk_create(objs, *args, **kwargs):
+            raise RuntimeError("panne simulée pendant la copie des activités")
+
+        before = snapshot()
+        monkeypatch.setattr(Activity.objects, "bulk_create", failing_bulk_create)
+        client = client_for(owner)
+        client.raise_request_exception = False
+
+        response = client.post(clone_url(source))
+
+        assert response.status_code == 500
+        assert response.json() == {"error": INTERNAL_ERROR}
+        assert snapshot() == before
 
 
 @pytest.mark.django_db

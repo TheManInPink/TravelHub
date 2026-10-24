@@ -6,7 +6,11 @@ Elles décrivent l'enveloppe produite par apps.core.exceptions.exception_handler
 from drf_spectacular.utils import OpenApiExample, OpenApiResponse
 from rest_framework import serializers
 
-from apps.integrations.exceptions import ExternalServiceTimeout, ExternalServiceUnavailable
+from apps.integrations.exceptions import (
+    ExternalServiceBadResponse,
+    ExternalServiceTimeout,
+    ExternalServiceUnavailable,
+)
 
 
 class ApiErrorBodySerializer(serializers.Serializer):
@@ -59,6 +63,11 @@ FORBIDDEN = error_response(
 NOT_FOUND = error_response("Introuvable ou non visible", "not_found", "Non trouvé.")
 THROTTLED = error_response(
     "Trop de requêtes", "throttled", "Requête ralentie. Disponible à nouveau dans 42 secondes."
+)
+BAD_RESPONSE = error_response(
+    "Réponse du service externe inexploitable",
+    ExternalServiceBadResponse.code,
+    "Open-Meteo a renvoyé une réponse inattendue.",
 )
 SERVICE_UNAVAILABLE = error_response(
     "Service externe injoignable ou en erreur",

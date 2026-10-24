@@ -303,7 +303,7 @@ Le propriétaire ne peut être ni retiré ni rétrogradé (400) : il transfère 
 - Une destination sans coordonnées est d'abord géocodée (ville et code pays). Ses `latitude` et `longitude` sont alors enregistrées et réutilisées aux appels suivants. Changer la ville ou le code pays sans fournir de nouvelles coordonnées les efface.
 - Cache Django : géocodage 7 jours, prévisions 30 minutes, par position arrondie à 4 décimales.
 - Chaque requête vers Open-Meteo a un délai de 5 s et deux essais. Le second essai n'a lieu qu'après une erreur réseau, un délai dépassé ou une réponse 5xx.
-- Erreurs : `location_not_found` (404, ville inconnue), `no_data_available` (404, séjour entièrement hors des 16 jours), `external_service_unavailable` (503, service injoignable, en erreur ou réponse illisible), `external_service_timeout` (504).
+- Erreurs : `location_not_found` (404, ville inconnue), `no_data_available` (404, séjour entièrement hors des 16 jours), `external_service_bad_response` (502, réponse illisible ou de forme inattendue), `external_service_unavailable` (503, service injoignable ou en erreur), `external_service_timeout` (504).
 
 Le service (`apps/integrations/services/open_meteo.py`) renvoie des dataclasses. Ses exceptions (`apps/integrations/exceptions.py`) ne dépendent pas de DRF, ce qui permettra de les réutiliser dans l'API GraphQL.
 
@@ -313,7 +313,7 @@ Le service (`apps/integrations/services/open_meteo.py`) renvoie des dataclasses.
 
 - Requête GraphQL paramétrée envoyée par POST à `https://countries.trevorblades.com/graphql` : le code pays passe dans `variables`, jamais dans le texte de la requête.
 - Cache Django : 24 heures. Même délai et mêmes essais qu'Open-Meteo (`apps/integrations/services/http.py`).
-- Erreurs : `country_not_found` (404, `country` vaut `null` pour ce code), `external_service_unavailable` (503 : service injoignable, 5xx, liste `errors` GraphQL non vide, réponse illisible), `external_service_timeout` (504).
+- Erreurs : `country_not_found` (404, `country` vaut `null` pour ce code), `external_service_bad_response` (502 : liste `errors` GraphQL non vide, réponse illisible), `external_service_unavailable` (503 : service injoignable, 4xx ou 5xx), `external_service_timeout` (504).
 
 ### Vue d'ensemble d'une destination
 
@@ -355,7 +355,7 @@ Toutes les erreurs ont la même forme :
 }
 ```
 
-`code` vaut notamment `validation_error`, `integrity_error`, `not_authenticated`, `token_not_valid`, `permission_denied`, `not_found`, `throttled`, ou pour les services externes `location_not_found`, `country_not_found`, `no_data_available`, `external_service_unavailable` et `external_service_timeout`. `details` contient les erreurs par champ (`non_field_errors` pour les erreurs globales), un objet vide sinon. Le gestionnaire (`apps/core/exceptions.py`) convertit aussi en 400 les `ValidationError` de Django levées par les services et les `IntegrityError` ; dans ce dernier cas, le message est celui de la contrainte PostgreSQL violée.
+`code` vaut notamment `validation_error`, `integrity_error`, `not_authenticated`, `token_not_valid`, `permission_denied`, `not_found`, `throttled`, ou pour les services externes `location_not_found`, `country_not_found`, `no_data_available`, `external_service_bad_response`, `external_service_unavailable` et `external_service_timeout`. `details` contient les erreurs par champ (`non_field_errors` pour les erreurs globales), un objet vide sinon. Le gestionnaire (`apps/core/exceptions.py`) convertit aussi en 400 les `ValidationError` de Django levées par les services et les `IntegrityError` ; dans ce dernier cas, le message est celui de la contrainte PostgreSQL violée.
 
 ## API GraphQL
 
@@ -437,7 +437,7 @@ postman/           collection Postman v2.1 et environnement local
 | API7 Server Side Request Forgery | Les URL d'Open-Meteo et de Countries sont des constantes. La ville part en paramètre de requête ; le code pays (`^[A-Z]{2}$`) en variable GraphQL, jamais concaténé. | `apps/integrations/tests/` |
 | API8 Security Misconfiguration | `check --deploy` sans avertissement. HSTS, redirection HTTPS, cookies `Secure`, `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy` et COOP. CORS limité à `CORS_ALLOWED_ORIGINS`, sans identifiants. En production : JSON seulement (pas d'API navigable), GraphiQL et introspection désactivés, et des 404/500 en JSON sans trace de pile, l'erreur étant journalisée. Journaux JSON sans jeton ni mot de passe, avec masquage en filet de sécurité. | `test_security.py`, `test_input_validation.py`, `test_logging.py` |
 | API9 Improper Inventory Management | Une seule version de l'API, entièrement décrite par OpenAPI (`/api/docs/`) et par la collection Postman. | `test_api_docs.py` |
-| API10 Unsafe Consumption of APIs | Réponses externes validées puis converties en dataclasses ; une réponse illisible devient une 503 et un délai dépassé une 504. Seules les réponses exploitables sont mises en cache. | `test_open_meteo.py`, `test_countries.py`, `test_destination_overview.py` |
+| API10 Unsafe Consumption of APIs | Réponses externes validées puis converties en dataclasses ; une réponse inexploitable devient une 502, un service injoignable une 503 et un délai dépassé une 504. Seules les réponses exploitables sont mises en cache. | `test_open_meteo.py`, `test_countries.py`, `test_destination_overview.py` |
 
 Validation des entrées (`test_input_validation.py`) : dates incohérentes ou hors du voyage et du séjour, montants négatifs ou trop précis, longueurs, choix inconnus, codes pays, coordonnées, filtres et pages invalides, JSON mal formé (400), type de contenu (415). Une donnée refusée n'écrit jamais rien en base.
 
@@ -469,25 +469,48 @@ Fixtures communes (`conftest.py`) :
 - `graphql(query, variables, user=…)` pour envoyer une requête GraphQL avec un vrai jeton ;
 - `mock_http`, qui intercepte Open-Meteo et Countries : aucun test ne sort sur le réseau.
 
+### Scénarios de test minimaux
+
+| Domaine | Cas | Attendu | Tests pytest | Postman |
+| --- | --- | --- | --- | --- |
+| Auth | Sans jeton ; jeton expiré ; refresh révoqué après déconnexion | 401 | `test_auth_api.py`, `test_security.py::TestJwt` | Cas d'erreur (sauf jeton expiré, qu'il faudrait signer avec la clé du serveur) |
+| Voyages | Création valide ; fin avant début ; titre vide ; filtre par statut ; tri | 201 / 400 / 200 | `test_trip_api.py`, `test_input_validation.py` | Trips, Cas d'erreur |
+| Accès | B lit, modifie, supprime le voyage de A | 404 | `test_object_level_authorization.py` | Cas d'erreur |
+| Rôles | Lecteur modifie ; éditeur supprime le voyage ; éditeur ajoute un participant | 403 | `test_trip_api.py`, `test_trip_actions.py` | Participants |
+| Destinations | Dates hors voyage ; ordre dupliqué ; destination d'un voyage tiers | 400 / 404 | `test_destination_api.py`, `test_input_validation.py` | Cas d'erreur |
+| Activités | Coût négatif ; date hors destination ; filtre par catégorie | 400 / 200 | `test_activity_api.py`, `test_input_validation.py` | Activities, Cas d'erreur |
+| Transaction | Panne forcée pendant le clonage | 500 JSON, base inchangée | `test_services.py`, `test_trip_actions.py`, `apps/trips/tests/test_graphql.py` (`failure_midway`) | — (panne simulée) |
+| Open-Meteo | Ville inconnue ; service en 500 ; délai dépassé | 404 / 503 / 504 | `test_open_meteo.py`, `test_destination_weather.py` | Cas d'erreur (404) |
+| Countries | Code inconnu ; liste `errors` GraphQL | 404 / 502 | `test_countries.py`, `test_destination_overview.py::TestCountry` | Cas d'erreur (404) |
+| Agrégation | Une source en panne | 200 + `warnings` | `test_destination_overview.py` | Externes |
+| GraphQL | Requête sans jeton ; mutation sur un voyage tiers ; validation | erreur GraphQL avec `extensions.code` | `test_object_level_authorization.py::TestGraphqlCrossAccess`, `apps/*/tests/test_graphql.py` | Cas d'erreur |
+
+Les pannes des services externes (500, délai, liste `errors`) et du clonage sont simulées dans pytest (`mock_http`, `monkeypatch`) : la collection Postman appelle les vrais services.
+
 ### Collection Postman
 
-`postman/TravelHub.postman_collection.json` (format v2.1) et l'environnement `postman/TravelHub.postman_environment.json` (`base_url`, `access`, `refresh`).
+`postman/TravelHub.postman_collection.json` (format v2.1) et l'environnement `TravelHub-local` (`postman/TravelHub.postman_environment.json` : `base_url`, `access`, `refresh`, `trip_id`, `destination_id`). L'autorisation *Bearer* `{{access}}` est définie sur la collection et héritée par chaque requête.
 
-1. Dans Postman : *Import*, choisir les deux fichiers, puis sélectionner l'environnement « TravelHub — local ».
+1. Dans Postman : *Import*, choisir les deux fichiers, puis sélectionner l'environnement « TravelHub-local ».
 2. Lancer le serveur : `python manage.py runserver`.
 3. Sur la collection : *Run collection*, puis *Run TravelHub API*.
 
 | Dossier | Contenu |
 | --- | --- |
-| Auth | Inscription d'Alice et de Bob, connexion (stocke `access` et `refresh` dans l'environnement), rotation, profil, déconnexion |
-| Trips | CRUD, recherche et filtres, statistiques, duplication |
-| Destinations, Activities | CRUD, filtres, statistiques après ajout |
-| Participants | Bob lecteur (403 en écriture), éditeur, puis retiré (404) |
-| Externes | Météo, pays, vue d'ensemble ; 503 ou 504 acceptés sans Internet |
+| Auth | Inscription d'Alice et de Bob, connexion (script *Tests* de `/api/auth/token/` : stocke `access` et `refresh` dans l'environnement), rotation, profil, déconnexion |
+| Trips | CRUD (stocke `trip_id`), recherche, filtre par statut, tri, statistiques, duplication |
+| Destinations, Activities | CRUD (stocke `destination_id`), filtres dont catégorie, statistiques après ajout |
+| Participants | Bob lecteur (403 en écriture), éditeur (403 pour supprimer le voyage ou ajouter un participant), puis retiré (404) |
+| Externes | Météo, pays, vue d'ensemble ; 502, 503 ou 504 acceptés sans Internet |
 | GraphQL | `me`, `myTrips`, `trip`, mutations, `destinationOverview` |
-| Cas d'erreur | 400, 401, 403, 404, 405, 415, affectation de masse, erreurs GraphQL, profondeur maximale |
+| Cas d'erreur | 401 (sans jeton, jeton invalide, refresh réutilisé ou révoqué), 400 (dates, titre vide, budget et coût négatifs, ordre dupliqué…), 404 (accès de Bob, ville et code pays inconnus des services externes), 405, 415, affectation de masse, erreurs GraphQL (voyage tiers, sans jeton, validation, profondeur) |
 | Nettoyage | Suppression du voyage de l'exécution |
 
 Chaque exécution crée deux comptes uniques et des dates relatives au jour même. Elle peut donc être relancée telle quelle. Elle envoie une dizaine de requêtes anonymes : avec la limite par défaut de 100/h, relevez `THROTTLE_ANON_RATE` dans `.env` pour enchaîner plus d'une dizaine d'exécutions par heure. Hors du Runner, le script de la collection rafraîchit `access` dès qu'il expire.
 
-En ligne de commande : `npx newman run postman/TravelHub.postman_collection.json -e postman/TravelHub.postman_environment.json`.
+En ligne de commande, avec Postman CLI ou Newman :
+
+```powershell
+postman collection run postman/TravelHub.postman_collection.json -e postman/TravelHub.postman_environment.json
+npx newman run postman/TravelHub.postman_collection.json -e postman/TravelHub.postman_environment.json
+```

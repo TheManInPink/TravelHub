@@ -9,6 +9,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from apps.core.openapi import (
+    BAD_RESPONSE,
     FORBIDDEN,
     GATEWAY_TIMEOUT,
     NOT_FOUND,
@@ -23,6 +24,7 @@ from apps.core.openapi import (
 from apps.core.permissions import IsTripEditor, TripRolePermissionMixin
 from apps.integrations.exceptions import (
     CountryNotFound,
+    ExternalServiceBadResponse,
     ExternalServiceTimeout,
     ExternalServiceUnavailable,
 )
@@ -113,10 +115,15 @@ COUNTRY_NOT_FOUND = OpenApiResponse(
         ),
     ],
 )
+COUNTRY_BAD_RESPONSE = error_response(
+    "Countries GraphQL a renvoyé une liste errors ou une réponse inattendue",
+    ExternalServiceBadResponse.code,
+    'Countries GraphQL a renvoyé une erreur : Cannot query field "nope" on type "Country".',
+)
 COUNTRY_UNAVAILABLE = error_response(
-    "Countries GraphQL injoignable, en erreur ou réponse inattendue",
+    "Countries GraphQL injoignable ou en erreur",
     ExternalServiceUnavailable.code,
-    "Countries GraphQL est momentanément indisponible (erreur 502).",
+    "Countries GraphQL est momentanément indisponible (erreur 500).",
 )
 COUNTRY_TIMEOUT = error_response(
     "Countries GraphQL trop lent",
@@ -300,6 +307,7 @@ class DestinationViewSet(TripRolePermissionMixin, viewsets.ModelViewSet):
         responses={
             200: DestinationWeatherSerializer,
             404: WEATHER_NOT_FOUND,
+            502: BAD_RESPONSE,
             503: SERVICE_UNAVAILABLE,
             504: GATEWAY_TIMEOUT,
             **COMMON_ERRORS,
@@ -325,6 +333,7 @@ class DestinationViewSet(TripRolePermissionMixin, viewsets.ModelViewSet):
         responses={
             200: CountrySerializer,
             404: COUNTRY_NOT_FOUND,
+            502: COUNTRY_BAD_RESPONSE,
             503: COUNTRY_UNAVAILABLE,
             504: COUNTRY_TIMEOUT,
             **COMMON_ERRORS,

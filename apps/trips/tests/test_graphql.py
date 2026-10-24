@@ -8,6 +8,7 @@ from django.db import connection
 from django.test.utils import CaptureQueriesContext
 
 from apps.core.testing import graphql_codes, graphql_data
+from apps.itinerary.models import Activity, Destination
 from apps.trips.models import Trip, TripParticipant
 from apps.trips.services import LAST_OWNER_MESSAGE
 
@@ -435,6 +436,24 @@ class TestCloneTrip:
 
         assert graphql_codes(response) == ["not_found"]
         assert Trip.objects.count() == 1
+
+    def test_failure_midway_gives_internal_error_and_creates_nothing(
+        self, graphql, owner, trip, destination, make_activity, monkeypatch
+    ):
+        make_activity()
+
+        def failing_bulk_create(objs, *args, **kwargs):
+            raise RuntimeError("panne simulée pendant la copie des activités")
+
+        models = (Trip, TripParticipant, Destination, Activity)
+        before = [model.objects.count() for model in models]
+        monkeypatch.setattr(Activity.objects, "bulk_create", failing_bulk_create)
+
+        response = graphql(CLONE_TRIP, variables={"id": trip.pk}, user=owner)
+
+        assert graphql_codes(response) == ["internal_error"]
+        assert "panne simulée" not in response.content.decode()
+        assert [model.objects.count() for model in models] == before
 
 
 @pytest.mark.django_db

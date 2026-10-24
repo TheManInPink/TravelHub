@@ -176,6 +176,19 @@ class TestExternalFields:
 
         assert graphql_codes(response) == ["country_not_found"]
 
+    def test_remote_graphql_errors_are_reported(self, graphql, owner, located, mock_http):
+        mock_http.post(GRAPHQL_URL, json={"errors": [{"message": "Internal server error"}]})
+
+        response = graphql(
+            "query ($id: ID!) { destination(id: $id) { countryInfo { name } } }",
+            variables={"id": located.pk},
+            user=owner,
+        )
+
+        error = only_error(response)
+        assert error["extensions"]["code"] == "external_service_bad_response"
+        assert error["message"] == "Countries GraphQL a renvoyé une erreur : Internal server error"
+
 
 @pytest.mark.django_db
 class TestDestinationOverview:

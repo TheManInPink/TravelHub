@@ -4,14 +4,15 @@ get_country() envoie une requête GraphQL paramétrée : le code pays voyage dan
 « variables », jamais concaténé au texte de la requête. Cache 24 heures.
 
 Un serveur GraphQL répond 200 même en cas d'erreur : la liste « errors » est donc
-examinée avant « data ». Un code inconnu donne {"data": {"country": null}}, traduit en
-CountryNotFound. Délai, nouvel essai et cache : voir apps.integrations.services.http.
+examinée avant « data », et une liste non vide donne ExternalServiceBadResponse (502).
+Un code inconnu donne {"data": {"country": null}}, traduit en CountryNotFound.
+Délai, nouvel essai et cache : voir apps.integrations.services.http.
 """
 
 import logging
 from dataclasses import dataclass
 
-from apps.integrations.exceptions import CountryNotFound, ExternalServiceUnavailable
+from apps.integrations.exceptions import CountryNotFound, ExternalServiceBadResponse
 
 from .http import cached, new_session, request_json
 
@@ -70,7 +71,7 @@ def get_country(code):
         if payload.get("errors"):
             messages = "; ".join(str(error.get("message")) for error in payload["errors"])
             logger.error("%s a renvoyé des erreurs pour %s : %s", SERVICE, code, messages)
-            raise ExternalServiceUnavailable(f"{SERVICE} a renvoyé une erreur : {messages}")
+            raise ExternalServiceBadResponse(f"{SERVICE} a renvoyé une erreur : {messages}")
         country = payload["data"]["country"]
         if country is None:
             raise CountryNotFound(f"Pays introuvable : {code} n'est pas un code pays connu.")

@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "e45157fe-2945-5cbb-92d3-88062f7ab8a3",
     "name": "TravelHub API",
-    "description": "API REST et GraphQL de TravelHub.\n\n1. Importer cette collection et l'environnement `TravelHub.postman_environment.json`.\n2. Lancer le serveur (`python manage.py runserver`) ; ajuster `base_url` au besoin.\n3. *Run collection* : les dossiers s'exécutent dans l'ordre. Chaque exécution crée deux comptes uniques (Alice et Bob) ; « Connexion » stocke `access` et `refresh` dans l'environnement.\n\nHors du Runner, le script de la collection rafraîchit `access` s'il a expiré.",
+    "description": "API REST et GraphQL de TravelHub.\n\n1. Importer cette collection et l'environnement `TravelHub-local` (`TravelHub.postman_environment.json`).\n2. Lancer le serveur (`python manage.py runserver`) ; ajuster `base_url` au besoin.\n3. *Run collection* : les dossiers s'exécutent dans l'ordre. Chaque exécution crée deux comptes uniques (Alice et Bob) ; « Connexion » stocke `access` et `refresh` dans l'environnement ; « Créer un voyage » et « Créer une destination » y stockent `trip_id` et `destination_id`.\n\nHors du Runner, le script de la collection rafraîchit `access` s'il a expiré.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "auth": {
@@ -143,19 +143,15 @@
       "value": ""
     },
     {
-      "key": "trip_id",
-      "value": ""
-    },
-    {
       "key": "clone_id",
       "value": ""
     },
     {
-      "key": "destination_id",
+      "key": "destination_2_id",
       "value": ""
     },
     {
-      "key": "destination_2_id",
+      "key": "unknown_destination_id",
       "value": ""
     },
     {
@@ -503,7 +499,7 @@
                   "                    pm.expect(body.destination_count).to.eql(0);",
                   "                    pm.expect(body.total_cost).to.eql(\"0.00\");",
                   "                });",
-                  "                pm.collectionVariables.set(\"trip_id\", body.id);"
+                  "                pm.environment.set(\"trip_id\", body.id);"
                 ]
               }
             }
@@ -527,7 +523,7 @@
                   "                const body = pm.response.json();",
                   "                pm.test(\"Réponse paginée\", () => pm.expect(body).to.have.all.keys(\"count\", \"next\", \"previous\", \"results\"));",
                   "                pm.test(\"Contient le voyage créé\", () => {",
-                  "                    pm.expect(body.results.map((t) => t.id)).to.include(pm.collectionVariables.get(\"trip_id\"));",
+                  "                    pm.expect(body.results.map((t) => t.id)).to.include(pm.environment.get(\"trip_id\"));",
                   "                });"
                 ]
               }
@@ -769,7 +765,7 @@
                   "",
                   "                const body = pm.response.json();",
                   "                pm.test(\"Code pays normalisé\", () => pm.expect(body.country_code).to.eql(\"JP\"));",
-                  "                pm.collectionVariables.set(\"destination_id\", body.id);"
+                  "                pm.environment.set(\"destination_id\", body.id);"
                 ]
               }
             }
@@ -943,7 +939,7 @@
                   "pm.test(\"Statut 201\", () => pm.response.to.have.status(201));",
                   "",
                   "                const body = pm.response.json();",
-                  "                pm.test(\"Rattachée au voyage\", () => pm.expect(body.trip).to.eql(pm.collectionVariables.get(\"trip_id\")));",
+                  "                pm.test(\"Rattachée au voyage\", () => pm.expect(body.trip).to.eql(pm.environment.get(\"trip_id\")));",
                   "                pm.collectionVariables.set(\"activity_id\", body.id);"
                 ]
               }
@@ -1329,6 +1325,54 @@
           ]
         },
         {
+          "name": "Bob ne peut pas ajouter de participant (éditeur, 403)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/trips/{{trip_id}}/participants/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email_a}}\",\n  \"role\": \"viewer\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_b}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 403\", () => pm.response.to.have.status(403));",
+                  "const error = pm.response.json().error;",
+                  "pm.test(\"Code d'erreur permission_denied\", () => pm.expect(error.code).to.eql(\"permission_denied\"));",
+                  "pm.test(\"Enveloppe {code, message, details}\", () => {",
+                  "    pm.expect(error).to.have.all.keys(\"code\", \"message\", \"details\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "Bob ne peut pas supprimer (éditeur, 403)",
           "request": {
             "method": "DELETE",
@@ -1419,7 +1463,7 @@
     },
     {
       "name": "Externes",
-      "description": "Open-Meteo (météo) et Countries GraphQL (pays), appelés par le serveur. Sans accès à Internet, météo et pays répondent 503 ou 504, et la vue d'ensemble reste un 200 avec des avertissements.",
+      "description": "Open-Meteo (météo) et Countries GraphQL (pays), appelés par le serveur. Sans accès à Internet, météo et pays répondent 502, 503 ou 504, et la vue d'ensemble reste un 200 avec des avertissements.",
       "item": [
         {
           "name": "Météo de la destination (Open-Meteo)",
@@ -1434,25 +1478,27 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "// Service externe : 200 s'il répond, sinon 503 ou 504 avec l'enveloppe d'erreur.",
-                  "const code = pm.response.code;",
-                  "pm.test(\"200, ou 503/504 si le service externe est indisponible\", () => {",
-                  "    pm.expect(code).to.be.oneOf([200, 503, 504]);",
-                  "});",
-                  "if (code !== 200) {",
-                  "    const error = pm.response.json().error;",
-                  "    pm.test(\"Erreur de service externe\", () => {",
-                  "        pm.expect(error.code).to.be.oneOf([\"external_service_unavailable\", \"external_service_timeout\"]);",
-                  "    });",
-                  "}",
+                  "const SERVICE_ERRORS = [\"external_service_bad_response\", \"external_service_unavailable\", \"external_service_timeout\"];",
                   "",
-                  "            if (code === 200) {",
-                  "                const body = pm.response.json();",
-                  "                pm.test(\"Prévisions du séjour\", () => {",
-                  "                    pm.expect(body.timezone).to.eql(\"Asia/Tokyo\");",
-                  "                    pm.expect(body.daily).to.be.an(\"array\").that.is.not.empty;",
-                  "                });",
-                  "            }"
+                  "    // Service externe : 200 s'il répond, sinon 502, 503 ou 504 avec l'enveloppe d'erreur.",
+                  "    const code = pm.response.code;",
+                  "    pm.test(\"200, ou 502/503/504 si le service externe est indisponible\", () => {",
+                  "        pm.expect(code).to.be.oneOf([200, 502, 503, 504]);",
+                  "    });",
+                  "    if (code !== 200) {",
+                  "        const error = pm.response.json().error;",
+                  "        pm.test(\"Erreur de service externe\", () => {",
+                  "            pm.expect(error.code).to.be.oneOf(SERVICE_ERRORS);",
+                  "        });",
+                  "    }",
+                  "",
+                  "                if (code === 200) {",
+                  "                    const body = pm.response.json();",
+                  "                    pm.test(\"Prévisions du séjour\", () => {",
+                  "                        pm.expect(body.timezone).to.eql(\"Asia/Tokyo\");",
+                  "                        pm.expect(body.daily).to.be.an(\"array\").that.is.not.empty;",
+                  "                    });",
+                  "                }"
                 ]
               }
             }
@@ -1471,21 +1517,23 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "// Service externe : 200 s'il répond, sinon 503 ou 504 avec l'enveloppe d'erreur.",
-                  "const code = pm.response.code;",
-                  "pm.test(\"200, ou 503/504 si le service externe est indisponible\", () => {",
-                  "    pm.expect(code).to.be.oneOf([200, 503, 504]);",
-                  "});",
-                  "if (code !== 200) {",
-                  "    const error = pm.response.json().error;",
-                  "    pm.test(\"Erreur de service externe\", () => {",
-                  "        pm.expect(error.code).to.be.oneOf([\"external_service_unavailable\", \"external_service_timeout\"]);",
-                  "    });",
-                  "}",
+                  "const SERVICE_ERRORS = [\"external_service_bad_response\", \"external_service_unavailable\", \"external_service_timeout\"];",
                   "",
-                  "            if (code === 200) {",
-                  "                pm.test(\"Japon\", () => pm.expect(pm.response.json().capital).to.eql(\"Tokyo\"));",
-                  "            }"
+                  "    // Service externe : 200 s'il répond, sinon 502, 503 ou 504 avec l'enveloppe d'erreur.",
+                  "    const code = pm.response.code;",
+                  "    pm.test(\"200, ou 502/503/504 si le service externe est indisponible\", () => {",
+                  "        pm.expect(code).to.be.oneOf([200, 502, 503, 504]);",
+                  "    });",
+                  "    if (code !== 200) {",
+                  "        const error = pm.response.json().error;",
+                  "        pm.test(\"Erreur de service externe\", () => {",
+                  "            pm.expect(error.code).to.be.oneOf(SERVICE_ERRORS);",
+                  "        });",
+                  "    }",
+                  "",
+                  "                if (code === 200) {",
+                  "                    pm.test(\"Japon\", () => pm.expect(pm.response.json().capital).to.eql(\"Tokyo\"));",
+                  "                }"
                 ]
               }
             }
@@ -2029,6 +2077,45 @@
           ]
         },
         {
+          "name": "400 — titre vide",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/trips/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"\",\n  \"start_date\": \"{{start_date}}\",\n  \"end_date\": \"{{end_date}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 400\", () => pm.response.to.have.status(400));",
+                  "const error = pm.response.json().error;",
+                  "pm.test(\"Code d'erreur validation_error\", () => pm.expect(error.code).to.eql(\"validation_error\"));",
+                  "pm.test(\"Enveloppe {code, message, details}\", () => {",
+                  "    pm.expect(error).to.have.all.keys(\"code\", \"message\", \"details\");",
+                  "});",
+                  "pm.test(\"Erreur sur le champ title\", () => pm.expect(error.details).to.have.property(\"title\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "400 — budget négatif",
           "request": {
             "method": "PATCH",
@@ -2101,6 +2188,45 @@
                   "    pm.expect(error).to.have.all.keys(\"code\", \"message\", \"details\");",
                   "});",
                   "pm.test(\"Erreur sur le champ arrival_date\", () => pm.expect(error.details).to.have.property(\"arrival_date\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "400 — ordre déjà utilisé dans le voyage",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/destinations/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"trip\": \"{{trip_id}}\",\n  \"order\": 1,\n  \"city\": \"Nara\",\n  \"country\": \"Japon\",\n  \"country_code\": \"JP\",\n  \"arrival_date\": \"{{arrival_date_2}}\",\n  \"departure_date\": \"{{departure_date_2}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 400\", () => pm.response.to.have.status(400));",
+                  "const error = pm.response.json().error;",
+                  "pm.test(\"Code d'erreur validation_error\", () => pm.expect(error.code).to.eql(\"validation_error\"));",
+                  "pm.test(\"Enveloppe {code, message, details}\", () => {",
+                  "    pm.expect(error).to.have.all.keys(\"code\", \"message\", \"details\");",
+                  "});",
+                  "pm.test(\"Erreur sur le champ non_field_errors\", () => pm.expect(error.details).to.have.property(\"non_field_errors\"));"
                 ]
               }
             }
@@ -2185,6 +2311,157 @@
           ]
         },
         {
+          "name": "400 — coût négatif",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/activities/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"destination\": \"{{destination_id}}\",\n  \"name\": \"Remboursement\",\n  \"date\": \"{{activity_date}}\",\n  \"cost\": \"-5.00\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 400\", () => pm.response.to.have.status(400));",
+                  "const error = pm.response.json().error;",
+                  "pm.test(\"Code d'erreur validation_error\", () => pm.expect(error.code).to.eql(\"validation_error\"));",
+                  "pm.test(\"Enveloppe {code, message, details}\", () => {",
+                  "    pm.expect(error).to.have.all.keys(\"code\", \"message\", \"details\");",
+                  "});",
+                  "pm.test(\"Erreur sur le champ cost\", () => pm.expect(error.details).to.have.property(\"cost\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Préparation — destination inconnue des services externes",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/destinations/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"trip\": \"{{trip_id}}\",\n  \"order\": 3,\n  \"city\": \"Zzyzxville {{run_id}}\",\n  \"country\": \"Nulle part\",\n  \"country_code\": \"ZZ\",\n  \"arrival_date\": \"{{arrival_date_2}}\",\n  \"departure_date\": \"{{departure_date_2}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 201\", () => pm.response.to.have.status(201));",
+                  "",
+                  "                pm.collectionVariables.set(\"unknown_destination_id\", pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "404 — Open-Meteo : ville inconnue",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/destinations/{{unknown_destination_id}}/weather/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const SERVICE_ERRORS = [\"external_service_bad_response\", \"external_service_unavailable\", \"external_service_timeout\"];",
+                  "const status = pm.response.code;",
+                  "const error = pm.response.json().error;",
+                  "if ([502, 503, 504].includes(status)) {",
+                  "    pm.test(\"Service externe indisponible : erreur de service\", () => {",
+                  "        pm.expect(error.code).to.be.oneOf(SERVICE_ERRORS);",
+                  "    });",
+                  "} else {",
+                  "    pm.test(\"Statut 404\", () => pm.response.to.have.status(404));",
+                  "    pm.test(\"Code d'erreur location_not_found\", () => pm.expect(error.code).to.eql(\"location_not_found\"));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "404 — Countries : code pays inconnu",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/destinations/{{unknown_destination_id}}/country/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const SERVICE_ERRORS = [\"external_service_bad_response\", \"external_service_unavailable\", \"external_service_timeout\"];",
+                  "const status = pm.response.code;",
+                  "const error = pm.response.json().error;",
+                  "if ([502, 503, 504].includes(status)) {",
+                  "    pm.test(\"Service externe indisponible : erreur de service\", () => {",
+                  "        pm.expect(error.code).to.be.oneOf(SERVICE_ERRORS);",
+                  "    });",
+                  "} else {",
+                  "    pm.test(\"Statut 404\", () => pm.response.to.have.status(404));",
+                  "    pm.test(\"Code d'erreur country_not_found\", () => pm.expect(error.code).to.eql(\"country_not_found\"));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Nettoyage — destination inconnue",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{base_url}}/api/destinations/{{unknown_destination_id}}/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 204\", () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "400 — le propriétaire ne peut pas être retiré",
           "request": {
             "method": "DELETE",
@@ -2240,7 +2517,7 @@
                   "                const body = pm.response.json();",
                   "                pm.test(\"Propriétaire, identifiant et total inchangés\", () => {",
                   "                    pm.expect(body.owner.username).to.eql(pm.collectionVariables.get(\"username_a\"));",
-                  "                    pm.expect(body.id).to.eql(pm.collectionVariables.get(\"trip_id\"));",
+                  "                    pm.expect(body.id).to.eql(pm.environment.get(\"trip_id\"));",
                   "                    pm.expect(body.total_cost).to.eql(\"50.00\");",
                   "                });"
                 ]
@@ -2559,6 +2836,46 @@
                   "pm.test(\"Erreur GraphQL not_found\", () => pm.expect(body.errors[0].extensions.code).to.eql(\"not_found\"));",
                   "",
                   "                pm.test(\"Aucune donnée\", () => pm.expect(body.data.trip).to.be.null);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GraphQL — Bob modifie le voyage d'Alice (mutation sur voyage tiers)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/graphql/",
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation Update($id: ID!) {\n  updateTrip(id: $id, input: {title: \"Piraté\"}) { trip { id title } }\n}",
+                "variables": "{\"id\": \"{{trip_id}}\"}"
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_b}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 200\", () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"Erreur GraphQL not_found\", () => pm.expect(body.errors[0].extensions.code).to.eql(\"not_found\"));",
+                  "",
+                  "                pm.test(\"Aucune donnée\", () => pm.expect(body.data.updateTrip).to.be.null);"
                 ]
               }
             }

@@ -91,6 +91,19 @@ class TestCountry:
         assert response.status_code == 404
         assert error_of(response)["code"] == "country_not_found"
 
+    def test_graphql_errors_give_502(self, client_for, owner, located, mock_http):
+        # Un serveur GraphQL signale ses erreurs avec un statut 200 et une liste errors.
+        mock_http.post(GRAPHQL_URL, json={"errors": [{"message": "Internal server error"}]})
+
+        response = client_for(owner).get(url("country", located))
+
+        assert response.status_code == 502
+        assert error_of(response) == {
+            "code": "external_service_bad_response",
+            "message": "Countries GraphQL a renvoyé une erreur : Internal server error",
+            "details": {},
+        }
+
     def test_remote_failure_gives_503(self, client_for, owner, located, mock_http):
         mock_http.post(GRAPHQL_URL, status=500)
 
@@ -244,7 +257,7 @@ class TestOverview:
     @pytest.mark.parametrize(
         ("path", "codes"),
         [
-            ("country", {"200", "401", "404", "503", "504"}),
+            ("country", {"200", "401", "404", "502", "503", "504"}),
             ("overview", {"200", "401", "404"}),
         ],
     )

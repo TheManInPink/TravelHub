@@ -41,11 +41,20 @@ class NoDataAvailable(IntegrationError):
 
 
 class ExternalServiceUnavailable(IntegrationError):
-    """Service injoignable, erreur 5xx ou réponse inexploitable, après les nouveaux essais."""
+    """Service injoignable ou en erreur (5xx après le nouvel essai, 4xx)."""
 
     status_code = 503
     code = "external_service_unavailable"
     default_message = "Le service externe est momentanément indisponible."
+
+
+class ExternalServiceBadResponse(ExternalServiceUnavailable):
+    """Le service a répondu, mais avec des erreurs (liste « errors » GraphQL) ou une
+    réponse inexploitable (JSON illisible, forme inattendue)."""
+
+    status_code = 502
+    code = "external_service_bad_response"
+    default_message = "Le service externe a renvoyé une réponse invalide."
 
 
 class ExternalServiceTimeout(ExternalServiceUnavailable):

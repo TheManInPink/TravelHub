@@ -12,7 +12,7 @@ Toutes les erreurs ont la même forme :
 Les ValidationError de Django (levées par les services et Model.clean()) et les
 IntegrityError (contrainte de base violée, par exemple par deux requêtes simultanées)
 deviennent des 400 au lieu de 500. Les erreurs des services externes
-(apps.integrations.exceptions) gardent leur statut (404, 503, 504) et leur code.
+(apps.integrations.exceptions) gardent leur statut (404, 502, 503, 504) et leur code.
 
 error_body() produit le même corps pour l'API GraphQL (apps.core.views).
 """

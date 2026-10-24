@@ -8,6 +8,7 @@ from responses import matchers
 
 from apps.integrations.exceptions import (
     CountryNotFound,
+    ExternalServiceBadResponse,
     ExternalServiceTimeout,
     ExternalServiceUnavailable,
 )
@@ -74,7 +75,7 @@ class TestGetCountry:
 
 
 class TestRemoteFailures:
-    def test_graphql_errors_raise_unavailable_and_are_not_cached(self, mock_http):
+    def test_graphql_errors_raise_bad_response_and_are_not_cached(self, mock_http):
         # Un serveur GraphQL signale ses erreurs avec un statut 200.
         payload = {
             "errors": [
@@ -87,7 +88,7 @@ class TestRemoteFailures:
         mock_http.post(GRAPHQL_URL, json=payload)
 
         for _ in range(2):
-            with pytest.raises(ExternalServiceUnavailable, match='Cannot query field "nope"'):
+            with pytest.raises(ExternalServiceBadResponse, match='Cannot query field "nope"'):
                 get_country("JP")
         assert len(mock_http.calls) == 2
 
@@ -129,8 +130,8 @@ class TestRemoteFailures:
             {"json": [1, 2, 3]},
         ],
     )
-    def test_unexpected_body_raises_unavailable(self, mock_http, response):
+    def test_unexpected_body_raises_bad_response(self, mock_http, response):
         mock_http.post(GRAPHQL_URL, **response)
 
-        with pytest.raises(ExternalServiceUnavailable):
+        with pytest.raises(ExternalServiceBadResponse):
             get_country("JP")
