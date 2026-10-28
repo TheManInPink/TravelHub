@@ -41,8 +41,8 @@ class TestCloneTrip:
         assert len(clone_trip(source, owner=owner).title) == 200
 
     def test_failure_midway_rolls_everything_back(self, source, owner, monkeypatch):
-        """Démonstration de transaction.atomic : l'échec de la copie des activités
-        annule aussi le voyage, son participant owner et les destinations déjà insérés."""
+        """Exemple de transaction.atomic. Si la copie des activités échoue, le voyage, son
+        participant owner et les destinations déjà insérés sont aussi annulés."""
         before = row_counts()
         inserted = {}
 

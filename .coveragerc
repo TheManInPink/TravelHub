@@ -7,13 +7,13 @@ branch = true
 omit =
     */migrations/*
     */tests/*
-    # Points d'entrée des serveurs WSGI et ASGI, jamais importés par les tests.
+    # Points d'entrée WSGI et ASGI, que les tests n'importent jamais.
     config/asgi.py
     config/wsgi.py
 
 [report]
-# Pas de fail_under ici : il ferait échouer « pytest un_fichier.py ». Seuil de la suite
-# complète : pytest --cov-fail-under=80.
+# Pas de fail_under ici, sinon « pytest un_fichier.py » échouerait. Pour la suite
+# complète, on met le seuil avec pytest --cov-fail-under=80.
 show_missing = true
 skip_covered = true
 

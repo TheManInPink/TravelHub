@@ -1,6 +1,6 @@
 """Opérations métier sur les destinations : coordonnées et météo (Open-Meteo).
 
-locate() et fetch_forecast() n'exécutent aucune requête SQL : l'agrégateur
+locate() et fetch_forecast() ne font aucune requête SQL. L'agrégateur
 (apps.integrations.services.aggregator) les appelle depuis un fil secondaire, puis
 enregistre les coordonnées depuis le fil principal avec save_coordinates().
 """
@@ -15,10 +15,10 @@ COORDINATE_STEP = Decimal("0.000001")  # 6 décimales, comme les champs du modè
 
 
 def locate(destination):
-    """Géocode la destination si ses coordonnées manquent, sans écrire en base.
+    """Géocode la destination si elle n'a pas de coordonnées, sans écrire en base.
 
-    Renvoie True si des coordonnées viennent d'être trouvées : à mémoriser avec
-    save_coordinates(). Des coordonnées déjà saisies ne sont jamais remplacées.
+    Renvoie True si on vient de trouver des coordonnées. Il faut alors les enregistrer
+    avec save_coordinates(). Les coordonnées déjà saisies ne sont jamais remplacées.
     """
     if destination.latitude is not None and destination.longitude is not None:
         return False
@@ -29,19 +29,19 @@ def locate(destination):
 
 
 def save_coordinates(destination):
-    """Mémorise en base les coordonnées trouvées par locate()."""
-    # update() plutôt que save() : n'écrit que les coordonnées, sans écraser une
-    # modification concurrente, ni toucher updated_at (donnée calculée, pas une saisie).
+    """Enregistre en base les coordonnées trouvées par locate()."""
+    # On utilise update() et pas save() pour n'écrire que les coordonnées. Ça évite
+    # d'écraser une modification faite en même temps et de toucher updated_at, puisque
+    # ce n'est pas une saisie de l'utilisateur.
     Destination.objects.filter(pk=destination.pk, latitude__isnull=True).update(
         latitude=destination.latitude, longitude=destination.longitude
     )
 
 
 def ensure_coordinates(destination):
-    """Géocode la destination si ses coordonnées manquent, et les mémorise en base.
+    """Géocode la destination si elle n'a pas de coordonnées, puis les enregistre.
 
-    Les appels suivants réutilisent les coordonnées enregistrées sans interroger le
-    géocodage.
+    Les appels suivants réutilisent les coordonnées en base sans refaire de géocodage.
     """
     if locate(destination):
         save_coordinates(destination)
@@ -49,7 +49,7 @@ def ensure_coordinates(destination):
 
 
 def fetch_forecast(destination):
-    """Météo du séjour, en géocodant au besoin, sans requête SQL."""
+    """Météo du séjour, avec géocodage si besoin, sans requête SQL."""
     locate(destination)
     return open_meteo.get_forecast(
         destination.latitude,

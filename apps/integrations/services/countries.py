@@ -1,12 +1,14 @@
 """Client Countries GraphQL (https://countries.trevorblades.com/graphql), sans clé d'API.
 
-get_country() envoie une requête GraphQL paramétrée : le code pays voyage dans
-« variables », jamais concaténé au texte de la requête. Cache 24 heures.
+get_country() envoie une requête GraphQL avec des variables. Le code pays est passé
+dans « variables » et n'est jamais collé dans le texte de la requête. Le résultat est
+gardé 24 heures en cache.
 
-Un serveur GraphQL répond 200 même en cas d'erreur : la liste « errors » est donc
-examinée avant « data », et une liste non vide donne ExternalServiceBadResponse (502).
-Un code inconnu donne {"data": {"country": null}}, traduit en CountryNotFound.
-Délai, nouvel essai et cache : voir apps.integrations.services.http.
+Un serveur GraphQL répond 200 même quand il y a une erreur. On regarde donc la liste
+« errors » avant « data ». Si elle n'est pas vide, on lève ExternalServiceBadResponse
+(502). Pour un code inconnu, la réponse est {"data": {"country": null}} et on lève
+CountryNotFound. Pour le délai, le nouvel essai et le cache, voir
+apps.integrations.services.http.
 """
 
 import logging
@@ -49,7 +51,7 @@ class Language:
 @dataclass(frozen=True, slots=True)
 class Country:
     code: str
-    name: str  # en anglais : le service ne traduit pas
+    name: str  # en anglais, le service ne traduit pas
     native: str
     capital: str | None
     emoji: str
@@ -63,7 +65,7 @@ class Country:
 
 
 def get_country(code):
-    """Pays de code ISO 3166-1 alpha-2 code ; CountryNotFound s'il n'existe pas."""
+    """Pays dont le code ISO 3166-1 alpha-2 est code. Lève CountryNotFound s'il n'existe pas."""
     code = code.strip().upper()
     body = {"query": COUNTRY_QUERY, "variables": {"code": code}}
 

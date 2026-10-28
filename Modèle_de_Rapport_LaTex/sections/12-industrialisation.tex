@@ -3,13 +3,13 @@
 \label{sec:industrialisation}
 %========================================================================================
 
-Cette partie dépasse l'énoncé. Elle n'a été entreprise qu'une fois toutes les exigences satisfaites.
+Cette partie va plus loin que l'énoncé. Nous l'avons faite seulement après avoir terminé tout ce qui était demandé.
 
 \subsection{Docker}
 
-Le \code{Dockerfile} construit l'image en deux étapes. La première installe les dépendances dans un environnement virtuel, à partir de \code{python:3.14-slim}. La seconde copie cet environnement dans une image d'exécution sans outils de construction. L'image exécute \code{collectstatic} : WhiteNoise sert ensuite les fichiers statiques. Gunicorn tourne sous un utilisateur non privilégié, qui ne peut écrire que dans \code{/app/logs}. Une instruction \code{HEALTHCHECK} interroge \code{/health/} toutes les 30~secondes.
+Le \code{Dockerfile} construit l'image en deux étapes. La première part de \code{python:3.14-slim} et installe les dépendances dans un environnement virtuel. La deuxième copie cet environnement dans une image d'exécution qui n'a pas les outils de construction. L'image lance \code{collectstatic}, puis WhiteNoise sert les fichiers statiques. Gunicorn tourne avec un utilisateur sans privilèges, qui peut seulement écrire dans \code{/app/logs}. Une instruction \code{HEALTHCHECK} appelle \code{/health/} toutes les 30~secondes.
 
-Le fichier \code{docker-compose.yml} assemble trois services (tableau~\ref{tab:compose}).
+Le fichier \code{docker-compose.yml} regroupe trois services (tableau~\ref{tab:compose}).
 
 \begin{table}[H]
   \centering
@@ -20,28 +20,28 @@ Le fichier \code{docker-compose.yml} assemble trois services (tableau~\ref{tab:c
     \toprule
     \textbf{Service} & \textbf{Rôle} \\
     \midrule
-    \code{web} & Image du projet, paramètres de production ; applique les migrations puis lance Gunicorn ; démarre quand \code{db} est prêt \\
-    \code{db} & \code{postgres:18}, volume persistant, contrôle \code{pg_isready} ; port non publié \\
-    \code{pgadmin} & pgAdmin~4, accessible depuis le poste local seulement ; serveur TravelHub déjà déclaré \\
+    \code{web} & Image du projet avec les paramètres de production. Applique les migrations puis lance Gunicorn, une fois que \code{db} est prêt \\
+    \code{db} & \code{postgres:18} avec un volume persistant et un contrôle \code{pg_isready}. Le port n'est pas publié \\
+    \code{pgadmin} & pgAdmin~4, accessible seulement depuis le poste local, avec le serveur TravelHub déjà déclaré \\
     \bottomrule
   \end{tabularx}
 \end{table}
 
 \subsection{Intégration continue}
 
-Le flux GitHub Actions (\code{.github/workflows/ci.yml}) s'exécute à chaque \emph{push} sur \code{master} et à chaque \emph{pull request}. Il comporte deux tâches.
-\begin{enumerate}
-  \item \textbf{Lint et tests.} Un service PostgreSQL 18 démarre, puis Ruff vérifie le code et son formatage. Pytest s'exécute ensuite avec le seuil de couverture de 80\,\%. Le résumé de couverture s'affiche dans la page de l'exécution, et les rapports sont publiés comme artefacts.
-  \item \textbf{Image Docker.} L'image est construite avec un cache, puis démarrée par \code{docker compose up --wait}. La tâche vérifie enfin que \code{/health/}, \code{/api/docs/} et \code{/api/schema/} répondent.
-\end{enumerate}
+Le flux GitHub Actions (\code{.github/workflows/ci.yml}) tourne à chaque \emph{push} sur \code{master} et à chaque \emph{pull request}. Il a deux tâches.
 
-Dependabot propose chaque semaine les mises à jour des dépendances pip et des actions GitHub.
+La première tâche s'appelle \og{}Lint et tests\fg{}. Elle démarre un service PostgreSQL 18, puis Ruff vérifie le code et son formatage. Pytest est lancé ensuite avec le seuil de couverture de 80\,\%. Le résumé de couverture s'affiche sur la page de l'exécution et les rapports sont publiés comme artefacts.
 
-\capture{ci-github.png}{Exécution réussie du flux d'intégration continue sur GitHub Actions.}{fig:ci}
+La deuxième tâche construit l'image Docker avec un cache et la démarre avec \code{docker compose up --wait}. Elle vérifie ensuite que \code{/health/}, \code{/api/docs/} et \code{/api/schema/} répondent.
+
+Dependabot propose aussi chaque semaine les mises à jour des dépendances pip et des actions GitHub. La figure~\ref{fig:ci} montre l'historique des exécutions. Elles ont toutes réussi, y compris celles lancées par les pull requests de Dependabot.
+
+\capture{ci-github.png}{Historique du flux CI sur GitHub Actions. Les six exécutions ont réussi.}{fig:ci}
 
 \subsection{Journaux et contrôle de santé}
 
-Chaque événement produit une ligne JSON, sur la console et dans un fichier rotatif (10~Mo, 5~archives). L'intergiciel \code{RequestIdMiddleware} attribue à chaque requête un identifiant, repris dans toutes ses lignes de journal et renvoyé dans l'en-tête \code{X-Request-ID}. Une erreur signalée par un utilisateur se retrouve ainsi en une recherche.
+Chaque événement donne une ligne JSON, écrite sur la console et dans un fichier rotatif (10~Mo, 5~archives). L'intergiciel \code{RequestIdMiddleware} donne un identifiant à chaque requête. On le retrouve dans toutes les lignes de journal de la requête et dans l'en-tête \code{X-Request-ID} de la réponse. Si un utilisateur signale une erreur, une seule recherche suffit pour la retrouver.
 
 \begin{lstlisting}[language=json,caption={Ligne de journal d'une requête.},label={lst:log}]
 {"timestamp": "2026-10-23T22:01:39.510+00:00", "level": "INFO", "logger": "travelhub.request",
@@ -49,8 +49,8 @@ Chaque événement produit une ligne JSON, sur la console et dans un fichier rot
  "method": "GET", "path": "/api/trips/", "status": 200, "duration_ms": 401.1, "user_id": 5}
 \end{lstlisting}
 
-Le point d'accès \code{/health/} vérifie la base (\code{SELECT 1}) et le cache (écriture puis relecture). Il répond 200 si tout fonctionne, 503 sinon, sans divulguer la cause, qui est journalisée.
+Le point d'accès \code{/health/} vérifie la base avec \code{SELECT 1} et le cache avec une écriture suivie d'une lecture. Il répond 200 si tout va bien et 503 sinon. La cause de l'échec n'est pas donnée au client, mais elle est écrite dans les journaux.
 
 \subsection{Sauvegarde et restauration}
 
-Les scripts \code{scripts/backup.ps1} et \code{scripts/restore.ps1} s'appuient sur \code{pg_dump} et \code{pg_restore}, pour la base locale comme pour celle du conteneur. Chaque archive est relue avant d'être conservée, et seules les sept plus récentes sont gardées. La restauration s'exécute en une seule transaction : une archive corrompue laisse la base inchangée. Une base non vide n'est écrasée qu'avec l'option \code{-Force}. La procédure de vérification restaure la dernière sauvegarde dans une base neuve, puis contrôle le schéma avec \code{migrate --check}.
+Les scripts \code{scripts/backup.ps1} et \code{scripts/restore.ps1} utilisent \code{pg_dump} et \code{pg_restore}. Ils marchent pour la base locale et pour celle du conteneur. Chaque archive est relue avant d'être gardée, et on ne garde que les sept plus récentes. La restauration se fait dans une seule transaction, donc une archive corrompue ne touche pas la base. Une base qui n'est pas vide n'est écrasée qu'avec l'option \code{-Force}. Pour vérifier une sauvegarde, nous la restaurons dans une base neuve et nous contrôlons le schéma avec \code{migrate --check}.

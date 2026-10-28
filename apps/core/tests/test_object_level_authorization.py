@@ -1,13 +1,11 @@
-"""Accès croisés entre deux utilisateurs, sur chaque ressource (OWASP API1 : BOLA).
+"""Accès croisés entre deux utilisateurs, pour chaque ressource (OWASP API1 : BOLA).
 
-Alice (user_a) possède un voyage, une destination et une activité ; Bob (user_b) n'y
-participe pas. Pour chaque point d'accès REST et chaque opération GraphQL qui vise un
-objet d'Alice, on vérifie :
-
-- Bob, non participant : 404 not_found (l'objet « n'existe pas » pour lui) ;
-- Bob, lecteur du voyage : lecture permise, écriture 403 permission_denied ;
-- un client anonyme : 401 not_authenticated ;
-- dans les cas refusés, aucune ligne n'est créée, modifiée ou supprimée.
+Alice (user_a) a un voyage, une destination et une activité. Bob (user_b) ne participe
+pas à ce voyage. Pour chaque point d'accès REST et chaque opération GraphQL qui touche
+un objet d'Alice, on vérifie que Bob reçoit un 404 not_found s'il n'est pas participant
+(l'objet « n'existe pas » pour lui). S'il est lecteur, il peut lire, mais une écriture
+donne 403 permission_denied. Un client anonyme reçoit 401 not_authenticated. Quand la
+requête est refusée, aucune ligne n'est créée, modifiée ou supprimée.
 """
 
 import pytest
@@ -56,7 +54,7 @@ DESTINATION_PUT = {
 ACTIVITY_PUT = {"name": "Piraté", "date": "2027-06-02", "category": "food", "cost": "1.00"}
 
 # (méthode, route, objet d'Alice dans l'URL, corps, statut attendu pour Bob lecteur).
-# None : point d'accès vers un service externe, couvert par les tests d'intégration.
+# None veut dire que le point d'accès appelle un service externe (testé ailleurs).
 OBJECT_ENDPOINTS = [
     ("get", "trip-detail", "trip", None, 200),
     ("put", "trip-detail", "trip", TRIP_PUT, 403),
@@ -82,7 +80,7 @@ OBJECT_ENDPOINTS = [
 ]
 VIEWER_ENDPOINTS = [endpoint for endpoint in OBJECT_ENDPOINTS if endpoint[4] is not None]
 
-# Points d'accès sans objet dans l'URL : tous exigent un jeton.
+# Points d'accès sans objet dans l'URL. Ils exigent tous un jeton.
 COLLECTION_ENDPOINTS = [
     ("get", "trip-list"),
     ("post", "trip-list"),
@@ -113,7 +111,7 @@ def send(client, method, url, body):
 class TestRestStranger:
     @pytest.mark.parametrize("endpoint", OBJECT_ENDPOINTS, ids=endpoint_id)
     def test_gets_404_and_changes_nothing(self, client_b, objects_a, mock_http, endpoint):
-        """mock_http : un appel à Open-Meteo ou Countries ferait échouer le test."""
+        """Avec mock_http, un appel à Open-Meteo ou Countries ferait échouer le test."""
         method, route, target, body, _ = endpoint
         before = snapshot()
 
@@ -257,7 +255,7 @@ class TestRestUnknownObjects:
         assert not TripParticipant.objects.filter(user=user_b).exists()
 
 
-# Opérations GraphQL visant un objet d'Alice : (requête, variables à partir des objets).
+# Opérations GraphQL qui visent un objet d'Alice (requête, variables tirées des objets).
 GRAPHQL_OPERATIONS = {
     "trip": (
         "query($id: ID!) { trip(id: $id) { id participants { user { username email } } } }",
@@ -324,7 +322,7 @@ GRAPHQL_OPERATIONS = {
     ),
 }
 
-# Lecteur du voyage : lectures et clonage permis, toute autre mutation refusée.
+# Bob lecteur peut lire et cloner, mais les autres mutations sont refusées.
 VIEWER_ALLOWED = {"trip", "destination", "destinationOverview", "cloneTrip"}
 
 

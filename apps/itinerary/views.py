@@ -292,7 +292,7 @@ class DestinationViewSet(TripRolePermissionMixin, viewsets.ModelViewSet):
         if getattr(self, "swagger_fake_view", False):
             return Destination.objects.none()
         visible = Trip.objects.visible_to(self.request.user)
-        # select_related : les permissions objet remontent à destination.trip.
+        # select_related, car les permissions objet passent par destination.trip.
         return Destination.objects.filter(trip__in=visible).select_related("trip")
 
     @extend_schema(
@@ -405,7 +405,7 @@ class DestinationViewSet(TripRolePermissionMixin, viewsets.ModelViewSet):
 class ActivityViewSet(TripRolePermissionMixin, viewsets.ModelViewSet):
     """CRUD des activités des voyages visibles par l'utilisateur.
 
-    Sans paramètre ordering, l'ordre est chronologique (date puis heure de début).
+    Sans paramètre ordering, les activités sont triées par date puis par heure de début.
     """
 
     serializer_class = ActivitySerializer

@@ -1,11 +1,11 @@
 """Opérations métier sur les voyages.
 
-La création passe par un service explicite plutôt que par un signal post_save :
-l'effet de bord (ajout du participant propriétaire) est visible à l'appel et
-s'exécute dans la même transaction que la création du voyage.
+La création passe par un service explicite plutôt que par un signal post_save. Comme
+ça, on voit à l'appel que le propriétaire est ajouté comme participant, et cet ajout
+se fait dans la même transaction que la création du voyage.
 
-Les services lèvent des ValidationError de Django ; le gestionnaire d'exceptions
-de l'API (apps.core.exceptions) les convertit en réponses 400.
+Les services lèvent des ValidationError de Django. Le gestionnaire d'exceptions de
+l'API (apps.core.exceptions) les transforme en réponses 400.
 """
 
 from decimal import Decimal
@@ -38,9 +38,9 @@ def create_trip(*, owner, **fields) -> Trip:
 
 @transaction.atomic
 def ensure_owner_membership(trip: Trip) -> TripParticipant:
-    """Aligne le participant « owner » sur trip.owner (utile après un changement de propriétaire).
+    """Aligne le participant « owner » sur trip.owner, par exemple après un transfert.
 
-    L'ancien propriétaire, s'il y en a un, reste participant avec le rôle editor.
+    S'il y avait un ancien propriétaire, il reste participant avec le rôle editor.
     """
     trip.memberships.filter(role=TripParticipant.Role.OWNER).exclude(user=trip.owner).update(
         role=TripParticipant.Role.EDITOR
@@ -54,7 +54,7 @@ def ensure_owner_membership(trip: Trip) -> TripParticipant:
 
 
 def _copy(instance, **overrides):
-    """Objet non enregistré reprenant les valeurs d'instance, sans clé ni horodatage."""
+    """Copie non enregistrée des valeurs d'instance, sans clé ni horodatage."""
     skipped = {"id", "created_at", "updated_at"}
     for name in overrides:
         skipped |= {name, instance._meta.get_field(name).attname}
@@ -70,8 +70,8 @@ def _copy(instance, **overrides):
 def clone_trip(source: Trip, *, owner, title=None) -> Trip:
     """Copie un voyage, ses destinations et leurs activités pour owner.
 
-    La copie est un brouillon dont owner est le seul participant. Tout se fait dans
-    une transaction : si une étape échoue, aucune ligne n'est créée.
+    La copie est un brouillon et owner en est le seul participant. Tout se passe dans une
+    transaction, donc si une étape échoue, aucune ligne n'est créée.
     """
     title_field = Trip._meta.get_field("title")
     trip = create_trip(
@@ -84,7 +84,8 @@ def clone_trip(source: Trip, *, owner, title=None) -> Trip:
         status=Trip.Status.DRAFT,
     )
     destinations = list(source.destinations.prefetch_related("activities"))
-    # bulk_create renvoie les clés primaires sous PostgreSQL : les copies servent de parents.
+    # Avec PostgreSQL, bulk_create renvoie les clés primaires. On peut donc utiliser
+    # les copies comme parents.
     copies = Destination.objects.bulk_create(_copy(d, trip=trip) for d in destinations)
     Activity.objects.bulk_create(
         _copy(activity, destination=copy)
@@ -102,7 +103,7 @@ def compute_trip_stats(trip: Trip) -> dict:
     by_category = (
         activities.values("category")
         .annotate(count=Count("pk"), total_cost=Sum("cost"), average_cost=Avg("cost"))
-        # order_by() explicite : l'ordre par défaut d'Activity ajouterait date au GROUP BY.
+        # Tri explicite, sinon l'ordre par défaut d'Activity ajouterait date au GROUP BY.
         .order_by("-total_cost", "category")
     )
     return {
@@ -126,9 +127,9 @@ def add_participant(trip: Trip, *, email, role, invited_by) -> TripParticipant:
         raise ValidationError({"email": "Aucun utilisateur n'a ce courriel."})
     if user.pk == trip.owner_id:
         raise ValidationError({"email": "Cet utilisateur est déjà le propriétaire du voyage."})
-    # Un doublon viole trips_participant_unique_trip_user : l'IntegrityError devient un 400
-    # (sans course possible entre deux ajouts). Le point de sauvegarde garde la transaction
-    # englobante utilisable après l'erreur.
+    # Un doublon viole trips_participant_unique_trip_user et l'IntegrityError devient
+    # un 400. Comme c'est la base qui vérifie, deux ajouts simultanés ne posent pas de
+    # problème. Le point de sauvegarde permet de continuer la transaction englobante.
     with transaction.atomic():
         return TripParticipant.objects.create(
             trip=trip, user=user, role=role, invited_by=invited_by
@@ -141,10 +142,10 @@ def _is_owner(membership: TripParticipant) -> bool:
 
 @transaction.atomic
 def change_participant_role(membership: TripParticipant, role) -> TripParticipant:
-    """Change le rôle d'un participant ; le rôle owner transfère la propriété du voyage.
+    """Change le rôle d'un participant. Le rôle owner transfère la propriété du voyage.
 
-    L'ancien propriétaire devient alors éditeur. Le propriétaire actuel ne peut pas
-    être rétrogradé directement : le voyage resterait sans propriétaire.
+    L'ancien propriétaire devient alors éditeur. On ne peut pas rétrograder directement
+    le propriétaire actuel, sinon le voyage n'aurait plus de propriétaire.
     """
     if _is_owner(membership):
         if role != Role.OWNER:
@@ -161,7 +162,7 @@ def change_participant_role(membership: TripParticipant, role) -> TripParticipan
 
 
 def remove_participant(membership: TripParticipant) -> None:
-    """Retire un participant ; le propriétaire ne peut pas être retiré."""
+    """Retire un participant. Le propriétaire ne peut pas être retiré."""
     if _is_owner(membership):
         raise ValidationError(LAST_OWNER_MESSAGE)
     membership.delete()

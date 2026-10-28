@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "e45157fe-2945-5cbb-92d3-88062f7ab8a3",
     "name": "TravelHub API",
-    "description": "API REST et GraphQL de TravelHub.\n\n1. Importer cette collection et l'environnement `TravelHub-local` (`TravelHub.postman_environment.json`).\n2. Lancer le serveur (`python manage.py runserver`) ; ajuster `base_url` au besoin.\n3. *Run collection* : les dossiers s'exécutent dans l'ordre. Chaque exécution crée deux comptes uniques (Alice et Bob) ; « Connexion » stocke `access` et `refresh` dans l'environnement ; « Créer un voyage » et « Créer une destination » y stockent `trip_id` et `destination_id`.\n\nHors du Runner, le script de la collection rafraîchit `access` s'il a expiré.",
+    "description": "API REST et GraphQL de TravelHub.\n\n1. Importer cette collection et l'environnement `TravelHub-local` (`TravelHub.postman_environment.json`).\n2. Lancer le serveur (`python manage.py runserver`) et changer `base_url` si besoin.\n3. Cliquer sur *Run collection*. Les dossiers s'exécutent dans l'ordre. Chaque exécution crée deux nouveaux comptes (Alice et Bob). « Connexion » garde `access` et `refresh` dans l'environnement, et « Créer un voyage » et « Créer une destination » y gardent `trip_id` et `destination_id`.\n\nEn dehors du Runner, le script de la collection rafraîchit `access` quand il a expiré.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "auth": {
@@ -21,8 +21,8 @@
       "script": {
         "type": "text/javascript",
         "exec": [
-          "// Session manuelle de plus de 15 minutes : rafraîchit le jeton d'accès d'Alice",
-          "// s'il expire dans moins de 30 s (les requêtes /api/auth/ gèrent leurs jetons).",
+          "// Pour une session manuelle de plus de 15 minutes. On rafraîchit le jeton d'accès",
+          "// d'Alice s'il expire dans moins de 30 s (les requêtes /api/auth/ gèrent leurs jetons).",
           "const access = pm.environment.get(\"access\");",
           "const refresh = pm.environment.get(\"refresh\");",
           "if (access && refresh && !pm.request.url.getPath().startsWith(\"/api/auth/\")) {",
@@ -174,7 +174,7 @@
   "item": [
     {
       "name": "Auth",
-      "description": "Inscription d'Alice et de Bob (noms uniques à chaque exécution), connexion, rotation du jeton de rafraîchissement, profil et déconnexion. Les jetons d'Alice sont stockés dans l'environnement (`access`, `refresh`), ceux de Bob dans les variables de collection.",
+      "description": "Inscription d'Alice et de Bob (noms uniques à chaque exécution), connexion, rotation du jeton de rafraîchissement, profil et déconnexion. Les jetons d'Alice sont gardés dans l'environnement (`access`, `refresh`) et ceux de Bob dans les variables de collection.",
       "item": [
         {
           "name": "Inscription — Alice",
@@ -206,7 +206,7 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "// Identifiant de l'exécution : chaque passage du Runner crée de nouveaux comptes.",
+                  "// Identifiant de l'exécution, pour que chaque passage du Runner crée de nouveaux comptes.",
                   "const run = Date.now().toString(36);",
                   "pm.collectionVariables.set(\"run_id\", run);",
                   "pm.collectionVariables.set(\"username_a\", `alice_${run}`);",
@@ -311,7 +311,7 @@
                   "",
                   "                const body = pm.response.json();",
                   "                pm.test(\"Paire de jetons\", () => pm.expect(body).to.have.all.keys(\"access\", \"refresh\"));",
-                  "                // Stocke les jetons dans l'environnement : toutes les requêtes suivantes s'en servent.",
+                  "                // On garde les jetons dans l'environnement pour les requêtes suivantes.",
                   "                pm.environment.set(\"access\", body.access);",
                   "                pm.environment.set(\"refresh\", body.refresh);"
                 ]
@@ -349,7 +349,7 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "// Garde l'ancien refresh : « Cas d'erreur » vérifie qu'il ne sert plus.",
+                  "// On garde l'ancien refresh, car « Cas d'erreur » vérifie qu'il ne marche plus.",
                   "pm.collectionVariables.set(\"old_refresh\", pm.environment.get(\"refresh\"));"
                 ]
               }
@@ -404,7 +404,7 @@
               }
             ],
             "url": "{{base_url}}/api/auth/logout/",
-            "description": "Met le refresh de Bob sur liste noire ; son jeton d'accès reste valable 15 minutes.",
+            "description": "Met le refresh de Bob sur liste noire. Son jeton d'accès reste valable 15 minutes.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"refresh\": \"{{refresh_b}}\"\n}",
@@ -470,7 +470,7 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "// Voyage de J+1 à J+12 ; destinations et activités sont placées à l'intérieur.",
+                  "// Voyage de J+1 à J+12. Les destinations et les activités sont placées dedans.",
                   "const day = (offset) => {",
                   "    const d = new Date();",
                   "    d.setDate(d.getDate() + offset);",
@@ -732,7 +732,7 @@
     },
     {
       "name": "Destinations",
-      "description": "Étapes du voyage. Le code pays est mis en majuscules ; les dates doivent rester dans celles du voyage.",
+      "description": "Étapes du voyage. Le code pays est mis en majuscules et les dates doivent rester dans celles du voyage.",
       "item": [
         {
           "name": "Créer une destination",
@@ -907,7 +907,7 @@
     },
     {
       "name": "Activities",
-      "description": "Activités d'une destination ; leur date doit être comprise dans le séjour.",
+      "description": "Activités d'une destination. Leur date doit tomber pendant le séjour.",
       "item": [
         {
           "name": "Créer une activité",
@@ -1106,7 +1106,7 @@
     },
     {
       "name": "Participants",
-      "description": "Partage du voyage d'Alice avec Bob : lecteur, puis éditeur, puis retiré. Les requêtes « Bob … » utilisent le jeton de Bob (`access_b`).",
+      "description": "Alice partage son voyage avec Bob. Il est d'abord lecteur, puis éditeur, puis retiré. Les requêtes « Bob … » utilisent le jeton de Bob (`access_b`).",
       "item": [
         {
           "name": "Ajouter Bob comme lecteur",
@@ -1463,7 +1463,7 @@
     },
     {
       "name": "Externes",
-      "description": "Open-Meteo (météo) et Countries GraphQL (pays), appelés par le serveur. Sans accès à Internet, météo et pays répondent 502, 503 ou 504, et la vue d'ensemble reste un 200 avec des avertissements.",
+      "description": "Open-Meteo (météo) et Countries GraphQL (pays), appelés par le serveur. Sans Internet, la météo et le pays répondent 502, 503 ou 504. La vue d'ensemble reste un 200 avec des avertissements.",
       "item": [
         {
           "name": "Météo de la destination (Open-Meteo)",
@@ -3002,7 +3002,7 @@
     },
     {
       "name": "Nettoyage",
-      "description": "Supprime le voyage de l'exécution ; ses destinations, activités et participations suivent.",
+      "description": "Supprime le voyage créé pendant l'exécution, avec ses destinations, ses activités et ses participations.",
       "item": [
         {
           "name": "Supprimer le voyage",

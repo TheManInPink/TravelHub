@@ -7,8 +7,8 @@ from apps.itinerary import schema as itinerary
 from apps.trips import schema as trips
 
 
-# graphene lit les classes de base de la dernière à la première : le schéma
-# affiche me, myTrips, trip, puis destination et destinationOverview.
+# graphene lit les classes de base de la dernière à la première. Le schéma affiche
+# donc me, myTrips, trip, puis destination et destinationOverview.
 class Query(itinerary.Query, trips.Query, accounts.Query, graphene.ObjectType):
     pass
 

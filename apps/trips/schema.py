@@ -1,7 +1,7 @@
 """Voyages et participants dans l'API GraphQL.
 
-Les mutations réutilisent les serializers et les services de l'API REST : mêmes
-validations, mêmes messages, mêmes règles de propriété.
+Les mutations réutilisent les serializers et les services de l'API REST. Les
+validations, les messages et les règles de propriété sont donc les mêmes.
 """
 
 import graphene
@@ -44,7 +44,7 @@ class InvitableRole(graphene.Enum):
 
 
 class TripOrderBy(graphene.Enum):
-    """Tri de myTrips ; START_DATE par défaut. Départage par identifiant."""
+    """Tri de myTrips (START_DATE par défaut). Les ex æquo sont départagés par identifiant."""
 
     START_DATE = "start_date"
     START_DATE_DESC = "-start_date"
@@ -65,7 +65,7 @@ class TripParticipantType(DjangoObjectType):
 
 
 class TripType(DjangoObjectType):
-    """Voyage visible par l'utilisateur : il en est propriétaire ou participant."""
+    """Voyage visible par l'utilisateur, qui en est propriétaire ou participant."""
 
     status = graphene.Field(TripStatusEnum, required=True)
     participants = graphene.List(
@@ -98,14 +98,14 @@ class TripType(DjangoObjectType):
         convert_choices_to_enum = False
 
     def resolve_participants(root, info):
-        # select_related() créerait un nouveau queryset : on garde le préchargement
-        # de with_relations() quand il existe.
+        # select_related() créerait un nouveau queryset. On garde donc le préchargement
+        # de with_relations() s'il existe.
         if "memberships" in getattr(root, "_prefetched_objects_cache", {}):
             return root.memberships.all()
         return root.memberships.select_related("user", "invited_by")
 
-    # Les totaux viennent de Trip.objects.with_totals() ; un voyage atteint par une
-    # relation (destination.trip) n'est pas annoté : ils sont alors calculés.
+    # Les totaux viennent de Trip.objects.with_totals(). Un voyage obtenu par une
+    # relation (destination.trip) n'est pas annoté, donc on calcule les totaux à part.
     def resolve_destination_count(root, info):
         if hasattr(root, "destination_count"):
             return root.destination_count
@@ -124,7 +124,7 @@ class TripType(DjangoObjectType):
 
 
 def with_relations(trips, info):
-    """Totaux et propriétaire, plus les relations demandées : pas de requête par voyage."""
+    """Totaux, propriétaire et relations demandées, sans une requête par voyage."""
     fields = selected_fields(info)
     trips = trips.with_totals().select_related("owner")
     if "destinations" in fields:
@@ -141,13 +141,13 @@ def reload_trip(info, trip):
 
 
 def filtered_trips(info, status=None, start_after=None, search=None):
-    """Voyages visibles filtrés par les arguments communs à myTrips et myTripsCount."""
+    """Voyages visibles, filtrés avec les arguments communs à myTrips et myTripsCount."""
     trips = visible_trips(info)
     if status:
         trips = trips.filter(status=status)
     if start_after:
         trips = trips.filter(start_date__gte=start_after)
-    # Comme le SearchFilter de l'API REST : chaque mot doit figurer quelque part.
+    # Comme avec le SearchFilter de l'API REST, chaque mot doit apparaître quelque part.
     for term in (search or "").split():
         trips = trips.filter(Q(title__icontains=term) | Q(description__icontains=term))
     return trips
@@ -229,7 +229,7 @@ class TripUpdateInput(graphene.InputObjectType):
 
 
 class CreateTrip(graphene.Mutation):
-    """Crée un voyage : vous en devenez propriétaire et premier participant."""
+    """Crée un voyage. Vous en devenez propriétaire et premier participant."""
 
     class Arguments:
         input = TripCreateInput(required=True)
@@ -286,7 +286,7 @@ class DeleteTrip(graphene.Mutation):
 class CloneTrip(graphene.Mutation):
     """Copie un voyage, ses destinations et ses activités dans un brouillon à vous.
 
-    Ouvert à tout participant ; tout est copié dans une transaction.
+    Tout participant peut le faire. La copie se fait dans une transaction.
     """
 
     class Arguments:

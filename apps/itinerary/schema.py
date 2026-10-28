@@ -1,8 +1,9 @@
 """Destinations, activités, météo et pays dans l'API GraphQL.
 
-Les mutations réutilisent DestinationSerializer et ActivitySerializer : le voyage ou la
-destination parent est cherché parmi les objets visibles (inconnu : not_found ; visible
-sans droit d'écriture : permission_denied) et Model.clean() est appliqué.
+Les mutations réutilisent DestinationSerializer et ActivitySerializer. Le voyage ou la
+destination parent est cherché parmi les objets visibles. S'il est inconnu, on renvoie
+not_found, et s'il est visible sans droit d'écriture, permission_denied. Model.clean()
+est aussi appliqué.
 """
 
 import graphene
@@ -35,7 +36,7 @@ ActivityCategoryEnum = choices_enum(ActivityCategory, "ActivityCategory", "Caté
 
 
 def visible_destinations(info):
-    # select_related : les permissions objet remontent à destination.trip.
+    # select_related, car les permissions objet passent par destination.trip.
     return Destination.objects.filter(trip__in=visible_trips(info)).select_related("trip")
 
 
@@ -105,9 +106,9 @@ class DestinationType(DjangoObjectType):
 
 
 class DestinationOverviewType(graphene.ObjectType):
-    """Base de données, météo et pays réunis ; les deux services sont appelés en parallèle.
+    """Base de données, météo et pays ensemble. Les deux services sont appelés en parallèle.
 
-    Une source en échec laisse son bloc à null et ajoute un avertissement : la requête
+    Si une source échoue, son bloc vaut null et un avertissement est ajouté. La requête
     réussit quand même (dégradation partielle).
     """
 

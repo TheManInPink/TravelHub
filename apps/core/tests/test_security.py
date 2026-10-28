@@ -1,5 +1,7 @@
-"""Configuration de sécurité : en-têtes HTTP, CORS, jetons JWT, paramètres de production
-et absence de trace de pile dans les réponses d'erreur."""
+"""Tests de la configuration de sécurité.
+
+On vérifie les en-têtes HTTP, CORS, les jetons JWT, les réglages de production et
+l'absence de trace de pile dans les réponses d'erreur."""
 
 import importlib
 import os
@@ -88,7 +90,7 @@ class TestJwt:
         assert jwt["ROTATE_REFRESH_TOKENS"] and jwt["BLACKLIST_AFTER_ROTATION"]
 
     def test_tampered_token_is_refused(self, api_client, user_a, user_b):
-        """Remplacer user_id dans la charge utile invalide la signature : pas d'usurpation."""
+        """Si on change user_id dans la charge utile, la signature n'est plus valide."""
         header, _, signature = str(AccessToken.for_user(user_a)).split(".")
         forged = AccessToken.for_user(user_b)
         _, payload, _ = str(forged).split(".")
@@ -139,7 +141,7 @@ class TestNoStackTrace:
         assert response.json() == {"error": INTERNAL_ERROR}
         body = response.content.decode()
         assert "secret interne" not in body and "Traceback" not in body
-        # L'erreur reste visible côté serveur, dans les journaux.
+        # Côté serveur, l'erreur apparaît quand même dans les journaux.
         assert "secret interne" in caplog.text
 
     def test_debug_is_off_in_tests_like_in_production(self):
@@ -147,7 +149,7 @@ class TestNoStackTrace:
 
 
 def load_settings(module):
-    """Module de paramètres importé à part : django.conf.settings n'est pas modifié."""
+    """On importe le module de paramètres à part pour ne pas modifier django.conf.settings."""
     return importlib.reload(importlib.import_module(module))
 
 

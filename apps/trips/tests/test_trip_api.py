@@ -43,7 +43,7 @@ class TestCreate:
 
         assert response.status_code == 201
         trip = Trip.objects.get(pk=response.data["id"])
-        # owner est en lecture seule : la valeur envoyée est ignorée.
+        # owner est en lecture seule, la valeur envoyée est donc ignorée.
         assert trip.owner == owner
         assert response.data["owner"]["username"] == "owner"
         assert trip.memberships.get().role == Role.OWNER
@@ -114,7 +114,7 @@ class TestListAndRetrieve:
     ):
         for i in range(5):
             make_trip(title=f"Voyage {i}")
-        # Authentification forcée : 1 requête de comptage (pagination) + 1 requête de page.
+        # Authentification forcée, donc 1 requête de comptage (pagination) et 1 pour la page.
         with django_assert_max_num_queries(2):
             response = client_for(owner).get(LIST_URL)
         assert response.data["count"] == 5
@@ -131,7 +131,8 @@ class TestListAndRetrieve:
         for order in range(1, 4):
             dest = make_destination(order=order + 10)
             make_activity(destination=dest)
-        # Voyage, destinations, activités ; IsTripMember ne requête pas pour le propriétaire.
+        # Voyage, destinations, activités. IsTripMember ne fait pas de requête pour le
+        # propriétaire.
         with django_assert_max_num_queries(3):
             assert client_for(owner).get(detail_url(trip)).status_code == 200
 
@@ -211,7 +212,7 @@ class TestRolePermissions:
 @pytest.mark.django_db
 class TestUpdateValidation:
     def test_partial_update_checks_dates_against_stored_value(self, client_for, owner, trip):
-        # Seule end_date est envoyée : elle est comparée au start_date existant (2027-06-01).
+        # On n'envoie que end_date. Elle est comparée au start_date actuel (2027-06-01).
         response = client_for(owner).patch(detail_url(trip), {"end_date": "2027-05-01"})
         assert response.status_code == 400
         assert "end_date" in response.data["error"]["details"]

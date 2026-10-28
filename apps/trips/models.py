@@ -9,8 +9,8 @@ from django.utils import timezone
 from apps.core.models import TimeStampedModel
 
 
-# Choix définis au niveau du module : la classe Meta ne voit pas les attributs
-# de la classe englobante, or les CheckConstraint en ont besoin.
+# Les choix sont définis au niveau du module. La classe Meta ne voit pas les attributs
+# de la classe qui la contient, et les CheckConstraint en ont besoin.
 class TripStatus(models.TextChoices):
     DRAFT = "draft", "Brouillon"
     PLANNED = "planned", "Planifié"
@@ -32,12 +32,12 @@ class TripQuerySet(models.QuerySet):
         """Voyages dont l'utilisateur est propriétaire ou participant, quel que soit son rôle."""
         if user is None or not user.is_authenticated:
             return self.none()
-        # Exists() plutôt qu'une jointure : aucun doublon, et with_totals() reste exact.
+        # Exists() au lieu d'une jointure, pour éviter les doublons et garder with_totals() exact.
         membership = TripParticipant.objects.filter(trip=OuterRef("pk"), user=user)
         return self.filter(Q(owner=user) | Exists(membership))
 
     def editable_by(self, user):
-        """Voyages que l'utilisateur peut modifier : propriétaire ou rôle owner/editor."""
+        """Voyages que l'utilisateur peut modifier (propriétaire ou rôle owner/editor)."""
         if user is None or not user.is_authenticated:
             return self.none()
         membership = TripParticipant.objects.filter(
@@ -58,9 +58,10 @@ class TripQuerySet(models.QuerySet):
     def with_totals(self):
         """Ajoute destination_count, activity_count et total_cost (somme des coûts d'activités).
 
-        Les jointures destinations -> activités forment une chaîne 1-N : chaque activité
-        n'apparaît qu'une fois, donc Sum() n'est pas gonflée. Ne pas ajouter ici un Count()
-        sur une autre relation (participants) : la seconde jointure multiplierait les lignes.
+        Les jointures destinations -> activités forment une chaîne 1-N. Chaque activité
+        n'apparaît qu'une fois, donc Sum() n'est pas faussé. Il ne faut pas ajouter ici un
+        Count() sur une autre relation (participants), car la deuxième jointure
+        multiplierait les lignes.
         """
         return self.annotate(
             destination_count=Count("destinations", distinct=True),
@@ -100,8 +101,8 @@ class Trip(TimeStampedModel):
     participants = models.ManyToManyField(
         settings.AUTH_USER_MODEL,
         through="TripParticipant",
-        # TripParticipant a deux FK vers User (user, invited_by) : on indique lesquelles
-        # relient le voyage à ses participants.
+        # TripParticipant a deux FK vers User (user et invited_by). Il faut donc préciser
+        # celles qui relient le voyage à ses participants.
         through_fields=("trip", "user"),
         related_name="trips",
         verbose_name="participants",
@@ -139,7 +140,7 @@ class Trip(TimeStampedModel):
 
     def clean(self):
         super().clean()
-        # Raccourcir le voyage ne doit pas laisser des destinations hors de ses dates.
+        # Si on raccourcit le voyage, aucune destination ne doit sortir de ses dates.
         if self.pk and self.start_date and self.end_date:
             outside = self.destinations.filter(
                 Q(arrival_date__lt=self.start_date) | Q(departure_date__gt=self.end_date)
@@ -152,7 +153,7 @@ class Trip(TimeStampedModel):
 
 
 class TripParticipant(models.Model):
-    """Table d'association User <-> Trip portant le rôle du participant."""
+    """Table d'association entre User et Trip, avec le rôle du participant."""
 
     Role = ParticipantRole
 
@@ -191,7 +192,7 @@ class TripParticipant(models.Model):
                 name="trips_participant_unique_trip_user",
                 violation_error_message="Cet utilisateur participe déjà à ce voyage.",
             ),
-            # Index unique partiel PostgreSQL : au plus un participant « owner » par voyage.
+            # Index unique partiel de PostgreSQL pour avoir au plus un « owner » par voyage.
             models.UniqueConstraint(
                 fields=["trip"],
                 condition=Q(role="owner"),

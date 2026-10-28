@@ -1,4 +1,4 @@
-# Mises à jour hebdomadaires des dépendances : une pull request par groupe.
+# Mises à jour des dépendances chaque semaine, avec une pull request par groupe.
 version: 2
 updates:
   - package-ecosystem: pip
@@ -6,7 +6,7 @@ updates:
     schedule:
       interval: weekly
     groups:
-      # Correctifs et versions mineures regroupés ; une majeure garde sa propre PR.
+      # Les correctifs et les versions mineures sont regroupés. Une version majeure a sa propre PR.
       pip-minor-patch:
         update-types: [minor, patch]
 

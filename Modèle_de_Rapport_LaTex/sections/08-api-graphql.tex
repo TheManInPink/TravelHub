@@ -5,7 +5,7 @@
 
 \subsection{Schéma}
 
-L'API GraphQL est construite avec Graphene-Django~\cite{graphene} et suit la spécification GraphQL~\cite{graphqlspec}. Elle expose un point d'entrée unique, \code{POST /graphql/}. Chaque application déclare ses types, ses requêtes et ses mutations dans son propre \code{schema.py}. Le schéma racine les assemble par héritage multiple.
+Nous avons construit l'API GraphQL avec Graphene-Django~\cite{graphene}, en suivant la spécification GraphQL~\cite{graphqlspec}. Elle n'a qu'un seul point d'entrée, \code{POST /graphql/}. Chaque application déclare ses types, ses requêtes et ses mutations dans son propre \code{schema.py}, et le schéma racine les assemble par héritage multiple.
 
 \begin{lstlisting}[language=Python,caption={Assemblage du schéma (\texttt{config/schema.py}).},label={lst:schema}]
 class Query(itinerary.Query, trips.Query, accounts.Query, graphene.ObjectType):
@@ -19,7 +19,7 @@ class Mutation(itinerary.Mutation, trips.Mutation, graphene.ObjectType):
 schema = graphene.Schema(query=Query, mutation=Mutation)
 \end{lstlisting}
 
-Les types \code{User}, \code{Trip}, \code{TripParticipant}, \code{Destination} et \code{Activity} dérivent de \code{DjangoObjectType}. Chacun déclare une liste blanche de champs : le type \code{User} n'expose ni mot de passe ni droits d'administration, et le courriel n'est visible que par son titulaire. Les choix des modèles deviennent des énumérations GraphQL (\code{TripStatus}, \code{ParticipantRole}, \code{ActivityCategory}). Les données externes ont leurs propres types : \code{Weather}, \code{CountryInfo} et \code{DestinationOverview}.
+Les types \code{User}, \code{Trip}, \code{TripParticipant}, \code{Destination} et \code{Activity} héritent de \code{DjangoObjectType}. Chacun a sa liste blanche de champs. Par exemple, le type \code{User} ne montre ni le mot de passe ni les droits d'administration, et le courriel n'est visible que par son titulaire. Les choix des modèles deviennent des énumérations GraphQL (\code{TripStatus}, \code{ParticipantRole}, \code{ActivityCategory}). Les données externes ont leurs propres types, \code{Weather}, \code{CountryInfo} et \code{DestinationOverview}.
 
 \begin{table}[H]
   \centering
@@ -38,7 +38,7 @@ Les types \code{User}, \code{Trip}, \code{TripParticipant}, \code{Destination} e
 
 \subsection{Réutilisation de la logique REST}
 
-L'API GraphQL ne duplique aucune règle. Tout resolver part de \code{Trip.objects.visible_to(user)}. Les mutations réutilisent les serializers DRF, donc \code{Model.clean()} et les contraintes, ainsi que les services (\code{create_trip}, \code{clone_trip}, \code{add_participant}). Les permissions objet sont les mêmes classes que côté REST. Chaque mutation s'exécute dans une transaction (\code{@transaction.atomic}).
+Nous n'avons réécrit aucune règle pour GraphQL. Tous les resolvers partent de \code{Trip.objects.visible_to(user)}. Les mutations réutilisent les serializers DRF (et donc \code{Model.clean()} et les contraintes) ainsi que les services (\code{create_trip}, \code{clone_trip}, \code{add_participant}). Les permissions objet sont les mêmes classes qu'en REST. Chaque mutation tourne dans une transaction (\code{@transaction.atomic}).
 
 \begin{lstlisting}[language=Python,caption={Mutation de modification (\texttt{apps/trips/schema.py}, extrait).},label={lst:mutation}]
 class UpdateTrip(graphene.Mutation):
@@ -60,9 +60,9 @@ class UpdateTrip(graphene.Mutation):
 
 \subsection{Authentification, limites et erreurs}
 
-La vue \code{TravelHubGraphQLView} hérite de \code{GraphQLView}. Elle authentifie le jeton avec la classe \code{JWTAuthentication} de SimpleJWT, comme l'API REST. Sans en-tête, la requête est anonyme et chaque champ protégé répond \code{not_authenticated}. Un jeton invalide ou expiré donne un 401. Le cookie de session n'est jamais pris en compte, ce qui permet d'exempter la vue de la protection CSRF sans risque. Les limites de requêtes reprennent les classes et les compteurs de DRF : un utilisateur dispose d'un seul quota, partagé entre REST et GraphQL.
+La vue \code{TravelHubGraphQLView} hérite de \code{GraphQLView}. Comme pour l'API REST, elle vérifie le jeton avec la classe \code{JWTAuthentication} de SimpleJWT. Sans en-tête, la requête est anonyme et chaque champ protégé répond \code{not_authenticated}. Un jeton invalide ou expiré donne un 401. La vue ne tient jamais compte du cookie de session, c'est pour ça qu'on peut l'exempter de la protection CSRF sans risque. Les limites de requêtes utilisent les classes et les compteurs de DRF. Un utilisateur a donc un seul quota pour REST et GraphQL.
 
-Les erreurs conservent le code et les détails de l'erreur REST équivalente, dans le champ \code{extensions}. Une erreur inattendue ne divulgue pas son message : elle devient \code{internal_error}, et sa trace est journalisée.
+Les erreurs gardent le code et les détails de l'erreur REST équivalente dans le champ \code{extensions}. Si l'erreur est inattendue, son message n'est pas montré. Elle devient \code{internal_error} et sa trace est journalisée.
 
 \begin{lstlisting}[language=json,caption={Erreur de validation d'une mutation \texttt{updateTrip}.},label={lst:graphql-erreur}]
 {
@@ -80,20 +80,15 @@ Les erreurs conservent le code et les détails de l'erreur REST équivalente, da
 
 \subsection{Durcissement et performance}
 
-Trois paramètres, relus à chaque requête, durcissent le point d'entrée.
-\begin{itemize}
-  \item \code{GRAPHQL_MAX_DEPTH = 6} : la profondeur des requêtes est limitée. Les requêtes cycliques (\texttt{trip \{ destinations \{ trip \{ \ldots{} \} \} \}}) sont rejetées avant leur exécution.
-  \item \code{GRAPHQL_INTROSPECTION} : l'introspection (\code{__schema}, \code{__type}) est fermée en production. Le champ \code{__typename}, ajouté par les clients comme Apollo, reste permis.
-  \item \code{GRAPHQL_GRAPHIQL} : l'interface GraphiQL n'est servie qu'en développement.
-\end{itemize}
+Trois paramètres, relus à chaque requête, protègent le point d'entrée. \code{GRAPHQL_MAX_DEPTH} limite la profondeur des requêtes à 6, ce qui bloque les requêtes cycliques (\texttt{trip \{ destinations \{ trip \{ \ldots{} \} \} \}}) avant qu'elles s'exécutent. \code{GRAPHQL_INTROSPECTION} ferme l'introspection (\code{__schema}, \code{__type}) en production, mais laisse passer \code{__typename}, que des clients comme Apollo ajoutent à chaque requête. Enfin, avec \code{GRAPHQL_GRAPHIQL}, l'interface GraphiQL n'est servie qu'en développement.
 
-Côté performance, \code{myTrips} et \code{trip} n'activent le préchargement des destinations, des activités ou des participants que si ces champs figurent dans la requête. La fonction \code{selected_fields()} parcourt la sélection, fragments compris. Le nombre de requêtes SQL ne dépend donc pas du nombre de voyages renvoyés. La liste \code{myTrips} est paginée comme l'API REST : 20 éléments par défaut, 100 au plus.
+Pour la performance, \code{myTrips} et \code{trip} préchargent les destinations, les activités ou les participants seulement si ces champs sont demandés. La fonction \code{selected_fields()} parcourt la sélection, fragments compris. Le nombre de requêtes SQL ne dépend donc pas du nombre de voyages renvoyés. \code{myTrips} est paginée comme l'API REST, avec 20 éléments par défaut et 100 au maximum.
 
 \subsection{Exemple}
 
-L'extrait~\ref{lst:graphql-requete} obtient, en un seul aller-retour, les voyages planifiés, leurs destinations, la météo actuelle et la fiche de chaque pays. En REST, la même information exigerait une requête pour la liste, puis deux requêtes par destination.
+La requête de l'extrait~\ref{lst:graphql-requete} récupère en un seul aller-retour les voyages planifiés, leurs destinations, la météo actuelle et la fiche de chaque pays. En REST, il faudrait une requête pour la liste, puis deux requêtes par destination.
 
-\begin{lstlisting}[language=graphql,caption={Requête GraphQL agrégée.},label={lst:graphql-requete}]
+\begin{lstlisting}[language=graphql,caption={Requête GraphQL qui regroupe plusieurs ressources.},label={lst:graphql-requete}]
 query MesVoyagesPlanifies {
   myTripsCount(status: PLANNED)
   myTrips(status: PLANNED, orderBy: START_DATE, limit: 5) {
@@ -110,13 +105,15 @@ query MesVoyagesPlanifies {
 }
 \end{lstlisting}
 
-\capture{graphiql.png}{GraphiQL (\texttt{/graphql/}, développement) : requête \texttt{myTrips} authentifiée par l'en-tête \texttt{Authorization}.}{fig:graphiql}
+En développement, on peut écrire ces requêtes dans GraphiQL (figure~\ref{fig:graphiql}). L'explorateur à gauche liste les champs racine du schéma et aide à construire la requête. Le jeton se met dans l'onglet \emph{Headers}.
+
+\capture{graphiql.png}{GraphiQL sur \texttt{/graphql/} en développement. L'explorateur liste les champs racine de \texttt{Query} (\texttt{destination}, \texttt{destinationOverview}, \texttt{me}, \texttt{myTrips}, \texttt{myTripsCount}, \texttt{trip}).}{fig:graphiql}
 
 \subsection{Comparaison REST et GraphQL}
 
-Le tableau~\ref{tab:rest-graphql} compare les deux API telles qu'elles sont réalisées dans TravelHub. REST, au sens de Fielding~\cite{fielding2000}, organise l'API autour de ressources adressables. GraphQL l'organise autour d'un schéma typé que le client interroge.
+Le tableau~\ref{tab:rest-graphql} compare les deux API telles que nous les avons faites dans TravelHub. REST, au sens de Fielding~\cite{fielding2000}, organise l'API autour de ressources qui ont chacune leur adresse. GraphQL l'organise autour d'un schéma typé que le client interroge.
 
-\begin{table}[H]
+\begin{table}[htbp]
   \centering
   \small
   \caption{Comparaison des deux API de TravelHub.}
@@ -125,19 +122,19 @@ Le tableau~\ref{tab:rest-graphql} compare les deux API telles qu'elles sont réa
     \toprule
     \textbf{Critère} & \textbf{REST (DRF)} & \textbf{GraphQL (Graphene)} \\
     \midrule
-    Points d'entrée & Une URL par ressource et par action (18 chemins) & Un seul : \code{POST /graphql/} \\
-    Forme de la réponse & Fixée par le serveur (serializer) & Choisie par le client, champ par champ \\
-    Sur- et sous-récupération & Liste sans détail ; vue d'ensemble dédiée (\code{overview}) pour éviter les allers-retours & Évitées : le client demande exactement les champs voulus \\
-    Signalement des erreurs & Code HTTP (400, 403, 404\ldots) et enveloppe \code{error} & HTTP 200 et liste \code{errors}, avec \code{extensions.code} ; 400 pour une requête invalide \\
-    Échec partiel & Tout ou rien, sauf \code{overview} (\code{warnings}) & Natif : un champ en échec vaut \code{null}, les autres sont servis \\
-    Cache HTTP & Possible sur les \code{GET} (URL stables) & Difficile : tout passe par \code{POST} \\
-    Documentation & OpenAPI, Swagger UI, ReDoc & Schéma typé, GraphiQL ; introspection fermée en production \\
-    Pagination & Numéro de page (\code{?page=}) & \code{limit} et \code{offset}, plus \code{myTripsCount} \\
-    Risques propres & Exposition de champs en trop (affectation de masse) & Requêtes coûteuses : profondeur limitée à 6, largeur non limitée \\
-    Authentification, permissions & JWT, \code{visible_to()}, classes de \code{apps.core.permissions} & Identiques ; quota de requêtes partagé avec REST \\
-    Validation & Serializers, \code{Model.clean()}, contraintes & Identique : mêmes serializers appelés par les mutations \\
+    Points d'entrée & Une URL par ressource et par action (18 chemins) & Un seul, \code{POST /graphql/} \\
+    Forme de la réponse & Décidée par le serveur (serializer) & Choisie par le client, champ par champ \\
+    Trop ou pas assez de données & La liste n'a pas le détail. Nous avons ajouté \code{overview} pour éviter les allers-retours & Le client demande exactement les champs qu'il veut \\
+    Erreurs & Code HTTP (400, 403, 404\ldots) et enveloppe \code{error} & HTTP 200 et liste \code{errors} avec \code{extensions.code}, 400 pour une requête invalide \\
+    Échec partiel & Tout ou rien, sauf \code{overview} (\code{warnings}) & Prévu par GraphQL. Un champ en échec vaut \code{null} et les autres sont servis \\
+    Cache HTTP & Possible sur les \code{GET} (URL stables) & Difficile, car tout passe par \code{POST} \\
+    Documentation & OpenAPI, Swagger UI, ReDoc & Schéma typé et GraphiQL, introspection fermée en production \\
+    Pagination & Numéro de page (\code{?page=}) & \code{limit} et \code{offset}, avec \code{myTripsCount} \\
+    Risques propres & Champs exposés en trop (affectation de masse) & Requêtes coûteuses. Profondeur limitée à 6, mais largeur non limitée \\
+    Authentification, permissions & JWT, \code{visible_to()}, classes de \code{apps.core.permissions} & Les mêmes, avec un quota partagé avec REST \\
+    Validation & Serializers, \code{Model.clean()}, contraintes & La même, les mutations appellent les mêmes serializers \\
     \bottomrule
   \end{tabularx}
 \end{table}
 
-Les deux API ne s'opposent pas ; elles se complètent. REST convient aux opérations simples et aux intégrations tierces, qui profitent du cache HTTP et d'OpenAPI. GraphQL convient aux écrans riches du futur front-end, qui assemblent plusieurs ressources en une requête. Le coût de cette double exposition reste faible, car toute la logique est partagée.
+Pour nous, les deux API ne sont pas en concurrence, elles se complètent. REST est pratique pour les opérations simples et pour les autres applications qui voudraient se brancher, grâce au cache HTTP et à OpenAPI. GraphQL sera plus pratique pour les écrans du front-end qui affichent plusieurs ressources à la fois. Offrir les deux ne coûte pas cher, puisque toute la logique est partagée.

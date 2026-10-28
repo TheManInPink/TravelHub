@@ -1,8 +1,9 @@
 """Affectation de masse (OWASP API3 : Broken Object Property Level Authorization).
 
-Un client ne peut écrire que les champs prévus : propriétaire, identifiants, horodatages,
-totaux calculés et droits d'administration sont en lecture seule ou absents, et les
-valeurs envoyées pour eux sont ignorées (REST) ou refusées (GraphQL, schéma typé).
+Un client ne peut écrire que les champs prévus. Le propriétaire, les identifiants, les
+horodatages, les totaux calculés et les droits d'administration sont en lecture seule
+ou absents. Si le client les envoie quand même, ils sont ignorés en REST et refusés en
+GraphQL, où le schéma est typé.
 """
 
 import pytest
@@ -188,7 +189,7 @@ class TestGraphql:
         ],
     )
     def test_unknown_input_fields_are_rejected(self, graphql, user_a, trip_b, activity_a, mutation):
-        """Les types d'entrée n'ont pas ces champs : la requête est refusée avant exécution."""
+        """Ces champs n'existent pas dans les types d'entrée, la requête est donc refusée."""
         ids = {
             "trip": activity_a.destination.trip_id,
             "destination": activity_a.destination_id,

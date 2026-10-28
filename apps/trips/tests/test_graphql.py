@@ -193,7 +193,7 @@ class TestMyTrips:
     def test_query_count_does_not_grow_with_trips(
         self, graphql, owner, make_trip, make_destination, make_activity
     ):
-        """Pas de N+1 : relations préchargées d'après les champs demandés."""
+        """Pas de N+1. Les relations sont préchargées selon les champs demandés."""
         query = """
         query { myTrips {
           title totalCost owner { username }

@@ -1,14 +1,17 @@
 """Identifiant de requête et journal d'accès.
 
-RequestIdMiddleware, premier de MIDDLEWARE :
+RequestIdMiddleware doit être le premier de MIDDLEWARE. Il reprend l'en-tête
+X-Request-ID envoyé par le client ou le proxy s'il est sûr (lettres, chiffres,
+« . _ - », 64 caractères au plus). Sinon, il en génère un nouveau.
 
-- reprend l'en-tête X-Request-ID du client ou du proxy s'il est sûr (lettres, chiffres,
-  « . _ - », 64 caractères au plus), en génère un sinon ;
-- le rend disponible à tous les journaux de la requête (apps.core.logs.request_id_var)
-  et le renvoie dans l'en-tête X-Request-ID de la réponse ;
-- journalise une ligne par requête : méthode, chemin sans chaîne de requête (qui pourrait
-  contenir un jeton), statut, durée et utilisateur. /health/, interrogé par Docker toutes
-  les 30 s, n'est journalisé qu'au niveau DEBUG.
+L'identifiant est disponible pour tous les journaux de la requête
+(apps.core.logs.request_id_var) et il est renvoyé dans l'en-tête X-Request-ID
+de la réponse.
+
+Le middleware écrit aussi une ligne par requête avec la méthode, le chemin, le statut,
+la durée et l'utilisateur. Le chemin est journalisé sans la chaîne de requête, qui
+pourrait contenir un jeton. /health/ est appelé par Docker toutes les 30 s, donc il
+n'est journalisé qu'au niveau DEBUG.
 """
 
 import logging
@@ -30,8 +33,11 @@ QUIET_PATHS = frozenset({"/health/"})
 
 @receiver(request_finished, dispatch_uid="travelhub.clear_request_id")
 def clear_request_id(**kwargs):
-    """Fin de requête (fermeture de la réponse, après django.request et django.server) :
-    les journaux suivants de ce fil ne portent plus l'identifiant."""
+    """Fin de la requête, quand la réponse est fermée.
+
+    Ça arrive après django.request et django.server. Les journaux suivants de ce fil
+    n'ont plus l'identifiant.
+    """
     request_id_var.set(None)
 
 
@@ -44,8 +50,9 @@ class RequestIdMiddleware:
         if not VALID_REQUEST_ID.fullmatch(request_id):
             request_id = uuid.uuid4().hex
         request.request_id = request_id
-        # Pas de remise à zéro en sortie : Django journalise les 4xx et 5xx (django.request)
-        # après toute la chaîne de middlewares. clear_request_id() s'en charge à la fin.
+        # On ne remet pas l'identifiant à zéro ici. Django journalise les 4xx et 5xx
+        # (django.request) après toute la chaîne de middlewares. C'est clear_request_id()
+        # qui s'en occupe à la fin.
         request_id_var.set(request_id)
         started = time.perf_counter()
         response = self.get_response(request)
@@ -55,7 +62,7 @@ class RequestIdMiddleware:
 
     @staticmethod
     def log(request, status, started):
-        # request.user : l'utilisateur JWT une fois la vue DRF ou GraphQL exécutée.
+        # Après la vue DRF ou GraphQL, request.user est l'utilisateur du JWT.
         user = getattr(request, "user", None)
         level = logging.DEBUG if request.path in QUIET_PATHS else logging.INFO
         logger.log(

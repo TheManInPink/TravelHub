@@ -84,7 +84,7 @@ class TestDestinationConstraints:
         assert "country_code" in exc.value.message_dict
 
     def test_lowercase_country_code_rejected_by_database(self, destination):
-        # update() contourne save() : seule la contrainte CHECK protège la base.
+        # update() ne passe pas par save(), donc seule la contrainte CHECK protège la base.
         with pytest.raises(IntegrityError, match="itinerary_destination_country_code_iso2"):
             Destination.objects.filter(pk=destination.pk).update(country_code="jp")
 

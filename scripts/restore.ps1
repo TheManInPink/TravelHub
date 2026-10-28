@@ -3,20 +3,20 @@
     Restaure une sauvegarde de TravelHub (archive pg_dump -Fc) dans une base PostgreSQL.
 
 .DESCRIPTION
-    Par défaut, restaure la sauvegarde la plus récente de backups\ dans la base de DATABASE_URL
-    (variable d'environnement, sinon fichier .env), avec le pg_restore de PostgreSQL 18.
-    -Database choisit une autre base sur le même serveur : elle est créée si elle n'existe pas
-    (le rôle de l'application a le droit CREATEDB).
+    Par défaut, le script restaure la sauvegarde la plus récente de backups\ dans la base de
+    DATABASE_URL (variable d'environnement, sinon fichier .env), avec le pg_restore de
+    PostgreSQL 18. -Database permet de viser une autre base sur le même serveur. Elle est
+    créée si elle n'existe pas, car le rôle de l'application a le droit CREATEDB.
 
-    Avec -Docker, restaure dans la base du service db de docker compose : l'archive est copiée
-    dans le conteneur (docker compose cp) et pg_restore s'y exécute (docker compose exec). Si la
-    base visée est celle du service web, celui-ci est arrêté pendant la restauration, puis
-    redémarré (il réapplique alors les migrations manquantes).
+    Avec -Docker, la restauration se fait dans la base du service db de docker compose.
+    L'archive est copiée dans le conteneur (docker compose cp) puis pg_restore y est lancé
+    (docker compose exec). Si c'est la base du service web, on arrête ce service pendant la
+    restauration et on le redémarre après. Il réapplique alors les migrations manquantes.
 
-    Une base qui contient déjà des tables n'est écrasée qu'avec -Force (pg_restore --clean).
-    La restauration se fait en une transaction : en cas d'erreur, la base reste inchangée.
-    Les propriétaires et les droits de l'archive sont ignorés (--no-owner --no-privileges) :
-    une sauvegarde locale se restaure dans Docker, et inversement.
+    Une base qui a déjà des tables n'est écrasée qu'avec -Force (pg_restore --clean).
+    Tout se fait dans une transaction, donc en cas d'erreur la base ne change pas.
+    Les propriétaires et les droits de l'archive sont ignorés (--no-owner --no-privileges).
+    On peut donc restaurer une sauvegarde locale dans Docker, et l'inverse aussi.
 
 .EXAMPLE
     .\scripts\restore.ps1 -Database travelhub_restore
@@ -40,8 +40,8 @@ param(
 $ErrorActionPreference = "Stop"
 $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 
-# Exécute un programme externe ; échoue si son code de sortie n'est pas 0. Ses messages sur la
-# sortie d'erreur (docker compose en écrit même en cas de succès) ne sont pas fatals.
+# Lance un programme externe et échoue si son code de sortie n'est pas 0. Ce qu'il écrit sur la
+# sortie d'erreur n'est pas bloquant (docker compose y écrit même quand tout va bien).
 function Invoke-Native {
     param([string]$FilePath, [string[]]$Arguments)
     $previous = $ErrorActionPreference
@@ -51,12 +51,12 @@ function Invoke-Native {
     if ($LASTEXITCODE -ne 0) { throw "$(Split-Path $FilePath -Leaf) a échoué (code $LASTEXITCODE)." }
 }
 
-# Commande exécutée dans le conteneur db (connexion locale par socket, sans mot de passe).
+# Commande lancée dans le conteneur db (par le socket local, sans mot de passe).
 function Invoke-InDb([string[]]$Arguments) {
     Invoke-Native "docker" (@("compose", "exec", "-T", "db") + $Arguments)
 }
 
-# Connexion décrite par DATABASE_URL : la variable d'environnement a priorité sur .env, comme dans Django.
+# Connexion lue dans DATABASE_URL. Comme dans Django, la variable d'environnement passe avant .env.
 function Get-DatabaseUrl {
     $url = $env:DATABASE_URL
     if (-not $url) {
@@ -86,7 +86,7 @@ if (-not $File) {
 $File = (Resolve-Path $File).Path
 Write-Host "Sauvegarde : $File"
 
-# Options communes ; --clean seulement si une base non vide doit être écrasée.
+# Options communes. --clean seulement s'il faut écraser une base qui n'est pas vide.
 $restoreOptions = @("--no-owner", "--no-privileges", "--exit-on-error", "--single-transaction")
 $countTables = "SELECT count(*) FROM pg_tables WHERE schemaname = 'public'"
 
@@ -114,7 +114,7 @@ try {
         }
         if ($tables -gt 0) { $restoreOptions += @("--clean", "--if-exists") }
 
-        # Le service web garde des connexions ouvertes sur sa base : on l'arrête le temps de la restauration.
+        # Le service web garde des connexions ouvertes sur sa base, donc on l'arrête pendant la restauration.
         $running = Invoke-Native "docker" @("compose", "ps", "--status", "running", "--services")
         if ($Database -eq $webDatabase -and $running -contains "web") {
             Invoke-Native "docker" @("compose", "stop", "web")

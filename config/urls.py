@@ -15,16 +15,16 @@ urlpatterns = [
     path("api/auth/", include("apps.accounts.urls")),
     path("api/", include("apps.trips.urls")),
     path("api/", include("apps.itinerary.urls")),
-    # Documentation OpenAPI, publique : SPECTACULAR_SETTINGS["SERVE_PERMISSIONS"] vaut AllowAny.
+    # Documentation OpenAPI publique (SPECTACULAR_SETTINGS["SERVE_PERMISSIONS"] vaut AllowAny).
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path("api/docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"),
     path("api/redoc/", SpectacularRedocView.as_view(url_name="schema"), name="redoc"),
-    # API GraphQL ; GraphiQL dans le navigateur en développement (GRAPHQL_GRAPHIQL).
+    # API GraphQL, avec GraphiQL dans le navigateur en développement (GRAPHQL_GRAPHIQL).
     path("graphql/", TravelHubGraphQLView.as_view(), name="graphql"),
     # Contrôle de santé (HEALTHCHECK de l'image Docker) : base et cache.
     path("health/", health, name="health"),
 ]
 
-# Erreurs hors DRF au format JSON de l'API, jamais de page HTML ni de trace de pile.
+# Les erreurs hors DRF sont aussi en JSON, sans page HTML ni trace de pile.
 handler404 = "apps.core.views.not_found"
 handler500 = "apps.core.views.server_error"

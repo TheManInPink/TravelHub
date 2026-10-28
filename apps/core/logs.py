@@ -1,18 +1,22 @@
-"""Journaux JSON de TravelHub : une ligne JSON par événement, avec l'identifiant de requête.
+"""Journaux JSON de TravelHub, une ligne par événement avec l'identifiant de requête.
 
-- request_id_var : identifiant de la requête HTTP en cours (RequestIdMiddleware). Une
-  variable de contexte : chaque fil et chaque tâche asyncio a la sienne. Les fils d'un
-  ThreadPoolExecutor ne l'héritent pas : soumettre contextvars.copy_context().run ;
-- RequestIdFilter : ajoute request_id à chaque enregistrement ;
-- JsonFormatter : horodatage UTC, niveau, logger, message, request_id, champs passés dans
-  extra= (valeurs JSON simples seulement), trace de l'exception.
+request_id_var contient l'identifiant de la requête HTTP en cours. Il est rempli
+par RequestIdMiddleware. C'est une variable de contexte, donc chaque fil et chaque
+tâche asyncio a la sienne. Attention, les fils d'un ThreadPoolExecutor n'en héritent
+pas. Il faut leur soumettre contextvars.copy_context().run.
 
-Aucun secret dans les journaux : les champs extra dont le nom évoque un secret (password,
-token, authorization, cookie…) sont masqués, comme les JWT et les en-têtes Bearer
-présents dans les messages et les traces. Ce masquage est un filet de sécurité : le code
-ne journalise de toute façon ni corps de requête, ni en-têtes, ni chaîne de requête.
+RequestIdFilter ajoute request_id à chaque enregistrement. JsonFormatter écrit
+l'horodatage UTC, le niveau, le logger, le message, le request_id, les champs passés
+dans extra= (seulement les valeurs JSON simples) et la trace de l'exception.
 
-Ce module n'importe pas Django : gunicorn.conf.py l'utilise avant le chargement de l'application.
+On ne veut aucun secret dans les journaux. Les champs extra dont le nom fait penser
+à un secret (password, token, authorization, cookie…) sont masqués. Les JWT et les
+en-têtes Bearer trouvés dans les messages et les traces le sont aussi. C'est surtout
+une sécurité en plus, car le code ne journalise jamais les corps de requête, les
+en-têtes ou la chaîne de requête.
+
+Ce module n'importe pas Django, car gunicorn.conf.py l'utilise avant que
+l'application soit chargée.
 """
 
 import contextvars
@@ -29,12 +33,13 @@ SENSITIVE_KEY = re.compile(
     re.IGNORECASE,
 )
 SENSITIVE_TEXT = (
-    # JWT : trois segments base64url, le premier étant un en-tête JSON ({" → eyJ).
+    # Un JWT a trois segments base64url. Le premier est un en-tête JSON,
+    # donc il commence par eyJ ({" encodé).
     re.compile(r"eyJ[\w-]+\.[\w-]+\.[\w-]*"),
     re.compile(r"(?i)\bBearer\s+\S+"),
 )
 
-# Attributs propres à tout LogRecord : le reste vient de extra=.
+# Attributs présents dans tout LogRecord. Les autres viennent de extra=.
 STANDARD_ATTRIBUTES = frozenset(logging.makeLogRecord({}).__dict__) | {
     "message",
     "asctime",
@@ -55,8 +60,11 @@ def redact_text(text):
 
 
 def redact(key, value):
-    """Valeur JSON d'un champ extra, masquée si son nom évoque un secret ; SKIP si
-    la valeur n'est pas une donnée JSON simple (objet requête, réponse…)."""
+    """Valeur JSON d'un champ extra.
+
+    Elle est masquée si le nom du champ fait penser à un secret. Renvoie SKIP si la
+    valeur n'est pas une donnée JSON simple (requête, réponse…).
+    """
     if SENSITIVE_KEY.search(key):
         return REDACTED
     if isinstance(value, str):

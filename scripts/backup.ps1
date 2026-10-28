@@ -1,18 +1,19 @@
 ﻿<#
 .SYNOPSIS
-    Sauvegarde la base de TravelHub (pg_dump -Fc) dans un fichier horodaté et garde les 7 plus récents.
+    Sauvegarde la base de TravelHub (pg_dump -Fc) dans un fichier horodaté. Garde les 7 plus récents.
 
 .DESCRIPTION
-    Par défaut, sauvegarde la base décrite par DATABASE_URL (variable d'environnement, sinon fichier .env)
-    avec le pg_dump de PostgreSQL 18. Le mot de passe passe par PGPASSWORD le temps de la commande :
-    jamais sur la ligne de commande ni dans un fichier.
+    Par défaut, le script sauvegarde la base de DATABASE_URL (variable d'environnement, sinon
+    fichier .env) avec le pg_dump de PostgreSQL 18. Le mot de passe est passé dans PGPASSWORD
+    pendant la commande. Il n'apparaît jamais sur la ligne de commande ni dans un fichier.
 
-    Avec -Docker, sauvegarde la base du service db de docker compose : pg_dump s'exécute dans le
-    conteneur (docker compose exec), puis l'archive est copiée sur l'hôte (docker compose cp).
+    Avec -Docker, c'est la base du service db de docker compose qui est sauvegardée. pg_dump
+    tourne dans le conteneur (docker compose exec) et l'archive est ensuite copiée sur l'hôte
+    (docker compose cp).
 
-    Chaque archive est relue avec pg_restore --list avant d'être conservée. Fichiers produits :
-    backups\<base>_AAAAMMJJ-HHMMSS.dump (local) ou backups\<base>-docker_AAAAMMJJ-HHMMSS.dump (Docker) ;
-    la rétention s'applique séparément à chacune des deux séries.
+    Chaque archive est relue avec pg_restore --list avant d'être gardée. Les fichiers s'appellent
+    backups\<base>_AAAAMMJJ-HHMMSS.dump en local et backups\<base>-docker_AAAAMMJJ-HHMMSS.dump
+    avec Docker. La rétention est appliquée à chaque série séparément.
 
 .EXAMPLE
     .\scripts\backup.ps1
@@ -31,8 +32,8 @@ param(
 $ErrorActionPreference = "Stop"
 $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 
-# Exécute un programme externe ; échoue si son code de sortie n'est pas 0. Ses messages sur la
-# sortie d'erreur (docker compose en écrit même en cas de succès) ne sont pas fatals.
+# Lance un programme externe et échoue si son code de sortie n'est pas 0. Ce qu'il écrit sur la
+# sortie d'erreur n'est pas bloquant (docker compose y écrit même quand tout va bien).
 function Invoke-Native {
     param([string]$FilePath, [string[]]$Arguments)
     $previous = $ErrorActionPreference
@@ -42,7 +43,7 @@ function Invoke-Native {
     if ($LASTEXITCODE -ne 0) { throw "$(Split-Path $FilePath -Leaf) a échoué (code $LASTEXITCODE)." }
 }
 
-# Connexion décrite par DATABASE_URL : la variable d'environnement a priorité sur .env, comme dans Django.
+# Connexion lue dans DATABASE_URL. Comme dans Django, la variable d'environnement passe avant .env.
 function Get-DatabaseUrl {
     $url = $env:DATABASE_URL
     if (-not $url) {
@@ -76,7 +77,7 @@ try {
         $file = Join-Path $OutputDir "${prefix}_$stamp.dump"
         $inContainer = "/tmp/travelhub-backup.dump"
         try {
-            # Variables du conteneur ; connexion locale par socket, sans mot de passe.
+            # Variables du conteneur. On se connecte par le socket local, sans mot de passe.
             Invoke-Native "docker" @("compose", "exec", "-T", "db", "sh", "-c",
                 "pg_dump -Fc -U `$POSTGRES_USER -d `$POSTGRES_DB -f $inContainer && pg_restore --list $inContainer > /dev/null")
             Invoke-Native "docker" @("compose", "cp", "db:$inContainer", $file)
@@ -98,7 +99,7 @@ try {
     }
 }
 catch {
-    # Une archive incomplète ne doit ni être prise pour une sauvegarde, ni en évincer une bonne.
+    # Une archive incomplète ne doit pas compter comme sauvegarde, ni en remplacer une bonne.
     if ($file -and (Test-Path $file)) { Remove-Item $file -Force }
     throw
 }
@@ -110,7 +111,7 @@ finally {
 $size = [math]::Round((Get-Item $file).Length / 1KB, 1)
 Write-Host "Sauvegarde créée : $file ($size Ko)"
 
-# Rétention : les noms contiennent l'horodatage, l'ordre alphabétique est donc chronologique.
+# Rétention. Les noms contiennent l'horodatage, donc l'ordre alphabétique est chronologique.
 $expired = Get-ChildItem $OutputDir -Filter "${prefix}_*.dump" |
     Sort-Object Name -Descending | Select-Object -Skip $Keep
 foreach ($old in $expired) {

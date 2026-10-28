@@ -33,7 +33,8 @@ class TestVisibleTo:
         assert not Trip.objects.visible_to(None).exists()
 
     def test_owner_without_membership_row_still_sees_trip(self, owner):
-        # Voyage créé hors service (ex. script) : le propriétaire garde l'accès.
+        # Voyage créé sans passer par le service (par un script, par exemple). Le
+        # propriétaire doit quand même y avoir accès.
         orphan = Trip.objects.create(
             owner=owner, title="Brut", start_date=date(2027, 1, 1), end_date=date(2027, 1, 2)
         )

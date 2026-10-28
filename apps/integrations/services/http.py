@@ -1,17 +1,18 @@
 """Couche HTTP commune aux clients des services externes (Open-Meteo, Countries GraphQL).
 
-- request_json() : délai de 5 s et deux essais ; une erreur réseau, un délai dépassé ou
-  une réponse 5xx déclenchent le second essai, une réponse 4xx non ;
-- cached() : met en cache la réponse brute, seulement si parse() l'a jugée exploitable.
+request_json() attend 5 s au maximum et fait deux essais. Une erreur réseau, un délai
+dépassé ou une réponse 5xx déclenchent le deuxième essai, mais pas une réponse 4xx.
+cached() met la réponse brute en cache, seulement si parse() l'a acceptée.
 
-Chaque essai est journalisé (logger apps.integrations.services.http) avec service,
-méthode, URL sans paramètres, statut (code HTTP, « timeout » ou « network_error »),
-durée en millisecondes et numéro d'essai. Ces services n'ont pas de clé d'API : aucune
-donnée d'authentification ne transite, et les paramètres ne sont pas journalisés.
+Chaque essai est journalisé (logger apps.integrations.services.http) avec le service,
+la méthode, l'URL sans paramètres, le statut (code HTTP, « timeout » ou
+« network_error »), la durée en millisecondes et le numéro de l'essai. Ces services
+n'ont pas de clé d'API, donc aucune donnée d'authentification ne passe. Les paramètres
+ne sont pas journalisés non plus.
 
-Les échecs deviennent les exceptions de apps.integrations.exceptions, avec le nom du
-service dans le message : injoignable ou 4xx/5xx → 503, délai dépassé → 504, réponse
-inexploitable → 502.
+Les échecs sont transformés en exceptions de apps.integrations.exceptions, avec le
+nom du service dans le message. Un service injoignable ou une réponse 4xx/5xx donne
+503, un délai dépassé donne 504 et une réponse inexploitable donne 502.
 """
 
 import logging
@@ -40,10 +41,10 @@ def new_session():
 
 
 def cached(service, cache_key, cache_seconds, load, parse):
-    """Réponse analysée par parse(), lue dans le cache ou obtenue par load().
+    """Réponse analysée par parse(), lue dans le cache ou obtenue avec load().
 
-    parse() peut lever une IntegrationError (donnée absente…) : la réponse n'est alors
-    pas mise en cache, pas plus qu'une réponse dont la forme est inattendue.
+    parse() peut lever une IntegrationError (par exemple si une donnée manque). Dans ce
+    cas, la réponse n'est pas mise en cache. C'est pareil si sa forme est inattendue.
     """
     payload = cache.get(cache_key)
     from_cache = payload is not None
@@ -60,7 +61,7 @@ def cached(service, cache_key, cache_seconds, load, parse):
 
 
 def request_json(session, service, method, url, **kwargs):
-    """Requête avec délai et nouvel essai ; renvoie le JSON décodé."""
+    """Envoie la requête avec délai et nouvel essai, puis renvoie le JSON décodé."""
     for attempt in range(1, ATTEMPTS + 1):
         started = time.perf_counter()
         try:
@@ -87,7 +88,7 @@ def request_json(session, service, method, url, **kwargs):
         raise error
 
     if not response.ok:
-        # 4xx : la requête est refusée telle quelle, un nouvel essai n'y changerait rien.
+        # Pour un 4xx, c'est la requête elle-même qui est refusée. Réessayer ne servirait à rien.
         logger.error("%s a refusé la requête (%s) : %s", service, url, response.text[:200])
         raise ExternalServiceUnavailable(
             f"{service} a refusé la requête (erreur {response.status_code})."
@@ -99,7 +100,7 @@ def request_json(session, service, method, url, **kwargs):
 
 
 def log_call(service, method, url, status, started, attempt):
-    """Une ligne par essai ; WARNING si l'essai a échoué ou a été refusé (4xx)."""
+    """Écrit une ligne par essai, en WARNING si l'essai a échoué ou a été refusé (4xx)."""
     duration_ms = round((time.perf_counter() - started) * 1000, 1)
     succeeded = isinstance(status, int) and status < 400
     logger.log(

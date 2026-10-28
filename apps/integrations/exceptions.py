@@ -1,8 +1,8 @@
 """Exceptions métier des services externes (Open-Meteo, Countries GraphQL).
 
-Elles ne dépendent pas de DRF : l'API REST et l'API GraphQL les traduisent
-chacune à leur façon. Côté REST, apps.core.exceptions.exception_handler en fait
-une réponse {"error": {...}} avec le statut et le code déclarés ici.
+Elles ne dépendent pas de DRF, car l'API REST et l'API GraphQL les traduisent chacune
+à leur manière. En REST, apps.core.exceptions.exception_handler en fait une réponse
+{"error": {...}} avec le statut et le code déclarés ici.
 """
 
 
@@ -41,7 +41,7 @@ class NoDataAvailable(IntegrationError):
 
 
 class ExternalServiceUnavailable(IntegrationError):
-    """Service injoignable ou en erreur (5xx après le nouvel essai, 4xx)."""
+    """Service injoignable ou en erreur (4xx, ou 5xx même après le nouvel essai)."""
 
     status_code = 503
     code = "external_service_unavailable"
@@ -49,7 +49,7 @@ class ExternalServiceUnavailable(IntegrationError):
 
 
 class ExternalServiceBadResponse(ExternalServiceUnavailable):
-    """Le service a répondu, mais avec des erreurs (liste « errors » GraphQL) ou une
+    """Le service a répondu avec des erreurs (liste « errors » de GraphQL) ou avec une
     réponse inexploitable (JSON illisible, forme inattendue)."""
 
     status_code = 502
@@ -58,7 +58,7 @@ class ExternalServiceBadResponse(ExternalServiceUnavailable):
 
 
 class ExternalServiceTimeout(ExternalServiceUnavailable):
-    """Le service n'a pas répondu dans le délai imparti, à chacun des essais."""
+    """Le service n'a pas répondu à temps, et ce à chacun des essais."""
 
     status_code = 504
     code = "external_service_timeout"

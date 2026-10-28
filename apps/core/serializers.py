@@ -9,10 +9,10 @@ from .exceptions import django_error_detail
 class ModelCleanMixin:
     """Applique Model.clean() et les contraintes du modèle aux données validées.
 
-    DRF ne connaît ni les règles de clean() (dates d'une destination comprises dans
-    le voyage…) ni les CheckConstraint : sans ce contrôle, elles donneraient une
-    IntegrityError au moment de l'enregistrement. Les règles sont évaluées sur une
-    copie : l'instance en base reste intacte si la validation échoue.
+    DRF ne connaît pas les règles de clean() (par exemple les dates d'une destination
+    qui doivent être dans le voyage) ni les CheckConstraint. Sans ce contrôle, elles
+    provoqueraient une IntegrityError à l'enregistrement. Les règles sont testées sur
+    une copie, donc l'instance en base ne change pas si la validation échoue.
     """
 
     def validate(self, attrs):

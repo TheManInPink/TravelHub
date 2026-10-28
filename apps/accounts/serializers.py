@@ -39,14 +39,15 @@ class RegisterSerializer(serializers.ModelSerializer):
 
     def validate_email(self, value):
         email = value.strip().lower()
-        # Même règle que la contrainte accounts_user_email_ci_unique, mais en 400 lisible.
+        # La contrainte accounts_user_email_ci_unique le vérifie déjà, mais ici on renvoie
+        # un 400 clair.
         if User.objects.filter(email__iexact=email).exists():
             raise serializers.ValidationError("Un utilisateur avec ce courriel existe déjà.")
         return email
 
     def validate(self, attrs):
-        # Les validateurs de AUTH_PASSWORD_VALIDATORS comparent le mot de passe
-        # au nom d'utilisateur et au courriel : on leur passe un utilisateur non enregistré.
+        # Les validateurs de AUTH_PASSWORD_VALIDATORS comparent le mot de passe avec le nom
+        # d'utilisateur et le courriel. Il faut donc leur donner un utilisateur (non enregistré).
         candidate = User(**{k: v for k, v in attrs.items() if k != "password"})
         try:
             validate_password(attrs["password"], user=candidate)
@@ -85,7 +86,7 @@ class LogoutSerializer(serializers.Serializer):
         except TokenError:
             self.fail("bad_token")
         user = self.context["request"].user
-        # Interdit de révoquer la session d'un autre utilisateur avec un jeton volé.
+        # Empêche de révoquer la session d'un autre utilisateur avec un jeton volé.
         if str(token.get("user_id")) != str(user.pk):
             self.fail("not_owner")
         return token

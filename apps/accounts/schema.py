@@ -6,11 +6,11 @@ from apps.core.graphql import authenticated_user
 
 
 class UserType(DjangoObjectType):
-    """Utilisateur : propriétaire d'un voyage, participant ou utilisateur connecté.
+    """Un utilisateur (propriétaire d'un voyage, participant ou utilisateur connecté).
 
-    Liste blanche de champs : ni mot de passe, ni droits (is_staff, is_superuser,
-    groupes), ni relations vers les voyages d'autrui. Le courriel n'est visible que
-    par son titulaire.
+    On n'expose que certains champs. Le mot de passe, les droits (is_staff,
+    is_superuser, groupes) et les voyages des autres ne sont pas visibles. Le courriel
+    n'est montré qu'à son titulaire.
     """
 
     email = graphene.String(description="Courriel ; null sauf pour l'utilisateur connecté.")
@@ -25,7 +25,8 @@ class UserType(DjangoObjectType):
 
 
 class Query(graphene.ObjectType):
-    # Champs racine nullables : une erreur (not_authenticated…) n'efface que ce champ.
+    # Les champs racine sont nullables. Comme ça, une erreur (not_authenticated par
+    # exemple) ne vide que ce champ.
     me = graphene.Field(UserType, description="Utilisateur connecté.")
 
     def resolve_me(root, info):

@@ -1,9 +1,9 @@
 ﻿<#
 .SYNOPSIS
-    Crée (ou met à jour) le rôle et la base PostgreSQL de TravelHub à partir de DATABASE_URL du fichier .env.
+    Crée ou met à jour le rôle et la base PostgreSQL de TravelHub d'après DATABASE_URL dans .env.
 
 .DESCRIPTION
-    Le mot de passe du super-utilisateur PostgreSQL est demandé une seule fois et n'est jamais enregistré.
+    Le mot de passe du super-utilisateur PostgreSQL est demandé une fois. Il n'est jamais enregistré.
     Le rôle reçoit CREATEDB pour que pytest puisse créer la base de test.
 
 .EXAMPLE

@@ -1,10 +1,13 @@
-"""Jeu de données de démonstration : 3 utilisateurs, 4 voyages, destinations et activités.
+"""Jeu de données de démonstration avec 3 utilisateurs, 4 voyages, des destinations et
+des activités.
 
-Les dates sont relatives au jour de l'exécution : le voyage « en cours » englobe toujours
-aujourd'hui, le voyage « terminé » est passé et les autres sont à venir.
+Les dates dépendent du jour où on lance la commande. Le voyage « en cours » contient
+toujours aujourd'hui, le voyage « terminé » est dans le passé et les autres sont à
+venir.
 
-Idempotence : un voyage déjà présent (même propriétaire, même titre) n'est pas recréé.
---reset supprime d'abord les comptes de démo, et par cascade leurs voyages.
+On peut relancer la commande sans créer de doublons. Un voyage qui existe déjà (même
+propriétaire, même titre) n'est pas recréé. --reset supprime d'abord les comptes de
+démo, et leurs voyages partent en cascade.
 """
 
 import os
@@ -20,7 +23,7 @@ from apps.itinerary.models import Activity, ActivityCategory, Destination
 from apps.trips.models import ParticipantRole, Trip, TripParticipant, TripStatus
 from apps.trips.services import create_trip
 
-# Les comptes de démo se reconnaissent à ce domaine (.example est réservé, RFC 2606).
+# On reconnaît les comptes de démo à ce domaine (.example est réservé par la RFC 2606).
 DEMO_EMAIL_DOMAIN = "demo.travelhub.example"
 
 DEMO_USERS = (
@@ -62,9 +65,9 @@ CITIES = {
 
 Cat = ActivityCategory
 
-# Dates en jours relatifs : start/end/arrival/departure depuis aujourd'hui,
-# le premier élément de chaque activité depuis l'arrivée à la destination.
-# Activité : (jour, nom, catégorie, heure de début ou None, coût).
+# Les dates sont en jours par rapport à aujourd'hui (start, end, arrival, departure).
+# Pour une activité, le premier élément compte depuis l'arrivée à la destination.
+# Format d'une activité : (jour, nom, catégorie, heure de début ou None, coût).
 DEMO_TRIPS = (
     {
         "owner": "alice",
@@ -185,7 +188,7 @@ def demo_users():
 
 
 def _save_valid(instance):
-    # Mêmes validations que l'admin et l'API : dates dans le voyage, codes pays, etc.
+    # On applique les mêmes validations que l'admin et l'API (dates, codes pays, etc.).
     instance.full_clean()
     instance.save()
     return instance

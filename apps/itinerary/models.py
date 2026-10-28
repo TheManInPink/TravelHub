@@ -11,7 +11,7 @@ COUNTRY_CODE_PATTERN = r"^[A-Z]{2}$"
 
 
 class Destination(TimeStampedModel):
-    """Étape d'un voyage : une ville visitée entre deux dates, à une position donnée."""
+    """Étape d'un voyage. C'est une ville visitée entre deux dates, à une position donnée."""
 
     trip = models.ForeignKey(
         "trips.Trip",
@@ -78,7 +78,7 @@ class Destination(TimeStampedModel):
             models.CheckConstraint(
                 condition=Q(latitude__isnull=True, longitude__isnull=True)
                 | Q(
-                    # isnull=False explicite : un CHECK évalué à NULL est considéré comme respecté.
+                    # On met isnull=False, car un CHECK qui vaut NULL compte comme respecté.
                     latitude__isnull=False,
                     longitude__isnull=False,
                     latitude__gte=-90,
@@ -97,7 +97,7 @@ class Destination(TimeStampedModel):
         return f"{self.city} ({self.country_code})"
 
     def clean_fields(self, exclude=None):
-        # Normaliser avant les validateurs de champ : « fr » devient « FR ».
+        # On normalise avant les validateurs de champ (« fr » devient « FR »).
         if self.country_code:
             self.country_code = self.country_code.strip().upper()
         super().clean_fields(exclude=exclude)
@@ -118,7 +118,7 @@ class Destination(TimeStampedModel):
             )
         if errors:
             raise ValidationError(errors)
-        # Réduire la période ne doit pas laisser des activités hors de la destination.
+        # Si on réduit la période, aucune activité ne doit se retrouver en dehors.
         if self.pk:
             outside = self.activities.exclude(date__range=(self.arrival_date, self.departure_date))
             if outside.exists():
@@ -128,7 +128,7 @@ class Destination(TimeStampedModel):
                 )
 
     def save(self, *args, **kwargs):
-        # Les créations par l'ORM n'appellent pas clean_fields() : on normalise aussi ici.
+        # L'ORM n'appelle pas clean_fields() à la création, donc on normalise aussi ici.
         if self.country_code:
             self.country_code = self.country_code.strip().upper()
         super().save(*args, **kwargs)

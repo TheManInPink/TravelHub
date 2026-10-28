@@ -55,16 +55,17 @@ class NestedDestinationSerializer(DestinationSummarySerializer):
 
 
 class EditableParentField(serializers.PrimaryKeyRelatedField):
-    """Voyage ou destination auquel rattacher l'objet créé ou modifié.
+    """Voyage ou destination auquel on rattache l'objet créé ou modifié.
 
-    Le parent est cherché parmi les objets visibles par l'utilisateur : inconnu ou
-    invisible, il donne 404 comme un GET ; visible sans droit d'écriture, 403.
-    NotFound et PermissionDenied ne sont pas des ValidationError : elles interrompent
-    la validation et l'emportent sur les erreurs des autres champs.
+    On cherche le parent parmi les objets visibles par l'utilisateur. S'il est inconnu ou
+    invisible, on renvoie 404 comme pour un GET. S'il est visible mais sans droit
+    d'écriture, on renvoie 403. NotFound et PermissionDenied ne sont pas des
+    ValidationError, donc elles arrêtent la validation et passent avant les erreurs
+    des autres champs.
     """
 
     def __init__(self, *, trip_lookup, **kwargs):
-        # Chemin du parent vers son voyage : "pk" pour un Trip, "trip" pour une Destination.
+        # Chemin du parent vers son voyage ("pk" pour un Trip, "trip" pour une Destination).
         self.trip_lookup = trip_lookup
         super().__init__(**kwargs)
 
@@ -90,7 +91,7 @@ class EditableParentField(serializers.PrimaryKeyRelatedField):
 
 
 class UpperCaseCharField(serializers.CharField):
-    """Met la valeur en majuscules avant les validateurs : « jp » devient « JP »."""
+    """Met la valeur en majuscules avant les validateurs (« jp » devient « JP »)."""
 
     def to_internal_value(self, data):
         return super().to_internal_value(data).upper()
@@ -127,8 +128,8 @@ class DestinationSerializer(ModelCleanMixin, serializers.ModelSerializer):
         read_only_fields = ["created_at", "updated_at"]
 
     def validate(self, attrs):
-        # Les coordonnées (souvent mémorisées par le géocodage) ne valent plus pour une
-        # autre ville : sans nouvelles coordonnées fournies, elles sont effacées.
+        # Les coordonnées (souvent enregistrées par le géocodage) ne sont plus bonnes pour
+        # une autre ville. Si on n'en fournit pas de nouvelles, elles sont effacées.
         if self.instance is not None and not {"latitude", "longitude"} & attrs.keys():
             if any(
                 field in attrs and attrs[field] != getattr(self.instance, field)
@@ -139,7 +140,7 @@ class DestinationSerializer(ModelCleanMixin, serializers.ModelSerializer):
 
 
 class DestinationWeatherSerializer(serializers.Serializer):
-    """Météo d'une destination : {"destination": …, "forecast": Forecast d'Open-Meteo}."""
+    """Météo d'une destination ({"destination": …, "forecast": Forecast d'Open-Meteo})."""
 
     destination = serializers.IntegerField(source="destination.pk")
     city = serializers.CharField(source="destination.city")

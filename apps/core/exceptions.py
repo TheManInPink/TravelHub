@@ -4,17 +4,17 @@ Toutes les erreurs ont la même forme :
 
     {"error": {"code": "validation_error", "message": "…", "details": {"end_date": ["…"]}}}
 
-- code : identifiant stable, à tester côté client (validation_error, not_authenticated,
-  permission_denied, not_found, integrity_error, throttled…) ;
-- message : phrase lisible par un humain ;
-- details : erreurs par champ pour une validation, objet vide sinon.
+Le code est un identifiant stable que le client peut tester (validation_error,
+not_authenticated, permission_denied, not_found, integrity_error, throttled, etc.).
+Le message est une phrase lisible. details contient les erreurs par champ quand il
+s'agit d'une validation. Sinon, c'est un objet vide.
 
-Les ValidationError de Django (levées par les services et Model.clean()) et les
-IntegrityError (contrainte de base violée, par exemple par deux requêtes simultanées)
-deviennent des 400 au lieu de 500. Les erreurs des services externes
-(apps.integrations.exceptions) gardent leur statut (404, 502, 503, 504) et leur code.
+Les ValidationError de Django (levées par les services et par Model.clean()) donnent
+un 400 au lieu d'une 500. C'est pareil pour les IntegrityError, par exemple quand deux
+requêtes simultanées violent une contrainte. Les erreurs des services externes
+(apps.integrations.exceptions) gardent leur statut (404, 502, 503 ou 504) et leur code.
 
-error_body() produit le même corps pour l'API GraphQL (apps.core.views).
+error_body() construit le même corps pour l'API GraphQL (apps.core.views).
 """
 
 from functools import cache
@@ -37,7 +37,7 @@ INTEGRITY_MESSAGE = "L'opération viole une contrainte d'intégrité des donnée
 
 
 def django_error_detail(exc):
-    """Erreurs d'une ValidationError Django au format DRF : {champ: [messages]}.
+    """Erreurs d'une ValidationError Django, remises au format DRF {champ: [messages]}.
 
     La clé « __all__ » de Django devient « non_field_errors », comme dans les serializers.
     """
@@ -50,7 +50,7 @@ def django_error_detail(exc):
 
 @cache
 def _constraint_messages():
-    """Nom de contrainte -> message d'erreur, pour les contraintes déclarées dans les modèles."""
+    """Associe le nom de chaque contrainte des modèles à son message d'erreur."""
     return {
         constraint.name: constraint.get_violation_error_message()
         for model in apps.get_models()
@@ -59,17 +59,17 @@ def _constraint_messages():
 
 
 def integrity_error_message(exc):
-    """Message de la contrainte violée, retrouvé grâce au nom que remonte PostgreSQL."""
+    """Retrouve le message de la contrainte violée à partir du nom renvoyé par PostgreSQL."""
     diag = getattr(exc.__cause__, "diag", None)  # psycopg expose le diagnostic du serveur
     name = getattr(diag, "constraint_name", None)
     return _constraint_messages().get(name, INTEGRITY_MESSAGE)
 
 
 def to_api_exception(exc):
-    """Traduit une exception de Django ou d'un service externe en APIException de DRF.
+    """Traduit une exception Django ou d'un service externe en APIException de DRF.
 
-    Renvoie (exception, code) : code remplace celui de l'exception quand il ne vaut pas
-    None. Une exception inconnue est renvoyée telle quelle.
+    Renvoie un couple (exception, code). Si code n'est pas None, il remplace le code de
+    l'exception. Une exception qu'on ne connaît pas est renvoyée sans changement.
     """
     code = None
     if isinstance(exc, DjangoValidationError):
@@ -80,8 +80,8 @@ def to_api_exception(exc):
             {api_settings.NON_FIELD_ERRORS_KEY: [integrity_error_message(exc)]}
         )
     elif isinstance(exc, Http404):
-        # Le message de get_object_or_404 est en anglais et nomme le modèle : on garde
-        # le message générique traduit de DRF.
+        # Le message de get_object_or_404 est en anglais et donne le nom du modèle.
+        # On préfère garder le message générique de DRF, qui est traduit.
         exc = exceptions.NotFound()
     elif isinstance(exc, DjangoPermissionDenied):
         exc = exceptions.PermissionDenied(*exc.args)
@@ -93,20 +93,23 @@ def to_api_exception(exc):
 
 
 def exception_handler(exc, context):
-    """EXCEPTION_HANDLER de DRF : convertit, délègue à DRF, puis enveloppe la réponse."""
+    """EXCEPTION_HANDLER de DRF.
+
+    Convertit l'exception, laisse DRF construire la réponse, puis l'enveloppe.
+    """
     exc, code = to_api_exception(exc)
     response = drf_exception_handler(exc, context)
     if response is None:
-        return None  # erreur inattendue : Django renvoie une 500
+        return None  # erreur inattendue, Django renverra une 500
     response.data = {"error": _error_body(exc, response.data, code)}
     return response
 
 
 def error_body(exc):
-    """{"code", "message", "details"} de l'exception, comme dans une réponse d'erreur REST.
+    """Corps {"code", "message", "details"} d'une exception, comme dans une erreur REST.
 
-    Sert à l'API GraphQL. None pour une exception inattendue, dont le message ne doit
-    pas être montré au client.
+    Utilisé par l'API GraphQL. Renvoie None pour une exception inattendue, car son
+    message ne doit pas être montré au client.
     """
     exc, code = to_api_exception(exc)
     if not isinstance(exc, exceptions.APIException):
@@ -119,12 +122,12 @@ def error_body(exc):
 def _error_body(exc, data, code):
     if isinstance(exc, exceptions.ValidationError):
         details = data if isinstance(data, dict) else {api_settings.NON_FIELD_ERRORS_KEY: data}
-        # Une erreur unique et globale (« dernier propriétaire »…) sert directement de message.
+        # S'il n'y a qu'une erreur globale (ex. « dernier propriétaire »), elle sert de message.
         non_field = details.get(api_settings.NON_FIELD_ERRORS_KEY, [])
         message = non_field[0] if len(details) == 1 and len(non_field) == 1 else VALIDATION_MESSAGE
         return {"code": code or "validation_error", "message": str(message), "details": details}
 
-    # Les autres APIException donnent {"detail": "…"} ; SimpleJWT y ajoute "code" et "messages".
+    # Les autres APIException donnent {"detail": "…"}. SimpleJWT ajoute aussi "code" et "messages".
     details = dict(data) if isinstance(data, dict) else {"detail": data}
     message = details.pop("detail", "")
     code = details.pop("code", None) or getattr(exc.detail, "code", None) or exc.default_code

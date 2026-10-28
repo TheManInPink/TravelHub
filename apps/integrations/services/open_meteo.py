@@ -1,12 +1,14 @@
-"""Client Open-Meteo : géocodage d'une ville et prévisions météo, sans clé d'API.
+"""Client Open-Meteo pour le géocodage d'une ville et la météo, sans clé d'API.
 
-- geocode() interroge https://geocoding-api.open-meteo.com/v1/search ; cache 7 jours ;
-- get_forecast() interroge https://api.open-meteo.com/v1/forecast : conditions actuelles
-  et prévisions quotidiennes des 16 prochains jours ; cache 30 minutes.
+geocode() appelle https://geocoding-api.open-meteo.com/v1/search et garde le résultat
+7 jours en cache. get_forecast() appelle https://api.open-meteo.com/v1/forecast pour
+avoir les conditions actuelles et les prévisions des 16 prochains jours. Ce résultat
+est gardé 30 minutes.
 
-Délai, nouvel essai et cache : voir apps.integrations.services.http. Seules les réponses
-exploitables sont mises en cache. Les échecs deviennent les exceptions de
-apps.integrations.exceptions ; les réponses deviennent des dataclasses compactes.
+Pour le délai, le nouvel essai et le cache, voir apps.integrations.services.http.
+Seules les réponses exploitables vont dans le cache. Les échecs deviennent des
+exceptions de apps.integrations.exceptions et les réponses sont converties en petites
+dataclasses.
 """
 
 import dataclasses
@@ -35,7 +37,7 @@ DAILY_VARIABLES = [
     "wind_speed_10m_max",
     "weather_code",
 ]
-# Unités par défaut d'Open-Meteo : les requêtes ne les changent pas.
+# Ce sont les unités par défaut d'Open-Meteo, les requêtes ne les changent pas.
 UNITS = {"temperature": "°C", "wind_speed": "km/h", "precipitation": "mm"}
 
 # Codes météo WMO renvoyés dans weather_code.
@@ -157,7 +159,7 @@ def geocode(city, country_code):
             timezone=place.get("timezone", ""),
         )
 
-    # Le nom passe par un condensat : la clé reste valide pour tout backend de cache.
+    # On hache le nom pour que la clé soit valide avec n'importe quel backend de cache.
     digest = hashlib.sha256(city.casefold().encode()).hexdigest()
     key = f"open-meteo:geocode:{country_code}:{digest}"
     return _fetch(GEOCODING_URL, params, key, GEOCODING_CACHE_SECONDS, parse)
@@ -170,22 +172,24 @@ def forecast_window(today=None):
 
 
 def get_forecast(latitude, longitude, start, end):
-    """Conditions actuelles et prévisions quotidiennes du start au end inclus.
+    """Conditions actuelles et prévisions quotidiennes de start à end inclus.
 
-    La période est ramenée aux 16 jours de prévision : NoDataAvailable si elle n'en
-    recoupe aucun.
+    La période est réduite aux 16 jours de prévision. Si elle n'en touche aucun, on lève
+    NoDataAvailable.
     """
     first, last = forecast_window()
     no_data = NoDataAvailable(
         f"Aucune prévision pour le {start:%Y-%m-%d} au {end:%Y-%m-%d} : Open-Meteo ne "
         f"prévoit que les {FORECAST_DAYS} prochains jours ({first:%Y-%m-%d} au {last:%Y-%m-%d})."
     )
-    # Marge d'un jour : la date locale de la destination peut différer de celle du serveur.
+    # On garde un jour de marge, car la date locale de la destination peut être
+    # différente de celle du serveur.
     margin = datetime.timedelta(days=1)
     if end < first - margin or start > last + margin:
         raise no_data
 
-    # 4 décimales (~10 m) : des destinations voisines partagent la même entrée de cache.
+    # On arrondit à 4 décimales (environ 10 m) pour que des destinations voisines
+    # partagent la même entrée de cache.
     latitude, longitude = round(float(latitude), 4), round(float(longitude), 4)
     params = {
         "latitude": latitude,
@@ -195,7 +199,7 @@ def get_forecast(latitude, longitude, start, end):
         "timezone": "auto",
         "forecast_days": FORECAST_DAYS,
     }
-    # Les 16 jours sont demandés et mis en cache d'un bloc, puis filtrés sur la période.
+    # On demande et on met en cache les 16 jours d'un coup, puis on filtre sur la période.
     key = f"open-meteo:forecast:{latitude:.4f}:{longitude:.4f}"
     forecast = _fetch(FORECAST_URL, params, key, FORECAST_CACHE_SECONDS, _parse_forecast)
     daily = tuple(day for day in forecast.daily if start <= day.date <= end)

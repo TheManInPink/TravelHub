@@ -1,16 +1,16 @@
 ﻿#Requires -RunAsAdministrator
 <#
 .SYNOPSIS
-    Réinitialise le mot de passe oublié du super-utilisateur PostgreSQL, puis crée la base TravelHub.
+    Remet à zéro le mot de passe oublié du super-utilisateur PostgreSQL, puis crée la base TravelHub.
 
 .DESCRIPTION
     1. Sauvegarde pg_hba.conf.
     2. Passe temporairement les connexions locales en « trust » et redémarre le service.
     3. Définit le nouveau mot de passe du super-utilisateur.
-    4. Restaure TOUJOURS pg_hba.conf d'origine et redémarre le service, même en cas d'erreur.
-    5. Lance create_database.ps1 avec le nouveau mot de passe, ce qui vérifie aussi qu'il fonctionne.
+    4. Remet toujours le pg_hba.conf d'origine et redémarre le service, même s'il y a une erreur.
+    5. Lance create_database.ps1 avec le nouveau mot de passe, ce qui permet de vérifier qu'il marche.
 
-    À exécuter dans un PowerShell ouvert « en tant qu'administrateur ».
+    Il faut le lancer dans un PowerShell ouvert « en tant qu'administrateur ».
 
 .EXAMPLE
     powershell -ExecutionPolicy Bypass -File .\scripts\db\reset_postgres_password.ps1
@@ -51,7 +51,7 @@ Copy-Item $hbaFile $backup
 Write-Host "Sauvegarde de pg_hba.conf : $backup"
 
 try {
-    # Seules les règles locales (socket, 127.0.0.1, ::1) passent en trust, et seulement le temps de l'opération.
+    # Seules les règles locales (socket, 127.0.0.1, ::1) passent en trust, et seulement pendant l'opération.
     $content = [IO.File]::ReadAllText($hbaFile)
     $trusted = [regex]::Replace($content, '(?m)^([ \t]*(?:local|host)[ \t].*?)\b(?:scram-sha-256|md5)(?=[ \t]*\r?$)', '${1}trust')
     [IO.File]::WriteAllText($hbaFile, $trusted, [Text.UTF8Encoding]::new($false))
@@ -69,6 +69,6 @@ finally {
     Write-Host "pg_hba.conf d'origine restauré (scram-sha-256)."
 }
 
-# Vérifie le nouveau mot de passe en conditions normales et crée le rôle + la base de TravelHub.
+# Vérifie le nouveau mot de passe dans des conditions normales, puis crée le rôle et la base de TravelHub.
 $env:PGPASSWORD = $newPassword
 & (Join-Path $PSScriptRoot "create_database.ps1") -PsqlPath $psql -SuperUser $SuperUser

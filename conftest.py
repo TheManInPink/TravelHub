@@ -25,7 +25,7 @@ TRIP_END = date(2027, 6, 20)
 
 @pytest.fixture(autouse=True)
 def _clear_cache():
-    """Les compteurs de throttling vivent dans le cache : chaque test repart de zéro."""
+    """Les compteurs de throttling sont dans le cache, donc chaque test repart de zéro."""
     cache.clear()
     yield
     cache.clear()
@@ -33,9 +33,9 @@ def _clear_cache():
 
 @pytest.fixture
 def mock_http():
-    """Intercepte les requêtes HTTP de requests : aucune ne part sur le réseau.
+    """Intercepte les requêtes HTTP de requests pour qu'aucune ne parte sur le réseau.
 
-    Une requête non déclarée lève ConnectionError ; une réponse déclarée mais jamais
+    Une requête non déclarée lève ConnectionError. Une réponse déclarée mais jamais
     demandée fait échouer le test.
     """
     with responses.RequestsMock() as mock:
@@ -63,8 +63,8 @@ def client_for():
 def graphql(client):
     """Envoie une requête à /graphql/ avec le client de test de graphene-django.
 
-    user est authentifié par un vrai jeton d'accès (Authorization: Bearer), comme un
-    client réel ; token permet d'envoyer un jeton quelconque.
+    user est authentifié avec un vrai jeton d'accès (Authorization: Bearer), comme un
+    vrai client. token permet d'envoyer n'importe quel jeton.
     """
 
     def _execute(query, variables=None, user=None, token=None):
@@ -100,8 +100,8 @@ def owner(make_user):
     return make_user("owner")
 
 
-# Fabriques : chaque fixture make_* crée un objet valide et accepte n'importe quel champ.
-# Le parent par défaut (owner, trip, destination) n'est créé que s'il n'est pas fourni.
+# Fabriques. Chaque fixture make_* crée un objet valide et accepte n'importe quel champ.
+# Le parent par défaut (owner, trip, destination) est créé seulement s'il n'est pas fourni.
 
 
 @pytest.fixture
@@ -167,8 +167,8 @@ def make_activity(request):
     return _make
 
 
-# Deux utilisateurs étrangers l'un à l'autre, chacun avec un voyage, une destination et
-# une activité : base des tests d'accès croisés (Broken Object Level Authorization).
+# Deux utilisateurs qui ne partagent rien, avec chacun un voyage, une destination et
+# une activité. Ça sert aux tests d'accès croisés (Broken Object Level Authorization).
 
 
 @pytest.fixture

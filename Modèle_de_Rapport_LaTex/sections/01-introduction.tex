@@ -5,26 +5,26 @@
 
 \subsection{Contexte}
 
-TravelHub est une plateforme de planification de voyages collaboratifs. Un utilisateur crée un voyage, le découpe en destinations, puis planifie des activités à chaque étape. Il peut partager le voyage avec d'autres utilisateurs, à qui il attribue un rôle : propriétaire, éditeur ou lecteur. Chaque destination est enrichie de données externes : la météo du séjour et une fiche descriptive du pays.
+TravelHub est une plateforme qui sert à planifier des voyages à plusieurs. Un utilisateur crée un voyage et le découpe en destinations. Il prévoit ensuite des activités à chaque étape. Il peut aussi partager son voyage avec d'autres utilisateurs en leur donnant un rôle, qui peut être propriétaire, éditeur ou lecteur. Pour chaque destination, l'application va chercher la météo du séjour et quelques informations sur le pays.
 
-Ce rapport présente le back-end réalisé pour le premier travail pratique. Il décrit les choix techniques, l'architecture, le modèle de données, les deux API exposées, l'intégration des services externes, la sécurité et la stratégie de test. Chaque affirmation renvoie au code du dépôt.
+Dans ce rapport, nous présentons le back-end que nous avons réalisé pour le premier travail pratique. Nous expliquons nos choix techniques, l'architecture, le modèle de données et les deux API. Nous parlons aussi de l'intégration des services externes, de la sécurité et des tests. Tout ce qui est décrit ici se retrouve dans le code du dépôt.
 
 \subsection{Objectifs}
 
-Le travail poursuit six objectifs :
+Nous nous sommes fixé six objectifs :
 \begin{itemize}
-  \item modéliser les données dans PostgreSQL, avec des relations 1-N et N-N et des contraintes d'intégrité vérifiées par la base elle-même ;
-  \item exposer les mêmes fonctions par une API REST (Django REST Framework) et par une API GraphQL (Graphene-Django) ;
-  \item consommer deux API publiques : Open-Meteo, de style REST, et Countries, de style GraphQL ;
-  \item protéger l'accès par jetons JWT et par des permissions fondées sur le rôle, en suivant l'OWASP API Security Top 10~\cite{owasp} ;
-  \item garantir la cohérence des données par la validation à plusieurs niveaux et par les transactions ;
-  \item vérifier le tout par une suite de tests automatisés et par une collection Postman.
+  \item modéliser les données dans PostgreSQL avec des relations 1-N et N-N, et laisser la base vérifier elle-même les contraintes d'intégrité ;
+  \item offrir les mêmes fonctions avec une API REST (Django REST Framework) et avec une API GraphQL (Graphene-Django) ;
+  \item utiliser deux API publiques, Open-Meteo (REST) et Countries (GraphQL) ;
+  \item protéger l'accès avec des jetons JWT et des permissions basées sur le rôle, en suivant l'OWASP API Security Top 10~\cite{owasp} ;
+  \item garder des données cohérentes grâce à plusieurs niveaux de validation et aux transactions ;
+  \item tout vérifier avec des tests automatisés et une collection Postman.
 \end{itemize}
 
 \subsection{Périmètre}
 
-Le TP1 porte sur le back-end seul. L'interface utilisateur relève du TP2. L'API constitue donc l'unique interface du système. Elle est exercée par Swagger UI, GraphiQL, Postman et l'administration de Django. Le dépôt contient aussi une part d'industrialisation : image Docker, intégration continue, journaux structurés et sauvegardes. Cette part n'est pas exigée par l'énoncé ; elle prépare le déploiement du TP2.
+Le TP1 porte seulement sur le back-end, l'interface utilisateur viendra au TP2. Pour l'instant, l'API est donc la seule façon d'utiliser le système. On peut la tester avec Swagger UI, GraphiQL, Postman et l'administration de Django. Nous avons aussi ajouté une image Docker, de l'intégration continue, des journaux structurés et des sauvegardes. L'énoncé ne le demandait pas, mais cela nous servira pour déployer le TP2.
 
 \subsection{Organisation du rapport}
 
-La section~\ref{sec:environnement} justifie les versions retenues. Les sections~\ref{sec:architecture} et~\ref{sec:modele} présentent l'architecture et le modèle de données. La section~\ref{sec:gestion} décrit la logique métier. La section~\ref{sec:integrations} traite des services externes. Les sections~\ref{sec:rest} et~\ref{sec:graphql} présentent les deux API et les comparent. Les sections~\ref{sec:validation} à~\ref{sec:tests} couvrent l'intégrité, la sécurité et les tests. La section~\ref{sec:industrialisation} décrit le déploiement, et la section~\ref{sec:conclusion} conclut.
+La section~\ref{sec:environnement} explique les versions que nous avons choisies. Les sections~\ref{sec:architecture} et~\ref{sec:modele} présentent l'architecture et le modèle de données, puis la section~\ref{sec:gestion} décrit la logique métier. La section~\ref{sec:integrations} parle des services externes. Les deux API sont présentées et comparées aux sections~\ref{sec:rest} et~\ref{sec:graphql}. Les sections~\ref{sec:validation} à~\ref{sec:tests} traitent de l'intégrité, de la sécurité et des tests. Enfin, la section~\ref{sec:industrialisation} porte sur le déploiement et la section~\ref{sec:conclusion} conclut le rapport.

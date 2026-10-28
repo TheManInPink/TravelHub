@@ -40,7 +40,8 @@ class DestinationInline(admin.TabularInline):
     model = Destination
     extra = 0
     fields = ("order", "city", "country", "country_code", "arrival_date", "departure_date")
-    # Les activités se gèrent depuis la fiche de la destination (inline imbriqué impossible).
+    # On gère les activités depuis la fiche de la destination, car Django ne permet pas
+    # d'inline imbriqué.
     show_change_link = True
 
 
@@ -78,7 +79,7 @@ class TripAdmin(admin.ModelAdmin):
 
     def save_related(self, request, form, formsets, change):
         super().save_related(request, form, formsets, change)
-        # Même invariant que le service create_trip : le propriétaire est toujours participant.
+        # Comme dans le service create_trip, le propriétaire doit toujours être participant.
         ensure_owner_membership(form.instance)
 
 

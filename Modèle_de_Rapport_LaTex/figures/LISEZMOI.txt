@@ -1,11 +1,11 @@
-Captures attendues par le rapport (PNG). Tant qu'un fichier manque, le PDF affiche
-un cadre « Capture à insérer » à sa place ; il suffit de déposer le fichier ici et de
-recompiler.
+Captures utilisées par le rapport (PNG). Si un fichier manque, le PDF affiche un cadre
+« Capture à insérer » à sa place. Il suffit alors de mettre le fichier ici et de recompiler.
 
-erd-pgadmin.png     pgAdmin 4 : Tools > ERD Tool sur la base travelhub (figure 3, section 4.1)
-admin.png           /admin/ : fiche d'un voyage avec participants et destinations en ligne (figure 4, section 5.5)
-swagger.png         /api/docs/ : opérations sur les voyages (figure 5, section 7.6)
-graphiql.png        /graphql/ en développement : requête myTrips avec l'en-tête Authorization (figure 6, section 8.5)
-couverture.png      htmlcov/index.html après « pytest » (figure 7, section 11.3)
-postman-runner.png  Runner Postman : collection TravelHub API, toutes les assertions vertes (figure 8, section 11.4)
-ci-github.png       GitHub Actions : exécution réussie du flux CI, deux tâches (figure 9, section 12.2)
+erd-pgadmin.png       pgAdmin 4, Tools > ERD Tool sur la base travelhub (section 4.1, page entière)
+admin.png             page d'accueil de /admin/ (section 5.5)
+swagger.png           /api/docs/ avec le bouton Authorize et les opérations (section 7.6)
+graphiql.png          /graphql/ en développement, avec l'explorateur (section 8.5)
+couverture.png        htmlcov/index.html après « pytest » (section 11.3)
+postman-runner.png    début d'une exécution de la collection avec Postman CLI (section 11.4)
+postman-runner1.png   fin de la même exécution avec le résumé (section 11.4)
+ci-github.png         historique des exécutions du flux CI sur GitHub Actions (section 12.2)

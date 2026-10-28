@@ -10,10 +10,10 @@ from .services import create_trip
 
 
 class TripSerializer(ModelCleanMixin, serializers.ModelSerializer):
-    """Voyage en liste, création et modification.
+    """Voyage en liste, en création et en modification.
 
-    destination_count, activity_count et total_cost proviennent de
-    Trip.objects.with_totals() : le queryset de la vue doit être annoté.
+    destination_count, activity_count et total_cost viennent de Trip.objects.with_totals().
+    Le queryset de la vue doit donc être annoté.
     """
 
     owner = UserSummarySerializer(read_only=True)
@@ -46,15 +46,15 @@ class TripSerializer(ModelCleanMixin, serializers.ModelSerializer):
         read_only_fields = ["created_at", "updated_at"]
 
     def validate(self, attrs):
-        # En PATCH, une seule des deux dates peut être fournie : on complète avec l'existant.
+        # En PATCH, on peut n'envoyer qu'une des deux dates. On complète avec la valeur actuelle.
         start = attrs.get("start_date", getattr(self.instance, "start_date", None))
         end = attrs.get("end_date", getattr(self.instance, "end_date", None))
         if start and end and end < start:
             raise serializers.ValidationError(
                 {"end_date": "La date de fin doit être postérieure ou égale à la date de début."}
             )
-        # ModelCleanMixin applique ensuite Trip.clean(), qui refuse de raccourcir un voyage
-        # en laissant des destinations hors de ses dates.
+        # Ensuite, ModelCleanMixin applique Trip.clean(), qui refuse de raccourcir un voyage
+        # si des destinations sortent de ses dates.
         return super().validate(attrs)
 
     def create(self, validated_data):
@@ -117,7 +117,7 @@ class ParticipantSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
-# Rôles attribuables à l'ajout : la propriété se transfère ensuite par changement de rôle.
+# Rôles possibles à l'ajout. Pour transférer la propriété, on change le rôle ensuite.
 INVITABLE_ROLES = [
     (role, label)
     for role, label in TripParticipant.Role.choices

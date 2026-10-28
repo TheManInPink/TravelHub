@@ -23,7 +23,7 @@ def body(exc):
 
 
 def capture_integrity_error(callback):
-    # Point de sauvegarde : la transaction du test reste utilisable après l'erreur.
+    # Le point de sauvegarde permet de continuer à utiliser la transaction du test.
     with pytest.raises(IntegrityError) as caught, transaction.atomic():
         callback()
     return caught.value

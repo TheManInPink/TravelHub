@@ -5,7 +5,7 @@
 
 \subsection{Diagramme entité-association}
 
-Le modèle compte cinq tables métier (figure~\ref{fig:erd}). Les tables techniques de Django et de SimpleJWT (sessions, permissions, liste noire des jetons) n'y figurent pas. Les champs \code{created_at} et \code{updated_at} proviennent du modèle abstrait \code{TimeStampedModel} de \code{apps.core}.
+Le modèle a cinq tables métier (figure~\ref{fig:erd}). Nous n'y avons pas mis les tables techniques de Django et de SimpleJWT (sessions, permissions, liste noire des jetons). Les champs \code{created_at} et \code{updated_at} viennent du modèle abstrait \code{TimeStampedModel} de \code{apps.core}.
 
 \begin{figure}[tbp]
   \centering
@@ -94,19 +94,29 @@ Le modèle compte cinq tables métier (figure~\ref{fig:erd}). Les tables techniq
     \draw[rel] (dest.south) -- node[card, pos=0.12, right] {1} node[card, pos=0.88, right] {0..*}
       node[card, pos=0.5, left] {destination} (act.north);
   \end{tikzpicture}}
-  \caption{Modèle de données de TravelHub. Les flèches vont de la table référencée vers la table qui porte la clé étrangère. La relation N-N entre utilisateurs et voyages passe par \texttt{trips\_tripparticipant}.}
+  \caption{Modèle de données de TravelHub. Chaque flèche part de la table référencée et va vers la table qui a la clé étrangère. La relation N-N entre utilisateurs et voyages passe par \texttt{trips\_tripparticipant}.}
   \label{fig:erd}
 \end{figure}
 
-La figure~\ref{fig:erd-pgadmin} montre le même schéma, produit par l'outil ERD de pgAdmin à partir de la base réelle.
+Nous avons aussi généré le diagramme de la vraie base avec l'outil ERD de pgAdmin (figure~\ref{fig:erd-pgadmin}). Il contient toutes les tables, y compris celles de Django et de SimpleJWT. Les cinq tables métier sont dans la partie gauche. L'image est en pleine résolution dans le PDF, on peut donc zoomer pour lire les colonnes.
 
-\capture{erd-pgadmin.png}{Diagramme ERD généré par pgAdmin~4 (\emph{Tools} $\rightarrow$ \emph{ERD Tool}) sur la base \texttt{travelhub}.}{fig:erd-pgadmin}
+\begin{figure}[p]
+  \centering
+  \IfFileExists{figures/erd-pgadmin.png}{%
+    \fbox{\includegraphics[width=\dimexpr\linewidth-2\fboxrule-2\fboxsep\relax,height=0.86\textheight,keepaspectratio]{figures/erd-pgadmin.png}}%
+  }{%
+    \fbox{\parbox[c][4cm][c]{0.9\linewidth}{\centering\small
+      Capture à insérer :\\[2pt] \texttt{figures/erd-pgadmin.png}}}%
+  }
+  \caption{La base \texttt{travelhub} dans l'outil ERD de pgAdmin~4 (\emph{Tools} $\rightarrow$ \emph{ERD Tool}). On y voit aussi les tables techniques de Django et de SimpleJWT.}
+  \label{fig:erd-pgadmin}
+\end{figure}
 
 \subsection{Relations}
 
-Le tableau~\ref{tab:relations} détaille chaque relation. Le nom inverse (\code{related_name}) est choisi pour se lire naturellement : \code{user.owned_trips}, \code{trip.destinations}, \code{destination.activities}.
+Le tableau~\ref{tab:relations} donne le détail de chaque relation. Nous avons choisi des noms inverses (\code{related_name}) qui se lisent bien : \code{user.owned_trips}, \code{trip.destinations}, \code{destination.activities}.
 
-\begin{table}[H]
+\begin{table}[htbp]
   \centering
   \small
   \caption{Relations du modèle.}
@@ -116,7 +126,7 @@ Le tableau~\ref{tab:relations} détaille chaque relation. Le nom inverse (\code{
     \textbf{Relation} & \textbf{Type} & \textbf{Suppression} & \textbf{Accès inverse} \\
     \midrule
     \code{Trip.owner} $\rightarrow$ \code{User} & 1-N & \code{CASCADE} & \code{user.owned_trips} \\
-    \code{Trip.participants} $\leftrightarrow$ \code{User} & N-N & --- & \code{user.trips}, via \code{TripParticipant} \\
+    \code{Trip.participants} $\leftrightarrow$ \code{User} & N-N & (aucune) & \code{user.trips}, via \code{TripParticipant} \\
     \code{TripParticipant.trip} $\rightarrow$ \code{Trip} & 1-N & \code{CASCADE} & \code{trip.memberships} \\
     \code{TripParticipant.user} $\rightarrow$ \code{User} & 1-N & \code{CASCADE} & \code{user.trip_memberships} \\
     \code{TripParticipant.invited_by} $\rightarrow$ \code{User} & 1-N & \code{SET_NULL} & \code{user.sent_trip_invitations} \\
@@ -126,30 +136,30 @@ Le tableau~\ref{tab:relations} détaille chaque relation. Le nom inverse (\code{
   \end{tabularx}
 \end{table}
 
-La relation N-N mérite une précision. Une simple table de jointure ne suffit pas : l'association porte des attributs (rôle, date d'ajout, auteur de l'invitation). Elle est donc modélisée par un modèle intermédiaire explicite, déclaré avec \code{through}. Comme \code{TripParticipant} possède deux clés étrangères vers \code{User}, l'option \code{through_fields} désigne celles qui relient le voyage à ses participants.
+La relation N-N demande un peu plus d'explications. Une simple table de jointure ne suffisait pas, parce que l'association a ses propres attributs (le rôle, la date d'ajout et la personne qui a invité). Nous l'avons donc modélisée avec un modèle intermédiaire, déclaré avec \code{through}. \code{TripParticipant} a deux clés étrangères vers \code{User}, donc il faut préciser avec \code{through_fields} lesquelles relient le voyage à ses participants.
 
 \begin{lstlisting}[language=Python,caption={Relation N-N avec modèle intermédiaire (\texttt{apps/trips/models.py}, extrait).},label={lst:m2m}]
 participants = models.ManyToManyField(
     settings.AUTH_USER_MODEL,
     through="TripParticipant",
-    # TripParticipant a deux FK vers User (user, invited_by) : on indique lesquelles
-    # relient le voyage à ses participants.
+    # TripParticipant a deux FK vers User (user et invited_by). Il faut donc préciser
+    # celles qui relient le voyage à ses participants.
     through_fields=("trip", "user"),
     related_name="trips",
 )
 \end{lstlisting}
 
-La suppression en cascade suit la composition : un voyage possède ses destinations, qui possèdent leurs activités. En revanche, la suppression de l'auteur d'une invitation ne doit pas retirer le participant invité ; \code{invited_by} passe alors à \code{NULL}.
+La suppression en cascade suit la logique de composition. Un voyage contient ses destinations, et chaque destination contient ses activités. Par contre, si la personne qui a envoyé une invitation est supprimée, le participant invité doit rester. Dans ce cas, \code{invited_by} passe simplement à \code{NULL}.
 
 \subsection{Utilisateur personnalisé}
 
-Le modèle \code{accounts.User} hérite d'\code{AbstractUser}. Il a été déclaré dans \code{AUTH_USER_MODEL} avant la première migration, comme le recommande Django : changer de modèle utilisateur après coup est très coûteux. Le courriel est obligatoire et unique sans tenir compte de la casse, grâce à une contrainte d'unicité sur l'expression \code{Lower("email")}. Le courriel est aussi normalisé en minuscules dans \code{save()}, car \code{createsuperuser} n'appelle pas \code{clean()}.
+Le modèle \code{accounts.User} hérite d'\code{AbstractUser}. Nous l'avons déclaré dans \code{AUTH_USER_MODEL} avant la première migration, comme Django le conseille, parce que changer de modèle utilisateur plus tard est très compliqué. Le courriel est obligatoire. Il est aussi unique sans tenir compte des majuscules, grâce à une contrainte d'unicité sur \code{Lower("email")}. Nous le mettons en minuscules dans \code{save()}, car \code{createsuperuser} n'appelle pas \code{clean()}.
 
 \subsection{Contraintes d'intégrité}
 
-Les règles essentielles sont vérifiées par PostgreSQL lui-même (tableau~\ref{tab:contraintes}). La base reste ainsi cohérente même si une écriture contourne la validation applicative, par exemple lors de deux requêtes simultanées. Chaque contrainte porte un nom et un message d'erreur en français, réutilisé par le gestionnaire d'exceptions (section~\ref{sec:validation}).
+Les règles importantes sont vérifiées par PostgreSQL lui-même (tableau~\ref{tab:contraintes}). Même si une écriture passe à côté de la validation de l'application, par exemple avec deux requêtes en même temps, la base reste cohérente. Chaque contrainte a un nom et un message d'erreur en français. Le gestionnaire d'exceptions réutilise ce message (section~\ref{sec:validation}).
 
-\begin{table}[H]
+\begin{table}[htbp]
   \centering
   \small
   \caption{Contraintes déclarées dans les modèles.}
@@ -168,14 +178,14 @@ Les règles essentielles sont vérifiées par PostgreSQL lui-même (tableau~\ref
     \code{itinerary_destination_unique_trip_order} & \code{UNIQUE} & une position par destination dans un voyage \\
     \code{itinerary_destination_departure_after_arrival} & \code{CHECK} & \code{departure_date >= arrival_date} \\
     \code{itinerary_destination_country_code_iso2} & \code{CHECK} & code pays conforme à \code{^[A-Z]{2}$} \\
-    \code{itinerary_destination_coordinates_valid} & \code{CHECK} & latitude et longitude fournies ensemble, dans leurs bornes \\
+    \code{itinerary_destination_coordinates_valid} & \code{CHECK} & latitude et longitude données ensemble, dans leurs bornes \\
     \code{itinerary_activity_cost_non_negative} & \code{CHECK} & \code{cost >= 0} \\
     \code{itinerary_activity_category_valid} & \code{CHECK} & catégorie parmi les huit valeurs \\
     \bottomrule
   \end{tabularx}
 \end{table}
 
-Deux points de conception méritent d'être relevés. D'abord, la contrainte \code{trips_participant_single_owner} est un index unique \emph{partiel} : il ne porte que sur les lignes où \code{role = 'owner'}. Ensuite, la contrainte sur les coordonnées teste explicitement \code{IS NOT NULL}. En SQL, une condition \code{CHECK} évaluée à \code{NULL} est considérée comme respectée ; sans ce test, une latitude seule passerait.
+Deux contraintes valent la peine d'être expliquées. \code{trips_participant_single_owner} est un index unique \emph{partiel}, qui ne s'applique qu'aux lignes où \code{role = 'owner'}. La contrainte sur les coordonnées teste aussi \code{IS NOT NULL} de façon explicite. En SQL, une condition \code{CHECK} qui donne \code{NULL} compte comme respectée. Sans ce test, on pourrait enregistrer une latitude sans longitude.
 
 \begin{lstlisting}[language=Python,caption={Contraintes du voyage (\texttt{apps/trips/models.py}, extrait).},label={lst:contraintes}]
 class Meta:
@@ -198,8 +208,8 @@ class Meta:
     ]
 \end{lstlisting}
 
-Les montants utilisent \code{DecimalField} (\code{numeric} en SQL) et jamais \code{float} : un coût de 0,10~\$ doit rester exact. Les choix (statut, rôle, catégorie) sont des \code{TextChoices} ; ils sont doublés d'une contrainte \code{CHECK}, car Django ne vérifie les choix qu'à la validation, jamais en base.
+Pour les montants, nous utilisons \code{DecimalField} (\code{numeric} en SQL) et jamais \code{float}, pour qu'un coût de 0,10~\$ reste exact. Les choix (statut, rôle, catégorie) sont des \code{TextChoices}. Nous avons quand même ajouté une contrainte \code{CHECK} pour chacun, parce que Django vérifie les choix seulement à la validation et pas dans la base.
 
 \subsection{Migrations}
 
-Chaque application possède une migration initiale (\code{0001_initial.py}), générée par Django 5.2.18 avec \code{makemigrations}. La commande \code{sqlmigrate} permet de relire le SQL produit, notamment les contraintes et l'index partiel. La commande \code{migrate --check} sert à vérifier qu'une base restaurée est à jour (section~\ref{sec:industrialisation}). Dans Docker, le service \code{web} applique les migrations à chaque démarrage, avant de lancer Gunicorn.
+Chaque application a une migration initiale (\code{0001_initial.py}) générée par Django 5.2.18 avec \code{makemigrations}. Avec \code{sqlmigrate}, on peut relire le SQL produit, par exemple pour vérifier les contraintes et l'index partiel. La commande \code{migrate --check} sert à vérifier qu'une base restaurée est à jour (section~\ref{sec:industrialisation}). Dans Docker, le service \code{web} applique les migrations à chaque démarrage, avant de lancer Gunicorn.

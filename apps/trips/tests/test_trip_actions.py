@@ -161,8 +161,8 @@ class TestClone:
     def test_failure_midway_gives_500_and_leaves_database_unchanged(
         self, client_for, owner, source, monkeypatch
     ):
-        """Panne forcée pendant la copie des activités, après l'insertion du voyage, de
-        son participant et des destinations : la transaction annule tout."""
+        """On force une panne pendant la copie des activités, après l'insertion du voyage,
+        de son participant et des destinations. La transaction doit tout annuler."""
 
         def snapshot():
             return [
@@ -267,7 +267,7 @@ class TestParticipantAdd:
             "message": "Cet utilisateur participe déjà à ce voyage.",
             "details": {"non_field_errors": ["Cet utilisateur participe déjà à ce voyage."]},
         }
-        # Le point de sauvegarde a annulé l'INSERT : la connexion reste utilisable.
+        # Le point de sauvegarde a annulé l'INSERT, donc la connexion reste utilisable.
         assert client.get(participants_url(trip)).status_code == 200
 
 

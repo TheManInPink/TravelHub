@@ -1,4 +1,4 @@
-# Secrets et environnements locaux : jamais dans l'image.
+# Les secrets et les environnements locaux ne vont jamais dans l'image.
 .env
 .venv/
 venv/
@@ -20,7 +20,7 @@ media/
 backups/
 logs/
 
-# Hors du service web
+# Pas utile au service web
 Dockerfile
 docker-compose.yml
 .dockerignore

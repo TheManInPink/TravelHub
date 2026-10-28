@@ -26,13 +26,14 @@
 % paragraphes qui déborderaient sinon.
 \setlength{\emergencystretch}{3em}
 
-% Capture d'écran : l'image figures/<fichier> si elle existe, sinon un cadre qui
-% indique le fichier attendu (le document compile avant l'ajout des captures).
+% Capture d'écran. On affiche figures/<fichier> sur toute la largeur, avec un cadre
+% fin pour bien la séparer du texte. Si le fichier manque, un cadre indique le nom
+% attendu, ce qui permet de compiler même sans les captures.
 \newcommand{\capture}[3]{%
-  \begin{figure}[H]
+  \begin{figure}[htbp]
     \centering
     \IfFileExists{figures/#1}{%
-      \includegraphics[width=\linewidth,height=0.42\textheight,keepaspectratio]{figures/#1}%
+      \fbox{\includegraphics[width=\dimexpr\linewidth-2\fboxrule-2\fboxsep\relax,height=0.5\textheight,keepaspectratio]{figures/#1}}%
     }{%
       \fbox{\parbox[c][4cm][c]{0.9\linewidth}{\centering\small
         Capture à insérer :\\[2pt] \texttt{figures/#1}}}%

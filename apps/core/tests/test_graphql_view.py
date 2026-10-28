@@ -1,4 +1,4 @@
-"""TravelHubGraphQLView : authentification JWT, format des erreurs, durcissement."""
+"""Tests de TravelHubGraphQLView (authentification JWT, format des erreurs, durcissement)."""
 
 import pytest
 from django.test import Client
@@ -38,7 +38,7 @@ class TestAuthentication:
         assert graphql_codes(response) == ["token_not_valid"]
 
     def test_session_cookie_does_not_authenticate(self, client, graphql, owner):
-        # La vue est exemptée de CSRF : seul le jeton doit compter.
+        # La vue est exemptée de CSRF, donc seul le jeton doit compter.
         client.force_login(owner)
 
         assert graphql_codes(graphql(ME)) == ["not_authenticated"]
@@ -86,7 +86,7 @@ class TestErrors:
 
 @pytest.mark.django_db
 class TestThrottling:
-    # Les classes de throttling lisent leurs taux à l'import : on les remplace directement.
+    # Les classes de throttling lisent leurs taux à l'import, donc on les remplace directement.
     def test_anonymous_requests_are_throttled(self, graphql, monkeypatch):
         monkeypatch.setattr(AnonRateThrottle, "THROTTLE_RATES", {"anon": "2/minute"})
 

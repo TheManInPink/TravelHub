@@ -26,7 +26,7 @@ def calls_to(mock_http, url):
 
 @pytest.fixture
 def trip(make_trip):
-    # Remplace la fixture globale : un voyage dans la fenêtre de 16 jours de prévision.
+    # Remplace la fixture globale par un voyage dans les 16 jours de prévision.
     return make_trip(start_date=TODAY, end_date=TODAY + timedelta(days=10))
 
 
@@ -100,7 +100,7 @@ class TestWeather:
         assert calls_to(mock_http, FORECAST_URL) == 2
 
     def test_existing_coordinates_are_kept(self, client_for, owner, located, mock_http):
-        # Aucun géocodage déclaré : une requête de géocodage ferait échouer le test.
+        # Pas de géocodage déclaré, donc une requête de géocodage ferait échouer le test.
         mock_http.get(FORECAST_URL, json=forecast_payload())
 
         response = client_for(owner).get(weather_url(located))

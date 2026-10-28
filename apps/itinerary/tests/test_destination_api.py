@@ -94,7 +94,7 @@ class TestCreate:
         assert field in error_of(response)["details"]
 
     def test_departure_before_arrival_is_a_400_not_a_500(self, client_for, owner, payload):
-        # Seule la CheckConstraint le vérifie : ModelCleanMixin l'applique avant l'INSERT.
+        # Seule la CheckConstraint vérifie ça. ModelCleanMixin l'applique avant l'INSERT.
         response = client_for(owner).post(
             LIST_URL, {**payload, "arrival_date": "2027-06-12", "departure_date": "2027-06-08"}
         )

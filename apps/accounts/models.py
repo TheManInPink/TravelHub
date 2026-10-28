@@ -15,7 +15,7 @@ class User(AbstractUser):
         verbose_name_plural = "utilisateurs"
         ordering = ["username"]
         constraints = [
-            # Unicité insensible à la casse : Alice@x.com et alice@x.com sont le même courriel.
+            # Le courriel est unique sans tenir compte de la casse (Alice@x.com = alice@x.com).
             models.UniqueConstraint(
                 Lower("email"),
                 name="accounts_user_email_ci_unique",
@@ -31,6 +31,6 @@ class User(AbstractUser):
         self.email = self.email.strip().lower()
 
     def save(self, *args, **kwargs):
-        # createsuperuser et create_user n'appellent pas clean() : on normalise aussi ici.
+        # createsuperuser et create_user n'appellent pas clean(), donc on normalise aussi ici.
         self.email = self.email.strip().lower()
         super().save(*args, **kwargs)

@@ -115,6 +115,7 @@ def test_seed_refuses_to_reuse_non_demo_account(make_user):
     make_user("yuki")
     with pytest.raises(CommandError, match="yuki"):
         seed()
-    # yuki est traité en dernier : alice et mamadou, déjà créés, sont annulés avec la transaction.
+    # yuki est traité en dernier. alice et mamadou, déjà créés, sont annulés avec la
+    # transaction.
     assert not demo_users().exists()
     assert not Trip.objects.exists()

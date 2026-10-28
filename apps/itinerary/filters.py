@@ -1,8 +1,8 @@
-"""Filtres des destinations et activités.
+"""Filtres des destinations et des activités.
 
-Voyages et destinations sont filtrés par identifiant brut (NumberFilter) plutôt que par
-ModelChoiceFilter : celui-ci répondrait 400 pour un identifiant inconnu mais 200 pour
-celui d'un voyage d'autrui, ce qui révélerait son existence.
+Les voyages et les destinations sont filtrés par identifiant brut (NumberFilter) et
+pas avec ModelChoiceFilter. ModelChoiceFilter répondrait 400 pour un identifiant
+inconnu mais 200 pour le voyage de quelqu'un d'autre, ce qui révélerait qu'il existe.
 """
 
 import django_filters

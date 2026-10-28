@@ -8,7 +8,7 @@ on:
 permissions:
   contents: read
 
-# Un nouveau push sur la même branche annule l'exécution en cours.
+# Si on pousse à nouveau sur la même branche, l'exécution en cours est annulée.
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -32,9 +32,9 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     env:
-      # Clé jetable d'au moins 50 caractères (test_secret_key_comes_from_environment).
+      # Clé jetable d'au moins 50 caractères (voir test_secret_key_comes_from_environment).
       SECRET_KEY: ci-cle-secrete-jetable-pour-les-tests-uniquement-0123456789
-      # Superutilisateur du service : pytest crée et supprime test_travelhub.
+      # Superutilisateur du service, car pytest crée et supprime test_travelhub.
       DATABASE_URL: postgres://travelhub:travelhub@localhost:5432/travelhub
       ALLOWED_HOSTS: localhost
     steps:
@@ -90,7 +90,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # Même démarrage qu'en local : migrations, Gunicorn, puis /api/docs/ doit répondre.
+      # On démarre comme en local (migrations puis Gunicorn) et /api/docs/ doit répondre.
       - name: Démarrer docker compose
         run: |
           {

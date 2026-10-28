@@ -1,4 +1,4 @@
-"""GET /health/ : contrôle de santé de Docker (base de données et cache)."""
+"""Tests de GET /health/, le contrôle de santé de Docker (base de données et cache)."""
 
 import logging
 

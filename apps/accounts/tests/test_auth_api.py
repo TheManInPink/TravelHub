@@ -172,7 +172,7 @@ class TestMe:
 
 @pytest.mark.django_db
 def test_anonymous_requests_are_throttled(api_client, owner, monkeypatch):
-    # Les classes de throttling lisent leurs taux à l'import : on les remplace directement.
+    # Les classes de throttling lisent leurs taux à l'import, donc on les remplace directement.
     monkeypatch.setattr(AnonRateThrottle, "THROTTLE_RATES", {"anon": "2/minute"})
     credentials = {"username": "owner", "password": PASSWORD}
 

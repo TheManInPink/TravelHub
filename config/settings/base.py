@@ -1,8 +1,8 @@
 """
 Paramètres communs à tous les environnements de TravelHub.
 
-Les valeurs sensibles (clé secrète, accès à la base, hôtes autorisés) sont lues
-depuis les variables d'environnement ou le fichier .env, jamais écrites ici.
+Les valeurs sensibles (clé secrète, accès à la base, hôtes autorisés) ne sont jamais
+écrites ici. Elles sont lues dans les variables d'environnement ou dans le fichier .env.
 """
 
 from datetime import timedelta
@@ -57,7 +57,7 @@ LOCAL_APPS = [
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
 
 MIDDLEWARE = [
-    # En premier : l'identifiant de requête couvre aussi les redirections HTTPS.
+    # En premier, pour que les redirections HTTPS aient aussi un identifiant de requête.
     "apps.core.middleware.RequestIdMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
@@ -91,7 +91,7 @@ WSGI_APPLICATION = "config.wsgi.application"
 ASGI_APPLICATION = "config.asgi.application"
 
 
-# Base de données : PostgreSQL, décrite par DATABASE_URL
+# Base de données PostgreSQL, configurée par DATABASE_URL
 # (ex. postgres://travelhub:motdepasse@localhost:5432/travelhub)
 
 DATABASES = {"default": env.db("DATABASE_URL")}
@@ -127,14 +127,15 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 
-# CORS : seules les origines listées dans CORS_ALLOWED_ORIGINS sont acceptées.
+# CORS : on accepte seulement les origines de CORS_ALLOWED_ORIGINS.
 
 CORS_ALLOWED_ORIGINS = env("CORS_ALLOWED_ORIGINS")
 # Le front-end peut lire l'identifiant de requête (à citer en cas d'erreur).
 CORS_EXPOSE_HEADERS = ["X-Request-ID"]
 
 
-# Django REST Framework : tout est privé par défaut, chaque vue publique le déclare.
+# Django REST Framework. Tout est privé par défaut, et les vues publiques doivent
+# le déclarer.
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
@@ -163,7 +164,8 @@ REST_FRAMEWORK = {
 }
 
 
-# JWT (SimpleJWT) : jeton d'accès court, jeton de rafraîchissement à usage unique.
+# JWT (SimpleJWT). Le jeton d'accès dure peu de temps et le jeton de rafraîchissement
+# ne sert qu'une fois.
 
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=15),
@@ -187,11 +189,11 @@ SPECTACULAR_SETTINGS = {
     ),
     "VERSION": "1.0.0",
     "SERVE_INCLUDE_SCHEMA": False,
-    # Schémas distincts en lecture et en écriture : les champs calculés
+    # Schémas séparés pour la lecture et l'écriture, pour que les champs calculés
     # n'apparaissent pas dans les corps de requête.
     "COMPONENT_SPLIT_REQUEST": True,
     "SWAGGER_UI_SETTINGS": {"persistAuthorization": True},
-    # Deux champs « role » aux choix différents : on nomme chaque énumération.
+    # Il y a deux champs « role » avec des choix différents, donc on nomme chaque énumération.
     "ENUM_NAME_OVERRIDES": {
         "ParticipantRoleEnum": "apps.trips.models.ParticipantRole",
         "InvitableRoleEnum": "apps.trips.serializers.INVITABLE_ROLES",
@@ -204,10 +206,11 @@ SPECTACULAR_SETTINGS = {
 GRAPHENE = {
     "SCHEMA": "config.schema.schema",
     "TESTING_ENDPOINT": "/graphql/",
-    # Pas de DjangoDebugMiddleware (ajouté par défaut si DEBUG) : le schéma n'a pas de champ _debug.
+    # Pas de DjangoDebugMiddleware (ajouté par défaut si DEBUG), donc pas de champ _debug
+    # dans le schéma.
     "MIDDLEWARE": [],
 }
-# Profondeur maximale d'une requête : coupe les requêtes cycliques
+# Profondeur maximale d'une requête. Ça bloque les requêtes cycliques
 # (trip { destinations { trip { destinations … } } }).
 GRAPHQL_MAX_DEPTH = 6
 # L'interface GraphiQL et l'introspection du schéma ne sont ouvertes qu'en développement.
@@ -215,9 +218,9 @@ GRAPHQL_GRAPHIQL = DEBUG
 GRAPHQL_INTROSPECTION = DEBUG
 
 
-# Journaux : une ligne JSON par événement (apps.core.logs), sur la console et dans un
-# fichier rotatif (LOG_FILE, 10 Mo × 5 archives ; LOG_FILE vide : console seulement).
-# Chaque ligne porte le request_id de la requête en cours (RequestIdMiddleware).
+# Journaux en JSON, une ligne par événement (apps.core.logs). Ils vont sur la console
+# et dans un fichier rotatif (LOG_FILE, 10 Mo et 5 archives). Si LOG_FILE est vide,
+# on écrit seulement sur la console. Chaque ligne a le request_id de la requête en cours.
 
 LOG_LEVEL = env("LOG_LEVEL", default="INFO")
 LOG_FILE = env("LOG_FILE", default=str(BASE_DIR / "logs" / "travelhub.log"))
@@ -243,7 +246,7 @@ LOGGING = {
                     "maxBytes": 10 * 1024 * 1024,
                     "backupCount": 5,
                     "encoding": "utf-8",
-                    # Fichier ouvert au premier message seulement (collectstatic, check…).
+                    # Fichier ouvert seulement au premier message (collectstatic, check…).
                     "delay": True,
                     "formatter": "json",
                     "filters": ["request_id"],
@@ -255,9 +258,9 @@ LOGGING = {
     },
     "root": {"handlers": ["console", "file"] if LOG_FILE else ["console"], "level": LOG_LEVEL},
     "loggers": {
-        # Les gestionnaires par défaut de Django (texte, courriel aux ADMINS) sont retirés :
-        # tout remonte à la racine. django.request journalise les 4xx et les 500 (avec la
-        # trace), que le client ne voit jamais (apps.core.views.server_error).
+        # On retire les gestionnaires par défaut de Django (texte, courriel aux ADMINS) et
+        # tout remonte à la racine. django.request journalise les 4xx et les 500 avec la
+        # trace. Le client, lui, ne voit jamais cette trace (apps.core.views.server_error).
         "django": {
             "handlers": [],
             "level": env("DJANGO_LOG_LEVEL", default="INFO"),
@@ -265,7 +268,7 @@ LOGGING = {
         },
         # runserver : RequestIdMiddleware journalise déjà chaque requête.
         "django.server": {"handlers": [], "level": "WARNING", "propagate": True},
-        # Requêtes SQL (en DEBUG) trop bavardes pour la racine.
+        # Les requêtes SQL (en DEBUG) font trop de bruit pour la racine.
         "django.db.backends": {"level": "INFO"},
     },
 }

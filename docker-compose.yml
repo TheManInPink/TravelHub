@@ -1,6 +1,6 @@
 # TravelHub en conteneurs : docker compose up --build
 #   API : http://localhost:8000/api/docs/   pgAdmin : http://localhost:5050
-# Variables lues dans .env (le même fichier que pour le développement local).
+# Les variables sont lues dans .env, le même fichier qu'en développement local.
 
 services:
   web:
@@ -9,16 +9,16 @@ services:
     env_file: .env
     environment:
       DJANGO_SETTINGS_MODULE: config.settings.prod
-      # Remplace le DATABASE_URL de .env, qui vise le PostgreSQL de l'hôte.
+      # Remplace le DATABASE_URL de .env, qui pointe vers le PostgreSQL de l'hôte.
       DATABASE_URL: postgres://${POSTGRES_USER:-travelhub}:${POSTGRES_PASSWORD:?Définir POSTGRES_PASSWORD dans .env}@db:5432/${POSTGRES_DB:-travelhub}
-      # Accès local en HTTP, sans proxy HTTPS devant Gunicorn.
+      # En local on passe par HTTP, il n'y a pas de proxy HTTPS devant Gunicorn.
       SECURE_SSL_REDIRECT: "False"
       SECURE_HSTS_SECONDS: "0"
-    # Migrations appliquées à chaque démarrage, avant le serveur.
+    # Les migrations sont appliquées à chaque démarrage, avant de lancer le serveur.
     command: sh -c "python manage.py migrate --noinput && exec gunicorn config.wsgi"
     ports:
       - "${WEB_PORT:-8000}:8000"
-    # Journaux : docker compose logs web (JSON), et fichiers rotatifs conservés ici.
+    # Journaux visibles avec docker compose logs web (JSON). Les fichiers rotatifs sont gardés ici.
     volumes:
       - web-logs:/app/logs
     depends_on:
@@ -32,10 +32,10 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-travelhub}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Définir POSTGRES_PASSWORD dans .env}
       POSTGRES_DB: ${POSTGRES_DB:-travelhub}
-    # PostgreSQL 18 range ses données dans /var/lib/postgresql/18/docker : on monte le parent.
+    # PostgreSQL 18 met ses données dans /var/lib/postgresql/18/docker, donc on monte le parent.
     volumes:
       - postgres-data:/var/lib/postgresql
-    # Port non publié : le PostgreSQL local de l'hôte occupe déjà 5432.
+    # Port non publié, car le PostgreSQL de l'hôte utilise déjà 5432.
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
@@ -54,7 +54,7 @@ services:
         target: /pgadmin4/servers.json
     volumes:
       - pgadmin-data:/var/lib/pgadmin
-    # Accessible depuis cet ordinateur seulement.
+    # Accessible seulement depuis cet ordinateur.
     ports:
       - "127.0.0.1:${PGADMIN_PORT:-5050}:80"
     depends_on:
@@ -62,7 +62,7 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
-# Serveur « TravelHub » déjà déclaré dans pgAdmin au premier lancement.
+# Le serveur « TravelHub » est déjà déclaré dans pgAdmin au premier lancement.
 configs:
   pgadmin-servers:
     content: |

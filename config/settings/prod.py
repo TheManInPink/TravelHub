@@ -9,8 +9,9 @@ from .base import MIDDLEWARE, REST_FRAMEWORK, env
 
 DEBUG = False
 
-# Fichiers statiques servis par Gunicorn via WhiteNoise, juste après SecurityMiddleware :
-# noms hachés et versions compressées produits par collectstatic (voir Dockerfile).
+# Les fichiers statiques sont servis par Gunicorn avec WhiteNoise, placé juste après
+# SecurityMiddleware. collectstatic produit les noms hachés et les versions
+# compressées (voir Dockerfile).
 _after_security = MIDDLEWARE.index("django.middleware.security.SecurityMiddleware") + 1
 MIDDLEWARE = [
     *MIDDLEWARE[:_after_security],
@@ -38,13 +39,13 @@ CSRF_COOKIE_SECURE = True
 X_FRAME_OPTIONS = "DENY"
 CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", default=[])
 
-# JSON seulement : pas d'API navigable (formulaires HTML) en production. Nouveau
-# dictionnaire : celui de base.py est partagé avec les autres modules de paramètres.
+# Seulement du JSON en production, sans l'API navigable (formulaires HTML). On crée
+# un nouveau dictionnaire, car celui de base.py est partagé avec les autres modules.
 REST_FRAMEWORK = {
     **REST_FRAMEWORK,
     "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],
 }
 
-# Ni GraphiQL ni introspection : le schéma n'est pas publié en production.
+# Pas de GraphiQL ni d'introspection, le schéma n'est pas publié en production.
 GRAPHQL_GRAPHIQL = False
 GRAPHQL_INTROSPECTION = False

@@ -35,7 +35,7 @@ def url(name, destination):
 
 @pytest.fixture
 def trip(make_trip):
-    # Remplace la fixture globale : un voyage dans la fenêtre de 16 jours de prévision.
+    # Remplace la fixture globale par un voyage dans les 16 jours de prévision.
     return make_trip(start_date=TODAY, end_date=TODAY + timedelta(days=10), budget=Decimal(900))
 
 
@@ -269,7 +269,8 @@ class TestOverview:
 @pytest.mark.django_db
 class TestParallelCalls:
     def test_external_calls_run_concurrently(self, located, monkeypatch):
-        # Chaque appel attend l'autre : exécutés l'un après l'autre, la barrière expirerait.
+        # Chaque appel attend l'autre. S'ils étaient exécutés l'un après l'autre,
+        # la barrière expirerait.
         barrier = threading.Barrier(2, timeout=5)
         threads = set()
 

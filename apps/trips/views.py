@@ -172,13 +172,13 @@ OBJECT_ERRORS = {**COMMON_ERRORS, 404: NOT_FOUND}
 class TripViewSet(TripRolePermissionMixin, viewsets.ModelViewSet):
     """CRUD des voyages visibles par l'utilisateur connecté.
 
-    Le queryset ne contient que les voyages de l'utilisateur : un voyage d'autrui
-    donne 404 avant même la vérification des permissions objet.
+    Le queryset ne contient que les voyages de l'utilisateur. Le voyage de quelqu'un
+    d'autre donne donc un 404, avant même la vérification des permissions objet.
     """
 
     filterset_class = TripFilter
     search_fields = ["title", "description"]
-    # Pas de champ de relation ici : une jointure fausserait les Sum/Count de with_totals().
+    # Pas de champ de relation ici, car une jointure fausserait les Sum/Count de with_totals().
     ordering_fields = ["start_date", "title", "created_at"]
     ordering = ["start_date"]
 
@@ -208,7 +208,7 @@ class TripViewSet(TripRolePermissionMixin, viewsets.ModelViewSet):
         return TripSerializer
 
     def get_object_permission_class(self):
-        # participants : lecture par tout participant, ajout par le propriétaire seulement.
+        # Tous les participants peuvent lire la liste, mais seul le propriétaire peut ajouter.
         if self.action == "participants" and self.request.method not in SAFE_METHODS:
             return IsTripOwner
         return super().get_object_permission_class()
@@ -220,8 +220,8 @@ class TripViewSet(TripRolePermissionMixin, viewsets.ModelViewSet):
         self._save_and_reload(serializer)
 
     def _save_and_reload(self, serializer):
-        # L'instance sauvegardée n'a pas les annotations de with_totals() : on la relit
-        # depuis le queryset de la vue pour que la réponse contienne les totaux.
+        # L'instance enregistrée n'a pas les annotations de with_totals(). On la relit depuis
+        # le queryset de la vue pour que la réponse contienne les totaux.
         trip = serializer.save()
         serializer.instance = self.get_queryset().get(pk=trip.pk)
 

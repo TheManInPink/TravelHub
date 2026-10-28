@@ -2,10 +2,10 @@ from rest_framework.filters import OrderingFilter
 
 
 class StableOrderingFilter(OrderingFilter):
-    """OrderingFilter qui ajoute la clé primaire en dernier critère de tri.
+    """OrderingFilter qui ajoute la clé primaire comme dernier critère de tri.
 
-    Sans ce départage, deux voyages de même titre peuvent changer de page d'une
-    requête à l'autre : PostgreSQL ne garantit pas l'ordre des ex æquo.
+    Sans ça, deux voyages avec le même titre peuvent changer de page d'une requête
+    à l'autre, parce que PostgreSQL ne garantit pas l'ordre des ex æquo.
     """
 
     def get_ordering(self, request, queryset, view):

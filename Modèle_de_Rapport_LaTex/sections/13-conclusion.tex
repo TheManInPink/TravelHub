@@ -5,19 +5,16 @@
 
 \subsection{Bilan}
 
-Le back-end de TravelHub satisfait l'ensemble de l'énoncé. Le modèle relationnel combine des relations 1-N et une relation N-N porteuse d'attributs. Ses invariants sont garantis par PostgreSQL. Les mêmes fonctions sont offertes par une API REST documentée par OpenAPI et par une API GraphQL. Toutes deux partagent la logique métier, les permissions et la validation. Les deux services externes sont consommés avec délais, nouvel essai, cache et dégradation partielle. La sécurité suit l'OWASP API Security Top 10, et 724 tests automatisés couvrent 98\,\% du code.
+Le back-end de TravelHub répond à tout l'énoncé. Le modèle relationnel a des relations 1-N et une relation N-N avec ses propres attributs, et PostgreSQL vérifie les règles importantes. Les mêmes fonctions sont disponibles dans une API REST documentée avec OpenAPI et dans une API GraphQL. Les deux partagent la logique métier, les permissions et la validation. Les deux services externes sont appelés avec un délai, un nouvel essai, un cache et une dégradation partielle. Pour la sécurité, nous avons suivi l'OWASP API Security Top 10, et 724 tests automatisés couvrent 98\,\% du code.
 
-Trois choix ont structuré le travail. Le filtrage systématique par \code{visible_to()} règle le contrôle d'accès au niveau objet par construction, plutôt que vue par vue. La double validation, applicative puis en base, rend les erreurs explicites sans sacrifier la cohérence en cas d'accès concurrent. Enfin, des services métier partagés ont réduit le coût de la seconde API à la seule couche de présentation.
+Quelques choix nous ont beaucoup aidés. Comme toutes les requêtes partent de \code{visible_to()}, le contrôle d'accès au niveau objet est réglé une seule fois, et pas vue par vue. Valider à la fois dans l'application et dans la base nous donne des erreurs claires, tout en gardant les données cohérentes quand deux requêtes arrivent en même temps. Enfin, grâce aux services métier partagés, ajouter l'API GraphQL n'a demandé qu'une nouvelle couche de présentation.
 
 \subsection{Limites}
 
-\begin{itemize}
-  \item Aucun moteur de cache n'est configuré en production : Django utilise alors un cache en mémoire propre à chaque processus. Les réponses externes ne sont pas partagées entre les processus Gunicorn, et les compteurs de limites de requêtes non plus. Avec deux processus, la limite effective double.
-  \item Les prévisions se limitent aux 16 prochains jours, et Countries fournit les noms de pays en anglais seulement.
-  \item Les risques résiduels de la section~\ref{sec:securite} demeurent : énumération des courriels, largeur des requêtes GraphQL non bornée, documentation OpenAPI publique.
-  \item La pagination GraphQL par décalage se dégrade sur de très grandes listes ; une pagination par curseur serait plus robuste.
-\end{itemize}
+Notre travail a quand même des limites. En production, nous n'avons pas configuré de moteur de cache. Django utilise donc un cache en mémoire propre à chaque processus. Les réponses externes et les compteurs de limites de requêtes ne sont pas partagés entre les processus Gunicorn. Avec deux processus, la limite réelle est donc deux fois plus haute.
+
+Les prévisions météo ne vont pas au-delà de 16 jours, et Countries donne les noms de pays seulement en anglais. Les risques résiduels de la section~\ref{sec:securite} sont toujours là (on peut deviner des courriels, la largeur des requêtes GraphQL n'est pas limitée, la documentation OpenAPI est publique). Enfin, la pagination GraphQL par décalage devient lente sur de très grandes listes. Une pagination par curseur serait plus solide.
 
 \subsection{Pistes pour le TP2}
 
-Le front-end pourra s'appuyer directement sur l'existant. GraphQL alimentera les écrans riches, comme la vue d'un voyage avec météo et pays, en une requête. Il suffira d'ajouter son origine à \code{CORS_ALLOWED_ORIGINS}. Les codes d'erreur stables et le champ \code{details} permettront d'afficher les messages au bon champ de formulaire, et l'en-tête \code{X-Request-ID} de relier une erreur affichée à son journal. Côté serveur, un cache partagé comme Redis lèverait la principale limite relevée ci-dessus.
+Le front-end pourra utiliser directement ce que nous avons fait. GraphQL servira pour les écrans les plus chargés, comme la page d'un voyage avec la météo et le pays, en une seule requête. Il faudra seulement ajouter son origine à \code{CORS_ALLOWED_ORIGINS}. Avec les codes d'erreur stables et le champ \code{details}, on pourra afficher chaque message à côté du bon champ de formulaire. L'en-tête \code{X-Request-ID} permettra aussi de retrouver dans les journaux une erreur vue par l'utilisateur. Côté serveur, un cache partagé comme Redis réglerait la principale limite que nous avons relevée.

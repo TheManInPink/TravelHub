@@ -1,11 +1,13 @@
-"""Permissions objet fondées sur le rôle de l'utilisateur dans un voyage.
+"""Permissions objet basées sur le rôle de l'utilisateur dans un voyage.
 
-Ces classes ne contrôlent que l'accès à un objet déjà trouvé. Les vues filtrent
-d'abord leur queryset avec Trip.objects.visible_to() : un non-membre obtient donc
-404 (le voyage « n'existe pas » pour lui), un membre sans le bon rôle obtient 403.
+Ces classes vérifient seulement l'accès à un objet déjà trouvé. Les vues filtrent
+d'abord leur queryset avec Trip.objects.visible_to(). Un non-membre reçoit donc
+un 404, comme si le voyage n'existait pas, et un membre qui n'a pas le bon rôle
+reçoit un 403.
 
-Elles acceptent un Trip ou tout objet rattaché à un voyage (Destination via
-.trip, Activity via .destination.trip), pour servir aussi aux vues d'itinéraire.
+Elles acceptent un Trip ou un objet lié à un voyage (Destination par .trip,
+Activity par .destination.trip). On peut donc aussi s'en servir dans les vues
+d'itinéraire.
 """
 
 from rest_framework.permissions import BasePermission
@@ -41,7 +43,7 @@ class IsTripMember(BasePermission):
 
 
 class IsTripEditor(BasePermission):
-    """Propriétaire ou participant au rôle owner/editor : peut modifier le voyage."""
+    """Propriétaire ou participant owner/editor, qui peut donc modifier le voyage."""
 
     message = "Seuls le propriétaire et les éditeurs peuvent modifier ce voyage."
 
@@ -62,10 +64,10 @@ class IsTripOwner(BasePermission):
 
 
 class TripRolePermissionMixin:
-    """Pour un ViewSet : ajoute aux permissions par défaut la permission objet de l'action.
+    """Pour un ViewSet, ajoute la permission objet de l'action aux permissions par défaut.
 
-    object_permission_by_action associe une action à IsTripEditor ou IsTripOwner ;
-    les actions absentes (lectures) exigent IsTripMember.
+    object_permission_by_action associe une action à IsTripEditor ou IsTripOwner.
+    Les actions qui n'y sont pas (les lectures) demandent IsTripMember.
     """
 
     object_permission_by_action = {}

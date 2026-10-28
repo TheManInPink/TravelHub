@@ -1,7 +1,7 @@
-"""Types GraphQL des données des services externes (lecture seule).
+"""Types GraphQL pour les données des services externes (lecture seule).
 
-Ils exposent les dataclasses d'Open-Meteo et de Countries GraphQL telles que les
-services les renvoient : les resolvers par défaut lisent leurs attributs.
+Ils exposent directement les dataclasses renvoyées par les services Open-Meteo et
+Countries GraphQL. Les resolvers par défaut lisent leurs attributs.
 """
 
 import graphene
@@ -35,7 +35,7 @@ class DailyForecast(graphene.ObjectType):
 
 
 class Weather(graphene.ObjectType):
-    """Météo d'Open-Meteo : conditions actuelles et prévisions des jours du séjour."""
+    """Météo d'Open-Meteo, avec les conditions actuelles et les prévisions du séjour."""
 
     latitude = graphene.Float(required=True)
     longitude = graphene.Float(required=True)
@@ -76,7 +76,7 @@ OverviewSource = graphene.Enum(
 
 
 class SourceWarning(graphene.ObjectType):
-    """Source externe en échec dans une vue d'ensemble (dégradation partielle)."""
+    """Source externe qui a échoué dans une vue d'ensemble (dégradation partielle)."""
 
     source = graphene.Field(OverviewSource, required=True)
     code = graphene.String(

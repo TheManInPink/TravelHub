@@ -1,7 +1,8 @@
-"""Validation des entrées : toute donnée invalide donne un 400 lisible et n'écrit rien.
+"""Validation des entrées. Une donnée invalide doit donner un 400 lisible et ne rien écrire.
 
-Dates incohérentes ou hors du voyage, montants négatifs, longueurs, choix inconnus,
-formats invalides, paramètres de requête et corps mal formés.
+On teste les dates incohérentes ou hors du voyage, les montants négatifs, les longueurs,
+les choix inconnus, les formats invalides, les paramètres de requête et les corps mal
+formés.
 """
 
 import pytest

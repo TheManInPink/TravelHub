@@ -180,8 +180,8 @@ class TestRequestIdMiddleware:
         assert not [r for r in request_logs.records if r.name == "travelhub.request"]
 
     def test_logs_never_contain_tokens_or_passwords(self, api_client, make_user, json_console):
-        """Bout en bout : connexion, appels avec un jeton valide et invalide, puis lecture
-        des lignes JSON produites par le formateur de production."""
+        """Test de bout en bout. On se connecte, on appelle l'API avec un jeton valide puis
+        invalide, et on lit les lignes JSON écrites par le formateur de production."""
         make_user("carol")
         login = api_client.post(
             reverse("auth:token"), {"username": "carol", "password": "pw-Secret-123"}

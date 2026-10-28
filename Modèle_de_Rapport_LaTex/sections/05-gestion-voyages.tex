@@ -6,7 +6,7 @@
 
 \subsection{QuerySets réutilisables}
 
-Les requêtes fréquentes sont regroupées dans un \code{QuerySet} personnalisé, exposé par \code{Trip.objects} (\code{TripQuerySet.as_manager()}). Elles se combinent par chaînage.
+Nous avons regroupé les requêtes qui reviennent souvent dans un \code{QuerySet} personnalisé, accessible par \code{Trip.objects} (\code{TripQuerySet.as_manager()}). On peut les enchaîner.
 
 \begin{table}[H]
   \centering
@@ -17,21 +17,21 @@ Les requêtes fréquentes sont regroupées dans un \code{QuerySet} personnalisé
     \toprule
     \textbf{Méthode} & \textbf{Résultat} \\
     \midrule
-    \code{visible_to(user)} & Voyages dont l'utilisateur est propriétaire ou participant, quel que soit son rôle ; vide pour un anonyme \\
-    \code{editable_by(user)} & Voyages que l'utilisateur peut modifier : propriétaire, rôle \code{owner} ou \code{editor} \\
-    \code{upcoming()} & Voyages à venir, hors voyages annulés ou terminés, triés par date \\
-    \code{with_totals()} & Annotations \code{destination_count}, \code{activity_count} et \code{total_cost} \\
+    \code{visible_to(user)} & Voyages dont l'utilisateur est propriétaire ou participant, quel que soit son rôle (rien pour un anonyme) \\
+    \code{editable_by(user)} & Voyages que l'utilisateur peut modifier (propriétaire, rôle \code{owner} ou \code{editor}) \\
+    \code{upcoming()} & Voyages à venir, triés par date, sans les voyages annulés ou terminés \\
+    \code{with_totals()} & Ajoute \code{destination_count}, \code{activity_count} et \code{total_cost} \\
     \bottomrule
   \end{tabularx}
 \end{table}
 
-La méthode \code{visible_to()} est le point de départ de toute vue et de tout resolver GraphQL. Elle utilise une sous-requête \code{Exists()} plutôt qu'une jointure sur les participants. Une jointure dupliquerait chaque voyage autant de fois qu'il a de participants, et fausserait les sommes de \code{with_totals()}.
+Toutes les vues et tous les resolvers GraphQL commencent par \code{visible_to()}. Cette méthode utilise une sous-requête \code{Exists()} au lieu d'une jointure sur les participants. Avec une jointure, chaque voyage apparaîtrait une fois par participant, et les sommes de \code{with_totals()} seraient fausses.
 
 \begin{lstlisting}[language=Python,caption={Voyages visibles et totaux (\texttt{apps/trips/models.py}, extrait).},label={lst:visible}]
 def visible_to(self, user):
     if user is None or not user.is_authenticated:
         return self.none()
-    # Exists() plutôt qu'une jointure : aucun doublon, et with_totals() reste exact.
+    # Exists() au lieu d'une jointure, pour éviter les doublons et garder with_totals() exact.
     membership = TripParticipant.objects.filter(trip=OuterRef("pk"), user=user)
     return self.filter(Q(owner=user) | Exists(membership))
 
@@ -47,17 +47,17 @@ def with_totals(self):
     )
 \end{lstlisting}
 
-Le calcul de \code{total_cost} suit la chaîne voyage $\rightarrow$ destinations $\rightarrow$ activités. Chaque activité n'apparaît qu'une fois dans cette jointure : la somme est exacte. Le code interdit d'y ajouter un \code{Count()} sur une seconde relation, car cette jointure supplémentaire multiplierait les lignes. Pour la même raison, le tri de la liste des voyages ne propose aucun champ de relation.
+\code{total_cost} se calcule en suivant le chemin voyage $\rightarrow$ destinations $\rightarrow$ activités. Dans cette jointure, chaque activité n'apparaît qu'une fois, donc la somme est juste. Il ne faut pas ajouter un \code{Count()} sur une autre relation, parce que la jointure en plus multiplierait les lignes. C'est aussi pour ça que la liste des voyages ne permet pas de trier sur un champ de relation.
 
 \subsection{Relations inverses et préchargement}
 
-Les relations inverses du tableau~\ref{tab:relations} évitent d'écrire des requêtes explicites : \code{trip.memberships.select_related("user")} liste les participants, \code{destination.activities.all()} les activités d'une étape. Le filtrage à travers les relations reste possible dans les deux sens, par exemple \code{Activity.objects.filter(destination__trip=trip)}.
+Grâce aux relations inverses du tableau~\ref{tab:relations}, on n'a pas besoin d'écrire de requêtes à la main. Par exemple, \code{trip.memberships.select_related("user")} donne les participants et \code{destination.activities.all()} donne les activités d'une étape. On peut aussi filtrer à travers les relations, dans les deux sens, comme avec \code{Activity.objects.filter(destination__trip=trip)}.
 
-Le préchargement empêche le problème des \og{}N+1 requêtes\fg{}. La liste des voyages charge le propriétaire par \code{select_related("owner")}. Le détail d'un voyage précharge ses destinations, triées par position, puis leurs activités, à l'aide d'un objet \code{Prefetch}. Le nombre de requêtes SQL ne dépend donc pas du nombre de destinations.
+Le préchargement évite le problème des \og{}N+1 requêtes\fg{}. La liste des voyages charge le propriétaire avec \code{select_related("owner")}. Le détail d'un voyage précharge ses destinations, triées par position, puis leurs activités, avec un objet \code{Prefetch}. Le nombre de requêtes SQL reste donc le même, peu importe le nombre de destinations.
 
 \subsection{Agrégations}
 
-L'action \code{GET /api/trips/{id}/stats/} calcule le budget restant et la répartition des coûts par catégorie. Tous les calculs sont confiés à PostgreSQL : \code{aggregate()} pour les totaux, \code{values().annotate()} pour le regroupement.
+L'action \code{GET /api/trips/{id}/stats/} calcule le budget restant et les coûts par catégorie. Nous laissons PostgreSQL faire tous les calculs, avec \code{aggregate()} pour les totaux et \code{values().annotate()} pour le regroupement.
 
 \begin{lstlisting}[language=Python,caption={Statistiques par catégorie (\texttt{apps/trips/services.py}, extrait).},label={lst:stats}]
 activities = Activity.objects.filter(destination__trip=trip)
@@ -65,26 +65,27 @@ totals = activities.aggregate(count=Count("pk"), total=Sum("cost"), average=Avg(
 by_category = (
     activities.values("category")
     .annotate(count=Count("pk"), total_cost=Sum("cost"), average_cost=Avg("cost"))
-    # order_by() explicite : l'ordre par défaut d'Activity ajouterait date au GROUP BY.
+    # Tri explicite, sinon l'ordre par défaut d'Activity ajouterait date au GROUP BY.
     .order_by("-total_cost", "category")
 )
 \end{lstlisting}
 
-Le commentaire de l'extrait~\ref{lst:stats} signale un piège de l'ORM. Le tri par défaut d'\code{Activity} porte sur la date. S'il était conservé, Django ajouterait la date au \code{GROUP BY}, et chaque catégorie serait éclatée par jour.
+Le commentaire de l'extrait~\ref{lst:stats} parle d'un piège de l'ORM dans lequel nous sommes tombés. Par défaut, les activités sont triées par date. Si on garde ce tri, Django ajoute la date au \code{GROUP BY} et chaque catégorie est découpée jour par jour.
 
 \subsection{Services métier}
 
-\paragraph{Création.} Le service \code{create_trip()} valide le voyage (\code{full_clean()}), l'enregistre, puis inscrit le propriétaire comme participant \code{owner}, dans une seule transaction. Un signal \code{post_save} aurait produit le même effet, mais de façon implicite. Le service rend l'effet de bord visible à l'appel.
+\paragraph{Création.} Le service \code{create_trip()} valide le voyage avec \code{full_clean()} et l'enregistre. Il ajoute ensuite le propriétaire comme participant \code{owner}, dans la même transaction. Un signal \code{post_save} aurait pu faire la même chose, mais de façon cachée. Avec un service, on voit l'effet de bord directement à l'appel.
 
-\paragraph{Clonage.} Le service \code{clone_trip()} copie un voyage, ses destinations et leurs activités dans un nouveau brouillon. Il utilise \code{bulk_create()}, qui insère chaque niveau en une requête. Sous PostgreSQL, \code{bulk_create()} renvoie les clés primaires créées : les destinations copiées servent directement de parents aux activités copiées.
+\paragraph{Clonage.} Le service \code{clone_trip()} copie un voyage, ses destinations et leurs activités dans un nouveau brouillon. Il utilise \code{bulk_create()}, qui insère chaque niveau en une seule requête. Avec PostgreSQL, \code{bulk_create()} renvoie les clés primaires créées. Les destinations copiées peuvent donc servir tout de suite de parents aux activités copiées.
 
-\begin{lstlisting}[language=Python,caption={Clonage transactionnel (\texttt{apps/trips/services.py}, extrait).},label={lst:clone}]
+\begin{lstlisting}[language=Python,caption={Clonage dans une transaction (\texttt{apps/trips/services.py}, extrait).},label={lst:clone}]
 @transaction.atomic
 def clone_trip(source: Trip, *, owner, title=None) -> Trip:
     trip = create_trip(owner=owner, title=title or f"Copie de {source.title}", ...,
                        status=Trip.Status.DRAFT)
     destinations = list(source.destinations.prefetch_related("activities"))
-    # bulk_create renvoie les clés primaires sous PostgreSQL : les copies servent de parents.
+    # Avec PostgreSQL, bulk_create renvoie les clés primaires. On peut donc utiliser
+    # les copies comme parents.
     copies = Destination.objects.bulk_create(_copy(d, trip=trip) for d in destinations)
     Activity.objects.bulk_create(
         _copy(activity, destination=copy)
@@ -94,10 +95,10 @@ def clone_trip(source: Trip, *, owner, title=None) -> Trip:
     return trip
 \end{lstlisting}
 
-\paragraph{Participants.} Le propriétaire ajoute un participant par son courriel, avec le rôle \code{editor} ou \code{viewer}. Le rôle \code{owner} ne s'attribue pas à l'invitation : il se transfère ensuite par un changement de rôle. L'ancien propriétaire devient alors éditeur. Le propriétaire ne peut être ni retiré ni rétrogradé directement ; le voyage resterait sans propriétaire. Un ajout en double viole la contrainte \code{trips_participant_unique_trip_user}. Le service laisse la base trancher, ce qui élimine toute course entre deux ajouts simultanés.
+\paragraph{Participants.} Le propriétaire ajoute un participant avec son courriel et lui donne le rôle \code{editor} ou \code{viewer}. On ne peut pas donner le rôle \code{owner} au moment de l'invitation. Pour transférer la propriété, on change le rôle ensuite, et l'ancien propriétaire devient éditeur. On ne peut pas non plus retirer ou rétrograder directement le propriétaire, sinon le voyage n'en aurait plus. Si on ajoute deux fois la même personne, la contrainte \code{trips_participant_unique_trip_user} est violée. Nous laissons la base décider, comme ça deux ajouts en même temps ne posent pas de problème.
 
 \subsection{Administration et données de démonstration}
 
-L'administration de Django (\code{/admin/}) affiche les voyages avec leurs participants et leurs destinations en ligne (figure~\ref{fig:admin}). La commande \code{seed_demo} crée trois comptes et quatre voyages (Montréal, Paris, Tokyo, Dakar) qui couvrent chaque rôle. Elle est idempotente, et ses dates sont relatives au jour de l'exécution : un voyage terminé, un en cours, un planifié et un brouillon.
+L'administration de Django (\code{/admin/}) permet de gérer tous les modèles, regroupés par application (figure~\ref{fig:admin}). Dans la fiche d'un voyage, les participants et les destinations sont affichés en ligne. La commande \code{seed_demo} crée trois comptes et quatre voyages (Montréal, Paris, Tokyo, Dakar) qui couvrent tous les rôles. On peut la relancer sans créer de doublons. Ses dates dépendent du jour où on la lance, ce qui donne un voyage terminé, un en cours, un planifié et un brouillon.
 
-\capture{admin.png}{Administration Django : fiche d'un voyage, avec ses participants et ses destinations en ligne.}{fig:admin}
+\capture{admin.png}{Page d'accueil de l'administration Django. Les modèles sont regroupés par application (comptes, itinéraires, voyages, liste noire des jetons).}{fig:admin}

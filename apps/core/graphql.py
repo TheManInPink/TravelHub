@@ -1,9 +1,9 @@
-"""Outils communs aux schémas GraphQL des applications.
+"""Fonctions communes aux schémas GraphQL des applications.
 
 Les resolvers lèvent les mêmes exceptions que l'API REST (NotAuthenticated, NotFound,
-PermissionDenied, ValidationError de DRF, ValidationError de Django, erreurs des
-services externes) : TravelHubGraphQLView les traduit en erreurs GraphQL dont
-extensions porte le code et les détails de l'erreur REST équivalente.
+PermissionDenied, les ValidationError de DRF et de Django, les erreurs des services
+externes). TravelHubGraphQLView les transforme en erreurs GraphQL. Le code et les
+détails de l'erreur REST équivalente sont mis dans extensions.
 """
 
 import graphene
@@ -15,7 +15,10 @@ from apps.trips.models import Trip
 
 
 def choices_enum(choices, name, description):
-    """Enum GraphQL d'un TextChoices : valeurs en majuscules, libellé français en description."""
+    """Enum GraphQL tiré d'un TextChoices.
+
+    Les valeurs sont en majuscules et le libellé français sert de description.
+    """
     return graphene.Enum.from_enum(
         choices,
         name=name,
@@ -24,7 +27,7 @@ def choices_enum(choices, name, description):
 
 
 def authenticated_user(info):
-    """Utilisateur authentifié par le jeton JWT de la requête, sinon NotAuthenticated."""
+    """Renvoie l'utilisateur authentifié par le jeton JWT, ou lève NotAuthenticated."""
     user = info.context.user
     if not user.is_authenticated:
         raise NotAuthenticated()
@@ -32,40 +35,40 @@ def authenticated_user(info):
 
 
 def visible_trips(info):
-    """Point de départ de tout resolver : les voyages dont l'utilisateur est membre."""
+    """Les voyages dont l'utilisateur est membre. Tous les resolvers partent de là."""
     return Trip.objects.visible_to(authenticated_user(info))
 
 
 def get_or_not_found(queryset, message, **lookup):
-    """Objet du queryset ; NotFound s'il n'y est pas, comme le 404 de l'API REST."""
+    """Renvoie l'objet s'il est dans le queryset, sinon NotFound (comme le 404 REST)."""
     try:
         return queryset.get(**lookup)
-    except (ObjectDoesNotExist, ValueError, TypeError) as exc:  # ValueError : id non numérique
+    except (ObjectDoesNotExist, ValueError, TypeError) as exc:  # ValueError : id pas numérique
         raise NotFound(message) from exc
 
 
 def check_object_permission(info, permission_class, obj):
-    """Applique une permission objet de apps.core.permissions ; PermissionDenied sinon."""
+    """Vérifie une permission objet de apps.core.permissions (sinon PermissionDenied)."""
     permission = permission_class()
     if not permission.has_object_permission(info.context, None, obj):
         raise PermissionDenied(permission.message)
 
 
 def serializer_context(info):
-    """Contexte attendu par les serializers DRF : la requête porte l'utilisateur."""
+    """Contexte attendu par les serializers DRF (la requête contient l'utilisateur)."""
     return {"request": info.context}
 
 
 def save_serializer(serializer, **kwargs):
-    """Valide puis enregistre ; les erreurs deviennent une erreur GraphQL validation_error."""
+    """Valide puis enregistre. Une erreur donne une erreur GraphQL validation_error."""
     serializer.is_valid(raise_exception=True)
     return serializer.save(**kwargs)
 
 
 def selected_fields(info):
-    """Noms des champs demandés directement sous le champ en cours, fragments compris.
+    """Noms des champs demandés juste sous le champ courant (fragments compris).
 
-    Sert à ne précharger (prefetch_related) que les relations demandées.
+    On s'en sert pour ne précharger (prefetch_related) que les relations demandées.
     """
     names = set()
 

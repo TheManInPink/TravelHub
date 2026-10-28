@@ -5,7 +5,7 @@
 
 \subsection{Points d'accès}
 
-L'API REST est construite avec Django REST Framework~\cite{drf}. Les tableaux~\ref{tab:rest-auth} à~\ref{tab:rest-itinerary} recensent ses points d'accès. Tous exigent un jeton d'accès (\code{Authorization: Bearer <access>}), sauf l'inscription, la connexion, le rafraîchissement et la documentation.
+Nous avons construit l'API REST avec Django REST Framework~\cite{drf}. Les tableaux~\ref{tab:rest-auth} à~\ref{tab:rest-itinerary} listent ses points d'accès. Ils demandent tous un jeton d'accès (\code{Authorization: Bearer <access>}), sauf l'inscription, la connexion, le rafraîchissement et la documentation.
 
 \begin{table}[H]
   \centering
@@ -16,10 +16,10 @@ L'API REST est construite avec Django REST Framework~\cite{drf}. Les tableaux~\r
     \toprule
     \textbf{Méthode} & \textbf{Chemin} & \textbf{Rôle} \\
     \midrule
-    POST & \code{/api/auth/register/} & Inscription ; renvoie l'utilisateur et une paire de jetons \\
-    POST & \code{/api/auth/token/} & Connexion ; jeton d'accès (15 min) et de rafraîchissement (1 jour) \\
-    POST & \code{/api/auth/token/refresh/} & Nouveau jeton d'accès ; l'ancien jeton de rafraîchissement est révoqué \\
-    POST & \code{/api/auth/logout/} & Révocation de son propre jeton de rafraîchissement \\
+    POST & \code{/api/auth/register/} & Inscription, renvoie l'utilisateur et une paire de jetons \\
+    POST & \code{/api/auth/token/} & Connexion, donne un jeton d'accès (15 min) et un jeton de rafraîchissement (1 jour) \\
+    POST & \code{/api/auth/token/refresh/} & Nouveau jeton d'accès, l'ancien jeton de rafraîchissement est révoqué \\
+    POST & \code{/api/auth/logout/} & Révoque son propre jeton de rafraîchissement \\
     GET & \code{/api/auth/me/} & Profil de l'utilisateur connecté \\
     \bottomrule
   \end{tabularx}
@@ -34,12 +34,12 @@ L'API REST est construite avec Django REST Framework~\cite{drf}. Les tableaux~\r
     \toprule
     \textbf{Méthode} & \textbf{Chemin} & \textbf{Rôle} \\
     \midrule
-    GET, POST & \code{/api/trips/} & Mes voyages (paginés par 20) ; création \\
-    GET, PUT, PATCH, DELETE & \code{/api/trips/{id}/} & Détail avec destinations et activités ; modification ; suppression \\
+    GET, POST & \code{/api/trips/} & Mes voyages (20 par page) et création \\
+    GET, PUT, PATCH, DELETE & \code{/api/trips/{id}/} & Détail avec destinations et activités, modification, suppression \\
     GET & \code{/api/trips/{id}/stats/} & Coût total, budget restant, coûts par catégorie \\
-    POST & \code{/api/trips/{id}/clone/} & Copie du voyage en brouillon, en une transaction \\
-    GET, POST & \code{/api/trips/{id}/participants/} & Liste ; ajout par courriel \\
-    PATCH, DELETE & \code{/api/trips/{id}/participants/{user_id}/} & Changement de rôle ; retrait \\
+    POST & \code{/api/trips/{id}/clone/} & Copie du voyage en brouillon, dans une transaction \\
+    GET, POST & \code{/api/trips/{id}/participants/} & Liste et ajout par courriel \\
+    PATCH, DELETE & \code{/api/trips/{id}/participants/{user_id}/} & Changement de rôle et retrait \\
     \bottomrule
   \end{tabularx}
 \end{table}
@@ -53,28 +53,28 @@ L'API REST est construite avec Django REST Framework~\cite{drf}. Les tableaux~\r
     \toprule
     \textbf{Méthode} & \textbf{Chemin} & \textbf{Rôle} \\
     \midrule
-    GET, POST & \code{/api/destinations/} & Destinations de mes voyages ; création \\
-    GET, PUT, PATCH, DELETE & \code{/api/destinations/{id}/} & Détail ; modification ; suppression \\
+    GET, POST & \code{/api/destinations/} & Destinations de mes voyages et création \\
+    GET, PUT, PATCH, DELETE & \code{/api/destinations/{id}/} & Détail, modification, suppression \\
     GET & \code{/api/destinations/{id}/weather/} & Météo du séjour (Open-Meteo) \\
     GET & \code{/api/destinations/{id}/country/} & Fiche du pays (Countries) \\
-    GET & \code{/api/destinations/{id}/overview/} & Vue d'ensemble, avec dégradation partielle \\
-    GET, POST & \code{/api/activities/} & Activités de mes voyages ; création \\
-    GET, PUT, PATCH, DELETE & \code{/api/activities/{id}/} & Détail ; modification ; suppression \\
+    GET & \code{/api/destinations/{id}/overview/} & Vue d'ensemble avec dégradation partielle \\
+    GET, POST & \code{/api/activities/} & Activités de mes voyages et création \\
+    GET, PUT, PATCH, DELETE & \code{/api/activities/{id}/} & Détail, modification, suppression \\
     \bottomrule
   \end{tabularx}
 \end{table}
 
-S'y ajoutent \code{/api/schema/} (schéma OpenAPI), \code{/api/docs/} (Swagger UI), \code{/api/redoc/} (ReDoc), \code{/graphql/} et \code{/health/}.
+Il y a aussi \code{/api/schema/} (schéma OpenAPI), \code{/api/docs/} (Swagger UI), \code{/api/redoc/} (ReDoc), \code{/graphql/} et \code{/health/}.
 
 \subsection{Serializers}
 
-Les serializers convertissent les modèles en JSON et valident les entrées. Ils appliquent une liste blanche de champs. Les champs calculés ou sensibles sont en lecture seule : \code{owner}, \code{id}, horodatages et totaux. Un client ne peut donc pas s'attribuer un voyage en envoyant \code{"owner": 7}.
+Les serializers transforment les modèles en JSON et valident ce que le client envoie. Ils n'acceptent que les champs d'une liste blanche. Les champs calculés ou sensibles, comme \code{owner}, \code{id}, les horodatages et les totaux, sont en lecture seule. Un client ne peut donc pas se donner un voyage en envoyant \code{"owner": 7}.
 
-Trois variantes servent le voyage. \code{TripSerializer} sert à la liste, à la création et à la modification. \code{TripDetailSerializer} y ajoute les destinations et leurs activités, imbriquées en lecture seule. Des serializers sans modèle décrivent les réponses calculées, comme \code{TripStatsSerializer}. Le mixin \code{ModelCleanMixin}, présenté en section~\ref{sec:validation}, applique en plus \code{Model.clean()} et les contraintes du modèle.
+Pour le voyage, nous avons trois serializers. \code{TripSerializer} sert pour la liste, la création et la modification. \code{TripDetailSerializer} ajoute les destinations et leurs activités, imbriquées en lecture seule. Enfin, des serializers sans modèle décrivent les réponses calculées, comme \code{TripStatsSerializer}. Le mixin \code{ModelCleanMixin}, expliqué à la section~\ref{sec:validation}, applique en plus \code{Model.clean()} et les contraintes du modèle.
 
 \subsection{ViewSets et routage}
 
-Chaque ressource est un \code{ModelViewSet}, enregistré auprès d'un \code{DefaultRouter}. Le routeur génère les routes de liste et de détail. Les opérations hors CRUD sont des actions déclarées par \code{@action} : \code{stats}, \code{clone}, \code{participants}, \code{weather}, \code{country} et \code{overview}.
+Chaque ressource est un \code{ModelViewSet} enregistré dans un \code{DefaultRouter}, qui crée les routes de liste et de détail. Les opérations qui ne sont pas du CRUD sont des actions déclarées avec \code{@action} : \code{stats}, \code{clone}, \code{participants}, \code{weather}, \code{country} et \code{overview}.
 
 \begin{lstlisting}[language=Python,caption={Queryset et permissions du ViewSet des voyages (\texttt{apps/trips/views.py}, extrait).},label={lst:viewset}]
 class TripViewSet(TripRolePermissionMixin, viewsets.ModelViewSet):
@@ -98,11 +98,11 @@ class TripViewSet(TripRolePermissionMixin, viewsets.ModelViewSet):
         return queryset
 \end{lstlisting}
 
-Le dictionnaire \code{object_permission_by_action} associe chaque action à sa permission objet. Une action absente, en pratique une lecture, exige seulement d'être membre du voyage. Les règles d'accès se lisent ainsi en un coup d'\oe{}il.
+Le dictionnaire \code{object_permission_by_action} associe chaque action à sa permission objet. Si une action n'y est pas (en pratique, une lecture), il suffit d'être membre du voyage. On voit donc toutes les règles d'accès au même endroit.
 
 \subsection{Filtres, recherche, tri et pagination}
 
-Trois moteurs de filtrage sont actifs par défaut : \code{django-filter}, la recherche plein texte de DRF et un tri stable, qui départage toujours par identifiant. La pagination est fixée à 20 éléments par page.
+Trois mécanismes de filtrage sont actifs par défaut. Il y a \code{django-filter}, la recherche texte de DRF et un tri stable qui départage toujours par identifiant. Les listes sont paginées par 20.
 
 \begin{table}[H]
   \centering
@@ -120,11 +120,11 @@ Trois moteurs de filtrage sont actifs par défaut : \code{django-filter}, la rec
   \end{tabularx}
 \end{table}
 
-Les filtres \code{?trip=} et \code{?destination=} sont de simples filtres numériques appliqués au queryset déjà restreint. Un identifiant étranger donne une liste vide, et non une erreur : le filtre ne révèle pas l'existence des voyages des autres.
+Les filtres \code{?trip=} et \code{?destination=} sont de simples filtres sur un nombre, appliqués à un queryset déjà limité aux voyages de l'utilisateur. Avec l'identifiant du voyage de quelqu'un d'autre, on obtient une liste vide et pas une erreur. Le filtre ne permet donc pas de savoir si ce voyage existe.
 
 \subsection{Codes HTTP et format des erreurs}
 
-L'API emploie les codes HTTP selon leur sémantique (tableau~\ref{tab:codes}).
+L'API utilise les codes HTTP pour ce qu'ils veulent dire (tableau~\ref{tab:codes}).
 
 \begin{table}[H]
   \centering
@@ -135,11 +135,11 @@ L'API emploie les codes HTTP selon leur sémantique (tableau~\ref{tab:codes}).
     \toprule
     \textbf{Code} & \textbf{Code d'erreur} & \textbf{Situation} \\
     \midrule
-    200, 201, 204 & --- & Lecture ou modification, création, suppression \\
+    200, 201, 204 & (aucun) & Lecture ou modification, création, suppression \\
     400 & \code{validation_error}, \code{integrity_error} & Données invalides, contrainte violée \\
     401 & \code{not_authenticated}, \code{token_not_valid} & Jeton absent, invalide ou expiré \\
-    403 & \code{permission_denied} & Membre du voyage sans le rôle requis \\
-    404 & \code{not_found} & Ressource absente ou appartenant à autrui \\
+    403 & \code{permission_denied} & Membre du voyage qui n'a pas le bon rôle \\
+    404 & \code{not_found} & Ressource absente ou qui appartient à quelqu'un d'autre \\
     405, 415 & \code{method_not_allowed}, \code{unsupported_media_type} & Méthode ou type de contenu refusé \\
     429 & \code{throttled} & Limite de requêtes atteinte \\
     502, 503, 504 & \code{external_service_*} & Service externe illisible, indisponible ou trop lent \\
@@ -147,7 +147,7 @@ L'API emploie les codes HTTP selon leur sémantique (tableau~\ref{tab:codes}).
   \end{tabularx}
 \end{table}
 
-Toutes les erreurs partagent la même enveloppe. Le champ \code{code} est un identifiant stable, destiné au programme client. Le champ \code{message} s'adresse à l'humain. Le champ \code{details} donne les erreurs par champ.
+Toutes les erreurs ont la même enveloppe. Le champ \code{code} est un identifiant stable que le programme client peut tester. Le champ \code{message} est destiné à une personne, et \code{details} donne les erreurs champ par champ.
 
 \begin{lstlisting}[language=json,caption={Enveloppe d'erreur d'une validation.},label={lst:erreur}]
 {
@@ -159,10 +159,10 @@ Toutes les erreurs partagent la même enveloppe. Le champ \code{code} est un ide
 }
 \end{lstlisting}
 
-Le gestionnaire \code{apps.core.exceptions.exception_handler} produit cette forme. Il convertit aussi les exceptions qui, sans lui, donneraient une erreur 500 : \code{ValidationError} de Django, levée par les services, et \code{IntegrityError}, levée par PostgreSQL. Les URL inconnues et les erreurs inattendues hors DRF (\code{handler404}, \code{handler500}) renvoient la même enveloppe, sans page HTML ni trace de pile.
+C'est le gestionnaire \code{apps.core.exceptions.exception_handler} qui produit cette forme. Il convertit aussi deux exceptions qui, sans lui, donneraient une erreur 500 : la \code{ValidationError} de Django levée par les services et l'\code{IntegrityError} levée par PostgreSQL. Les URL inconnues et les erreurs inattendues en dehors de DRF (\code{handler404}, \code{handler500}) renvoient la même enveloppe, sans page HTML ni trace de pile.
 
 \subsection{Documentation OpenAPI}
 
-La bibliothèque drf-spectacular~\cite{spectacular} génère un schéma OpenAPI~3 à partir des ViewSets et des serializers. Chaque opération est annotée par \code{@extend_schema} : résumé en français, réponses d'erreur possibles et exemples de requête et de réponse. L'option \code{COMPONENT_SPLIT_REQUEST} sépare les schémas de lecture et d'écriture : les champs calculés n'apparaissent pas dans les corps de requête. Swagger UI (figure~\ref{fig:swagger}) permet de tester l'API après avoir collé un jeton dans \emph{Authorize}.
+drf-spectacular~\cite{spectacular} génère un schéma OpenAPI~3 à partir des ViewSets et des serializers. Nous avons annoté chaque opération avec \code{@extend_schema} pour ajouter un résumé en français, les réponses d'erreur possibles et des exemples. L'option \code{COMPONENT_SPLIT_REQUEST} sépare les schémas de lecture et d'écriture, pour que les champs calculés n'apparaissent pas dans les corps de requête. Dans Swagger UI (figure~\ref{fig:swagger}), on peut tester l'API après avoir collé un jeton avec le bouton \emph{Authorize}.
 
-\capture{swagger.png}{Swagger UI (\texttt{/api/docs/}) : opérations sur les voyages, regroupées par étiquette.}{fig:swagger}
+\capture{swagger.png}{Swagger UI (\texttt{/api/docs/}). En haut, la description de l'API et le bouton \emph{Authorize}. En dessous, les opérations sur les activités.}{fig:swagger}
