@@ -466,6 +466,8 @@ python manage.py check --deploy --settings=config.settings.prod
 
 La couverture (`.coveragerc`) mesure les branches de `apps/` et `config/`, sans compter les tests et les migrations. Le rapport HTML est dans `htmlcov/index.html`.
 
+Au dernier passage (29 octobre 2026), les 724 tests passent et la couverture totale est de **98 %** (2139 instructions et 242 branches mesurées). La CI échoue si elle descend sous 80 %.
+
 Fixtures communes (`conftest.py`) :
 
 - `api_client` (anonyme) et `client_for(user)`
