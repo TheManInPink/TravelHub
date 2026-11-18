@@ -1,3 +1,4 @@
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from apps.accounts.serializers import UserSummarySerializer
@@ -5,18 +6,21 @@ from apps.core.serializers import ModelCleanMixin
 from apps.itinerary.models import Activity
 from apps.itinerary.serializers import NestedDestinationSerializer
 
-from .models import Trip, TripParticipant
+from .models import ParticipantRole, Trip, TripParticipant
 from .services import create_trip
 
 
 class TripSerializer(ModelCleanMixin, serializers.ModelSerializer):
     """Voyage en liste, en création et en modification.
 
-    destination_count, activity_count et total_cost viennent de Trip.objects.with_totals().
-    Le queryset de la vue doit donc être annoté.
+    destination_count, activity_count et total_cost viennent de Trip.objects.with_totals(),
+    et my_role de with_role(). Le queryset de la vue doit donc être annoté.
     """
 
     owner = UserSummarySerializer(read_only=True)
+    my_role = serializers.SerializerMethodField(
+        help_text="Votre rôle dans ce voyage. Le front-end s'en sert pour masquer les boutons.",
+    )
     destination_count = serializers.IntegerField(read_only=True)
     activity_count = serializers.IntegerField(read_only=True)
     total_cost = serializers.DecimalField(
@@ -36,7 +40,9 @@ class TripSerializer(ModelCleanMixin, serializers.ModelSerializer):
             "end_date",
             "status",
             "budget",
+            "cover_image_url",
             "owner",
+            "my_role",
             "destination_count",
             "activity_count",
             "total_cost",
@@ -44,6 +50,14 @@ class TripSerializer(ModelCleanMixin, serializers.ModelSerializer):
             "updated_at",
         ]
         read_only_fields = ["created_at", "updated_at"]
+
+    @extend_schema_field(serializers.ChoiceField(choices=ParticipantRole.choices))
+    def get_my_role(self, trip):
+        if hasattr(trip, "my_role"):
+            return trip.my_role
+        # Voyage non annoté : on calcule le rôle avec une requête.
+        request = self.context.get("request")
+        return trip.role_of(getattr(request, "user", None))
 
     def validate(self, attrs):
         # En PATCH, on peut n'envoyer qu'une des deux dates. On complète avec la valeur actuelle.

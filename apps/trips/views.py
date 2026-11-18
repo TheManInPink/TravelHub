@@ -67,7 +67,12 @@ TRIP_RESPONSE_EXAMPLE = OpenApiExample(
         "end_date": "2027-04-15",
         "status": "planned",
         "budget": "4500.00",
+        "cover_image_url": (
+            "https://abcdefgh.supabase.co/storage/v1/object/public/travelhub-images/"
+            "trips/12/3f6c2a9e.webp"
+        ),
         "owner": {"id": 1, "username": "alice", "first_name": "Alice", "last_name": "Tremblay"},
+        "my_role": "owner",
         "destination_count": 3,
         "activity_count": 8,
         "total_cost": "612.50",
@@ -192,7 +197,9 @@ class TripViewSet(TripRolePermissionMixin, viewsets.ModelViewSet):
     def get_queryset(self):
         if getattr(self, "swagger_fake_view", False):
             return Trip.objects.none()
-        queryset = Trip.objects.visible_to(self.request.user).with_totals().select_related("owner")
+        user = self.request.user
+        queryset = Trip.objects.visible_to(user).with_totals().with_role(user)
+        queryset = queryset.select_related("owner")
         if self.action == "retrieve":
             queryset = queryset.prefetch_related(
                 Prefetch(
@@ -323,7 +330,9 @@ class TripViewSet(TripRolePermissionMixin, viewsets.ModelViewSet):
             PARTICIPANT_RESPONSE_EXAMPLE,
         ],
     )
-    @action(detail=True, methods=["get", "post"])
+    # La liste n'est pas paginée. Sans pagination_class=None, le schéma OpenAPI la
+    # décrirait comme une page {count, next, previous, results}.
+    @action(detail=True, methods=["get", "post"], pagination_class=None)
     def participants(self, request, pk=None):
         trip = self.get_object()
         if request.method == "GET":

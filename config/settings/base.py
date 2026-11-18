@@ -127,11 +127,29 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 
-# CORS : on accepte seulement les origines de CORS_ALLOWED_ORIGINS.
+# CORS : on accepte seulement les origines de CORS_ALLOWED_ORIGINS (le domaine Vercel en
+# production). Le front-end Next.js appelle Django depuis son serveur, et le CORS ne
+# s'applique qu'aux appels faits par un navigateur. Il reste une défense en profondeur.
 
 CORS_ALLOWED_ORIGINS = env("CORS_ALLOWED_ORIGINS")
-# Le front-end peut lire l'identifiant de requête (à citer en cas d'erreur).
-CORS_EXPOSE_HEADERS = ["X-Request-ID"]
+# Facultatif, pour les previews Vercel. Les regex sont séparées par « ; », car une regex
+# peut contenir une virgule.
+CORS_ALLOWED_ORIGIN_REGEXES = [
+    pattern.strip()
+    for pattern in env.str("CORS_ALLOWED_ORIGIN_REGEXES", default="").split(";")
+    if pattern.strip()
+]
+# Le front-end peut lire l'identifiant de requête (à citer en cas d'erreur) et le délai
+# d'attente après un 429.
+CORS_EXPOSE_HEADERS = ["X-Request-ID", "Retry-After"]
+# Pas de cookie ni d'en-tête d'authentification envoyé automatiquement par le navigateur.
+CORS_ALLOW_CREDENTIALS = False
+
+
+# Supabase Storage : si cette variable est définie, cover_image_url n'accepte que cet hôte
+# (ex. abcdefgh.supabase.co).
+
+SUPABASE_STORAGE_HOST = env.str("SUPABASE_STORAGE_HOST", default="")
 
 
 # Django REST Framework. Tout est privé par défaut, et les vues publiques doivent
@@ -158,6 +176,9 @@ REST_FRAMEWORK = {
         "anon": env("THROTTLE_ANON_RATE", default="100/hour"),
         "user": env("THROTTLE_USER_RATE", default="1000/hour"),
     },
+    # Nombre de proxys devant Gunicorn (1 sur Render). Le throttling prend alors l'adresse
+    # ajoutée par ce proxy à X-Forwarded-For, et pas une adresse inventée par le client.
+    "NUM_PROXIES": env.int("NUM_PROXIES", default=None),
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     # Enveloppe {"error": {"code", "message", "details"}} pour toutes les erreurs.
     "EXCEPTION_HANDLER": "apps.core.exceptions.exception_handler",

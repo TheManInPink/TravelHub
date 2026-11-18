@@ -73,6 +73,9 @@ class TripType(DjangoObjectType):
         required=True,
         description="Participants et leur rôle, propriétaire compris.",
     )
+    my_role = graphene.Field(
+        ParticipantRoleEnum, required=True, description="Votre rôle dans ce voyage."
+    )
     destination_count = graphene.Int(required=True)
     activity_count = graphene.Int(required=True)
     total_cost = graphene.Decimal(
@@ -90,6 +93,7 @@ class TripType(DjangoObjectType):
             "end_date",
             "status",
             "budget",
+            "cover_image_url",
             "owner",
             "destinations",
             "created_at",
@@ -104,8 +108,13 @@ class TripType(DjangoObjectType):
             return root.memberships.all()
         return root.memberships.select_related("user", "invited_by")
 
-    # Les totaux viennent de Trip.objects.with_totals(). Un voyage obtenu par une
-    # relation (destination.trip) n'est pas annoté, donc on calcule les totaux à part.
+    # Les totaux et le rôle viennent de Trip.objects.with_totals() et with_role(). Un voyage
+    # obtenu par une relation (destination.trip) n'est pas annoté, donc on les calcule à part.
+    def resolve_my_role(root, info):
+        if hasattr(root, "my_role"):
+            return root.my_role
+        return root.role_of(info.context.user)
+
     def resolve_destination_count(root, info):
         if hasattr(root, "destination_count"):
             return root.destination_count
@@ -126,7 +135,7 @@ class TripType(DjangoObjectType):
 def with_relations(trips, info):
     """Totaux, propriétaire et relations demandées, sans une requête par voyage."""
     fields = selected_fields(info)
-    trips = trips.with_totals().select_related("owner")
+    trips = trips.with_totals().with_role(info.context.user).select_related("owner")
     if "destinations" in fields:
         trips = trips.prefetch_related("destinations__activities")
     if "participants" in fields:
@@ -136,8 +145,9 @@ def with_relations(trips, info):
 
 
 def reload_trip(info, trip):
-    """Voyage relu avec ses totaux, après une création ou une modification."""
-    return visible_trips(info).with_totals().select_related("owner").get(pk=trip.pk)
+    """Voyage relu avec ses totaux et le rôle, après une création ou une modification."""
+    trips = visible_trips(info).with_totals().with_role(info.context.user)
+    return trips.select_related("owner").get(pk=trip.pk)
 
 
 def filtered_trips(info, status=None, start_after=None, search=None):
@@ -215,6 +225,7 @@ class TripCreateInput(graphene.InputObjectType):
     end_date = graphene.Date(required=True)
     status = TripStatusEnum(description="DRAFT par défaut.")
     budget = graphene.Decimal()
+    cover_image_url = graphene.String(description="Adresse https de l'image de couverture.")
 
 
 class TripUpdateInput(graphene.InputObjectType):
@@ -226,6 +237,9 @@ class TripUpdateInput(graphene.InputObjectType):
     end_date = graphene.Date()
     status = TripStatusEnum()
     budget = graphene.Decimal()
+    cover_image_url = graphene.String(
+        description="Adresse https de l'image de couverture, ou chaîne vide pour la retirer."
+    )
 
 
 class CreateTrip(graphene.Mutation):

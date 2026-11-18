@@ -25,7 +25,7 @@ C:\Python314\python.exe -m venv .venv
 python -m pip install --upgrade pip
 pip install -r requirements-dev.txt
 
-Copy-Item .env.example .env      # puis remplacer SECRET_KEY et le mot de passe de DATABASE_URL
+Copy-Item .env.example .env      # puis remplir SECRET_KEY, ALLOWED_HOSTS et DATABASE_URL (exemples en commentaire)
 .\scripts\db\create_database.ps1 # crée le rôle et la base de DATABASE_URL
 python manage.py migrate
 python manage.py createsuperuser
@@ -64,7 +64,7 @@ Le script fait une copie de `pg_hba.conf` et autorise pour un moment les connexi
 
 ## Docker
 
-Il faut Docker Desktop avec Compose 2.23 ou plus récent. Compose lit aussi le fichier `.env`, donc ajoutez-y `POSTGRES_PASSWORD` et `PGADMIN_DEFAULT_PASSWORD` (voir `.env.example`).
+Il faut Docker Desktop avec Compose 2.23 ou plus récent. Compose lit aussi le fichier `.env`, donc remplissez-y `ALLOWED_HOSTS`, `POSTGRES_PASSWORD` et `PGADMIN_DEFAULT_PASSWORD` (voir `.env.example`).
 
 ```powershell
 docker compose up --build        # web (Gunicorn), db (PostgreSQL 18), pgadmin
@@ -105,9 +105,12 @@ Les variables sont lues dans l'environnement, sinon dans `.env` (le modèle est 
 | `DATABASE_URL` | oui | | `postgres://utilisateur:motdepasse@hôte:5432/base`, remplacée par l'hôte `db` dans Docker |
 | `DEBUG` | | `False` (`True` en dev) | Ignorée en production (`config.settings.prod`) |
 | `ALLOWED_HOSTS` | en production | `localhost,127.0.0.1` en dev | Noms d'hôte acceptés, séparés par des virgules |
-| `CORS_ALLOWED_ORIGINS` | | aucune | Origines du front-end autorisées |
+| `CORS_ALLOWED_ORIGINS` | | aucune | Origines du front-end autorisées (le domaine Vercel en production) |
+| `CORS_ALLOWED_ORIGIN_REGEXES` | | aucune | Regex des previews Vercel, séparées par `;`. Chaque regex commence par `^` et finit par `$` |
+| `SUPABASE_STORAGE_HOST` | | aucun | Seul hôte accepté pour `cover_image_url` (ex. `<ref>.supabase.co`). Si la variable est vide, toute adresse https est acceptée |
 | `DB_CONN_MAX_AGE` | | `60` | Durée de vie des connexions PostgreSQL, en secondes |
 | `THROTTLE_ANON_RATE`, `THROTTLE_USER_RATE` | | `100/hour`, `1000/hour` | Limites de requêtes (REST et GraphQL) |
+| `NUM_PROXIES` | | aucun | Nombre de proxys devant Gunicorn (`1` sur Render). La limite de requêtes prend alors l'adresse ajoutée par le proxy à `X-Forwarded-For` |
 | `LOG_LEVEL` | | `INFO` | Niveau des journaux de l'application |
 | `DJANGO_LOG_LEVEL` | | `INFO` | Niveau des journaux de Django |
 | `LOG_FILE` | | `logs/travelhub.log` | Fichier rotatif. Si la valeur est vide, on écrit seulement sur la console |
@@ -118,6 +121,8 @@ Les variables sont lues dans l'environnement, sinon dans `.env` (le modèle est 
 | `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | Docker | `travelhub`, aucun, `travelhub` | Base du conteneur `db` (évitez `@ : /` dans le mot de passe) |
 | `PGADMIN_DEFAULT_EMAIL`, `PGADMIN_DEFAULT_PASSWORD` | Docker | `admin@example.com`, aucun | Compte pgAdmin |
 | `WEB_PORT`, `PGADMIN_PORT` | | `8000`, `5050` | Ports publiés par Docker |
+| `PORT` | | `8000` | Port d'écoute de Gunicorn, donné par Render. À ne pas définir pour Docker en local |
+| `GUNICORN_BIND` | | | Adresse d'écoute complète de Gunicorn, prioritaire sur `PORT` |
 | `WEB_CONCURRENCY` | | `2` | Nombre de processus Gunicorn |
 
 Il y a trois modules de paramètres :
@@ -169,7 +174,7 @@ L'application écrit une ligne JSON par événement (`apps/core/logs.py`). Les l
 | `django.request` | Requêtes en 4xx (WARNING) et erreurs 500 avec leur trace (ERROR). Le client reçoit seulement `internal_error` |
 | `gunicorn.error` | Démarrage de Gunicorn et de ses processus (Docker) |
 
-Chaque réponse a un en-tête `X-Request-ID` (`apps/core/middleware.py`). Le même identifiant se retrouve dans toutes les lignes de la requête, même celles écrites par les fils de la vue d'ensemble. Si le client ou un proxy envoie déjà un `X-Request-ID`, on le garde s'il est sûr (lettres, chiffres, `. _ -`, 64 caractères au plus). Sinon, on le remplace. Le front-end peut le lire (`CORS_EXPOSE_HEADERS`) et l'afficher avec un message d'erreur.
+Chaque réponse a un en-tête `X-Request-ID` (`apps/core/middleware.py`). Le même identifiant se retrouve dans toutes les lignes de la requête, même celles écrites par les fils de la vue d'ensemble. Si le client ou un proxy envoie déjà un `X-Request-ID`, on le garde s'il est sûr (lettres, chiffres, `. _ -`, 64 caractères au plus). Sinon, on le remplace. Le front-end peut le lire (`CORS_EXPOSE_HEADERS`, avec `Retry-After`) et l'afficher avec un message d'erreur.
 
 Aucun secret n'est journalisé. On n'écrit jamais les corps de requête, les en-têtes, la chaîne de requête ou les paramètres des appels externes. Par sécurité, le formateur masque aussi (`[masqué]`) les champs dont le nom fait penser à un secret (`password`, `token`, `access`, `refresh`, `authorization`, `cookie`…). Il masque aussi les JWT et les en-têtes `Bearer` trouvés dans un message ou une trace (voir `apps/core/tests/test_logging.py`).
 
@@ -299,6 +304,11 @@ Actions sur un voyage :
 
 On ne peut pas retirer ni rétrograder le propriétaire (400). Il doit d'abord donner le rôle `owner` à un autre participant, et il devient alors éditeur.
 
+Deux champs ont été ajoutés aux voyages pour le front-end du TP2 :
+
+- `my_role` (lecture seule) donne le rôle de l'utilisateur connecté dans le voyage : `owner`, `editor` ou `viewer`. L'interface s'en sert pour masquer les boutons, mais c'est toujours l'API qui décide. Le rôle est lu dans une sous-requête, donc la liste fait toujours deux requêtes SQL.
+- `cover_image_url` est l'adresse de l'image de couverture, envoyée dans Supabase Storage par le front-end. Elle doit commencer par `https://` et, si `SUPABASE_STORAGE_HOST` est défini, être sur cet hôte. Une chaîne vide retire l'image. La duplication d'un voyage ne copie pas l'image.
+
 ### Météo (Open-Meteo)
 
 `GET /api/destinations/{id}/weather/` est ouvert à tous les participants du voyage. La réponse donne les conditions actuelles (`temperature`, `wind_speed`, `precipitation`, `weather_code`). Pour chaque jour du séjour qui tombe dans les 16 jours de prévision, elle donne aussi `temperature_max`, `temperature_min`, `precipitation_sum`, `wind_speed_max` et `weather_code`. Chaque code météo WMO a une `description` en français. Les unités sont les °C, les km/h et les mm, et les heures sont celles de la destination (`timezone`).
@@ -382,6 +392,8 @@ Les règles sont les mêmes que dans l'API REST. Tous les resolvers partent de `
 
 `Destination.weather` et `Destination.countryInfo` appellent Open-Meteo et Countries GraphQL seulement si le client les demande. Si l'appel échoue, seul ce champ est vide. `destinationOverview` garde la même dégradation partielle que l'API REST (`warnings`).
 
+Le type `Trip` a aussi `myRole` (`OWNER`, `EDITOR` ou `VIEWER`) et `coverImageUrl`, comme l'API REST. `createTrip` et `updateTrip` acceptent `coverImageUrl`. `myRole` marche aussi pour un voyage atteint par `destination { trip }`.
+
 `myTrips` est paginé comme l'API REST. `limit` vaut 20 par défaut (100 au maximum) et `offset` permet de sauter des voyages. `myTripsCount` donne le total avec les mêmes filtres. `myTrips` et `trip` préchargent les destinations, les activités et les participants seulement s'ils sont demandés. Le nombre de requêtes SQL ne dépend donc pas du nombre de voyages.
 
 Le courriel d'un utilisateur n'est visible que par lui. Le mot de passe et les droits d'administration ne sont jamais exposés.
@@ -439,12 +451,12 @@ postman/           collection Postman v2.1 et environnement local
 | --- | --- | --- |
 | API1 Broken Object Level Authorization | Chaque vue, resolver et filtre part de `Trip.objects.visible_to(user)`. Un non-participant reçoit 404, jamais 403. Les filtres `?trip=` et `?destination=` sont des `NumberFilter`, ils ne révèlent donc pas si un objet existe. Le parent (`trip`, `destination`) est cherché parmi les objets visibles. | `apps/core/tests/test_object_level_authorization.py`. On teste A contre B sur chaque point d'accès REST et chaque opération GraphQL (non-participant, lecteur, anonyme) et on vérifie que la base n'a pas changé après un refus |
 | API2 Broken Authentication | Jeton d'accès JWT de 15 min. Rotation du refresh avec liste noire. On ne peut déconnecter que son propre jeton. Validateurs de mot de passe. `/graphql/` n'accepte jamais les cookies de session. | `test_security.py` (jeton falsifié, non signé, expiré, refresh utilisé comme accès), `apps/accounts/tests/` |
-| API3 Broken Object Property Level Authorization | Liste blanche des champs modifiables. `owner`, `id`, les horodatages et les totaux sont en lecture seule. Pas de `is_staff` ni de groupes à l'inscription. Le rôle `owner` ne se donne pas par invitation. En GraphQL, il n'y a aucun champ de mot de passe ou de droits, et le courriel n'est visible que par son titulaire. | `test_mass_assignment.py` |
+| API3 Broken Object Property Level Authorization | Liste blanche des champs modifiables. `owner`, `my_role`, `id`, les horodatages et les totaux sont en lecture seule. `cover_image_url` n'accepte que https et l'hôte Supabase. Pas de `is_staff` ni de groupes à l'inscription. Le rôle `owner` ne se donne pas par invitation. En GraphQL, il n'y a aucun champ de mot de passe ou de droits, et le courriel n'est visible que par son titulaire. | `test_mass_assignment.py` |
 | API4 Unrestricted Resource Consumption | 100 requêtes/h en anonyme et 1000/h par utilisateur, avec un quota partagé entre REST et GraphQL. Pagination par 20 (100 au plus en GraphQL). Profondeur GraphQL limitée à 6. Délai de 5 s, deux essais et cache pour les services externes. | `test_auth_api.py`, `test_graphql_view.py` |
 | API5 Broken Function Level Authorization | Permissions par rôle (`IsTripMember`, `IsTripEditor`, `IsTripOwner`). Un lecteur reçoit 403 pour toute écriture, et seul le propriétaire gère les participants. | Cas « lecteur » de `test_object_level_authorization.py`, `test_permissions.py` |
 | API6 Unrestricted Access to Sensitive Business Flows | L'inscription et la connexion sont soumises à la limite anonyme. La duplication de voyages est soumise à la limite par utilisateur. | `test_auth_api.py` |
 | API7 Server Side Request Forgery | Les URL d'Open-Meteo et de Countries sont des constantes. La ville est envoyée en paramètre de requête et le code pays (`^[A-Z]{2}$`) en variable GraphQL. Rien n'est concaténé. | `apps/integrations/tests/` |
-| API8 Security Misconfiguration | `check --deploy` ne donne aucun avertissement. HSTS, redirection HTTPS, cookies `Secure`, `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy` et COOP. CORS limité à `CORS_ALLOWED_ORIGINS`, sans identifiants. En production, seulement du JSON (pas d'API navigable), GraphiQL et introspection désactivés, et des 404/500 en JSON sans trace de pile (l'erreur est journalisée). Les journaux JSON ne contiennent ni jeton ni mot de passe, avec un masquage en plus par sécurité. | `test_security.py`, `test_input_validation.py`, `test_logging.py` |
+| API8 Security Misconfiguration | `check --deploy` ne donne aucun avertissement. HSTS, redirection HTTPS, cookies `Secure`, `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy` et COOP. CORS limité à `CORS_ALLOWED_ORIGINS` et aux regex ancrées des previews, sans identifiants. En production, seulement du JSON (pas d'API navigable), GraphiQL et introspection désactivés, et des 404/500 en JSON sans trace de pile (l'erreur est journalisée). Les journaux JSON ne contiennent ni jeton ni mot de passe, avec un masquage en plus par sécurité. | `test_security.py`, `test_input_validation.py`, `test_logging.py` |
 | API9 Improper Inventory Management | Une seule version de l'API, décrite en entier par OpenAPI (`/api/docs/`) et par la collection Postman. | `test_api_docs.py` |
 | API10 Unsafe Consumption of APIs | Les réponses externes sont validées puis converties en dataclasses. Une réponse inexploitable donne une 502, un service injoignable une 503 et un délai dépassé une 504. Seules les réponses exploitables vont dans le cache. | `test_open_meteo.py`, `test_countries.py`, `test_destination_overview.py` |
 
@@ -481,7 +493,7 @@ Fixtures communes (`conftest.py`) :
 | Domaine | Cas | Attendu | Tests pytest | Postman |
 | --- | --- | --- | --- | --- |
 | Auth | Sans jeton, jeton expiré, refresh révoqué après déconnexion | 401 | `test_auth_api.py`, `test_security.py::TestJwt` | Cas d'erreur (sauf le jeton expiré, qu'il faudrait signer avec la clé du serveur) |
-| Voyages | Création valide, fin avant début, titre vide, filtre par statut, tri | 201 / 400 / 200 | `test_trip_api.py`, `test_input_validation.py` | Trips, Cas d'erreur |
+| Voyages | Création valide, fin avant début, titre vide, filtre par statut, tri, image en http ou sur un autre hôte, `my_role` de chaque membre | 201 / 400 / 200 | `test_trip_api.py`, `test_input_validation.py` | Trips, Participants, Cas d'erreur |
 | Accès | B lit, modifie, supprime le voyage de A | 404 | `test_object_level_authorization.py` | Cas d'erreur |
 | Rôles | Un lecteur modifie, un éditeur supprime le voyage, un éditeur ajoute un participant | 403 | `test_trip_api.py`, `test_trip_actions.py` | Participants |
 | Destinations | Dates hors du voyage, ordre en double, destination d'un voyage tiers | 400 / 404 | `test_destination_api.py`, `test_input_validation.py` | Cas d'erreur |
@@ -505,12 +517,12 @@ La collection est dans `postman/TravelHub.postman_collection.json` (format v2.1)
 | Dossier | Contenu |
 | --- | --- |
 | Auth | Inscription d'Alice et de Bob, connexion (le script *Tests* de `/api/auth/token/` garde `access` et `refresh` dans l'environnement), rotation, profil, déconnexion |
-| Trips | CRUD (garde `trip_id`), recherche, filtre par statut, tri, statistiques, duplication |
+| Trips | CRUD (garde `trip_id`), `my_role` et `cover_image_url` à la création, recherche, filtre par statut, tri, statistiques, duplication |
 | Destinations, Activities | CRUD (garde `destination_id`), filtres dont la catégorie, statistiques après ajout |
 | Participants | Bob lecteur (403 en écriture), puis éditeur (403 pour supprimer le voyage ou ajouter un participant), puis retiré (404) |
 | Externes | Météo, pays et vue d'ensemble. Sans Internet, on accepte 502, 503 ou 504 |
 | GraphQL | `me`, `myTrips`, `trip`, mutations, `destinationOverview` |
-| Cas d'erreur | 401 (sans jeton, jeton invalide, refresh réutilisé ou révoqué), 400 (dates, titre vide, budget et coût négatifs, ordre en double…), 404 (accès de Bob, ville et code pays inconnus), 405, 415, affectation de masse, erreurs GraphQL (voyage tiers, sans jeton, validation, profondeur) |
+| Cas d'erreur | 401 (sans jeton, jeton invalide, refresh réutilisé ou révoqué), 400 (dates, titre vide, budget et coût négatifs, image de couverture en http, ordre en double…), 404 (accès de Bob, ville et code pays inconnus), 405, 415, affectation de masse, erreurs GraphQL (voyage tiers, sans jeton, validation, profondeur) |
 | Nettoyage | Suppression du voyage créé pendant l'exécution |
 
 Chaque exécution crée deux comptes uniques et utilise des dates calculées à partir du jour même. On peut donc la relancer sans rien changer. Elle envoie une dizaine de requêtes anonymes. Avec la limite par défaut de 100/h, il faut augmenter `THROTTLE_ANON_RATE` dans `.env` si on veut faire plus d'une dizaine d'exécutions par heure. En dehors du Runner, le script de la collection rafraîchit `access` dès qu'il expire.

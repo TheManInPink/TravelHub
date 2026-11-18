@@ -115,3 +115,36 @@ class TestWithTotals:
         totals = Trip.objects.visible_to(members["viewer"]).with_totals().get()
         assert totals.total_cost == Decimal("40.00")
         assert totals.activity_count == 1
+
+
+@pytest.mark.django_db
+class TestWithRole:
+    def test_role_of_each_member(self, trip, owner, members):
+        for user, role in ((owner, "owner"), (members["editor"], "editor")):
+            assert Trip.objects.with_role(user).get(pk=trip.pk).my_role == role
+        assert Trip.objects.with_role(members["stranger"]).get(pk=trip.pk).my_role is None
+
+    def test_anonymous_has_no_role(self, trip):
+        assert Trip.objects.with_role(AnonymousUser()).get(pk=trip.pk).my_role is None
+
+    def test_owner_without_membership_row_is_owner(self, owner):
+        orphan = Trip.objects.create(
+            owner=owner, title="Brut", start_date=date(2027, 1, 1), end_date=date(2027, 1, 2)
+        )
+        assert Trip.objects.with_role(owner).get(pk=orphan.pk).my_role == "owner"
+        assert orphan.role_of(owner) == "owner"
+
+    def test_combined_with_totals_is_not_inflated(
+        self, trip, members, make_destination, make_activity
+    ):
+        make_activity(destination=make_destination(), cost=Decimal("40.00"))
+        viewer = members["viewer"]
+        annotated = Trip.objects.visible_to(viewer).with_totals().with_role(viewer).get()
+        assert (annotated.my_role, annotated.total_cost) == ("viewer", Decimal("40.00"))
+
+    def test_role_of_without_annotation(self, trip, owner, members):
+        assert trip.role_of(owner) == "owner"
+        assert trip.role_of(members["viewer"]) == "viewer"
+        assert trip.role_of(members["stranger"]) is None
+        assert trip.role_of(AnonymousUser()) is None
+        assert trip.role_of(None) is None
