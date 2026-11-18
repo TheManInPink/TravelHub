@@ -635,7 +635,7 @@ Quatre réglages évitent la plupart des échecs dans Vitest :
 1. Une branche est poussée et une PR est ouverte.
 2. GitHub Actions lance trois jobs : « Lint et tests » (Django), « Image Docker » et le nouveau « Front-end » (lint, typecheck, test, build). Depuis Next.js 16, `next build` ne lance plus ESLint : le lint est une étape à part.
 3. Vercel publie une preview de la PR. Elle appelle Django de serveur à serveur : le CORS, appliqué seulement par les navigateurs, ne la concerne pas. Elle marche si DJANGO\_API\_URL est défini pour Preview et si l'hôte Render est dans ALLOWED\_HOSTS.
-4. Nous relisons la PR (prompt « Relecture de PR »), puis nous la fusionnons. La protection de `master` exige les trois jobs verts, même pour l'administrateur du dépôt.
+4. Nous relisons la PR (prompt « Relecture de PR »), puis nous la fusionnons. La protection de `master` exige les trois jobs verts et une approbation. Seul le propriétaire du dépôt peut passer outre.
 5. À la fusion, Vercel déploie la production et Render reconstruit l'image de l'API. `migrate` tourne au démarrage du conteneur, grâce au dockerCommand de render.yaml.
 
 ### 8.3 Ordre de déploiement
