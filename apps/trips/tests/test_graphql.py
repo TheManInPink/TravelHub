@@ -4,7 +4,9 @@ from datetime import date
 from decimal import Decimal
 
 import pytest
+from django.contrib.auth import get_user_model
 from django.db import connection
+from django.test import override_settings
 from django.test.utils import CaptureQueriesContext
 
 from apps.core.testing import graphql_codes, graphql_data
@@ -196,7 +198,7 @@ class TestMyTrips:
         """Pas de N+1. Les relations sont préchargées selon les champs demandés."""
         query = """
         query { myTrips {
-          title totalCost owner { username }
+          title totalCost myRole owner { username }
           destinations { city activities { name } }
           participants { role user { username } }
         } }
@@ -389,6 +391,96 @@ class TestUpdateTrip:
         assert error["extensions"]["code"] == "validation_error"
         assert error["message"].startswith("Des destinations de ce voyage sortent")
         assert list(error["extensions"]["details"]) == ["nonFieldErrors"]
+
+
+TRIP_ROLE = "query Trip($id: ID!) { trip(id: $id) { myRole coverImageUrl } }"
+DESTINATION_TRIP_ROLE = (
+    "query Destination($id: ID!) { destination(id: $id) { trip { id myRole } } }"
+)
+UPDATE_COVER = """
+mutation Update($id: ID!, $input: TripUpdateInput!) {
+  updateTrip(id: $id, input: $input) { trip { coverImageUrl myRole } }
+}
+"""
+CREATE_TRIP_ROLE = """
+mutation Create($input: TripCreateInput!) {
+  createTrip(input: $input) { trip { myRole } }
+}
+"""
+STORAGE_HOST = "abcdefgh.supabase.co"
+COVER_URL = f"https://{STORAGE_HOST}/storage/v1/object/public/travelhub-images/trips/1/a.webp"
+
+
+@pytest.mark.django_db
+class TestMyRoleAndCoverImage:
+    def test_trip_gives_the_role_of_each_member(self, graphql, owner, members, trip):
+        for user, role in (
+            (owner, "OWNER"),
+            (members["editor"], "EDITOR"),
+            (members["viewer"], "VIEWER"),
+        ):
+            data = graphql_data(graphql(TRIP_ROLE, variables={"id": trip.pk}, user=user))
+            assert data["trip"] == {"myRole": role, "coverImageUrl": ""}
+
+    def test_my_trips_gives_the_role(self, graphql, members, trip):
+        data = graphql_data(graphql("query { myTrips { myRole } }", user=members["viewer"]))
+
+        assert data["myTrips"] == [{"myRole": "VIEWER"}]
+
+    def test_role_of_a_trip_reached_through_a_destination(self, graphql, members, destination):
+        # destination.trip n'est pas annoté : le rôle est calculé par Trip.role_of().
+        for member, role in (("editor", "EDITOR"), ("viewer", "VIEWER")):
+            response = graphql(
+                DESTINATION_TRIP_ROLE, variables={"id": destination.pk}, user=members[member]
+            )
+            assert graphql_data(response)["destination"]["trip"]["myRole"] == role
+
+    def test_demo_roles_on_automne_a_paris(self, graphql, demo_data):
+        trip = Trip.objects.get(title="Automne à Paris")
+        destination = trip.destinations.first()
+        users = get_user_model().objects.in_bulk(["alice", "yuki"], field_name="username")
+
+        for username, role in (("alice", "EDITOR"), ("yuki", "VIEWER")):
+            user = users[username]
+            by_trip = graphql_data(graphql(TRIP_ROLE, variables={"id": trip.pk}, user=user))
+            by_destination = graphql_data(
+                graphql(DESTINATION_TRIP_ROLE, variables={"id": destination.pk}, user=user)
+            )
+            assert by_trip["trip"]["myRole"] == role
+            assert by_destination["destination"]["trip"]["myRole"] == role
+
+    @override_settings(SUPABASE_STORAGE_HOST=STORAGE_HOST)
+    def test_editor_sets_the_cover_image(self, graphql, members, trip):
+        variables = {"id": trip.pk, "input": {"coverImageUrl": COVER_URL}}
+
+        response = graphql(UPDATE_COVER, variables=variables, user=members["editor"])
+
+        assert graphql_data(response)["updateTrip"]["trip"] == {
+            "coverImageUrl": COVER_URL,
+            "myRole": "EDITOR",
+        }
+        trip.refresh_from_db()
+        assert trip.cover_image_url == COVER_URL
+
+    @override_settings(SUPABASE_STORAGE_HOST=STORAGE_HOST)
+    def test_cover_image_on_another_host_is_refused(self, graphql, owner, trip):
+        variables = {"id": trip.pk, "input": {"coverImageUrl": "https://evil.example/a.webp"}}
+
+        error = only_error(graphql(UPDATE_COVER, variables=variables, user=owner))
+
+        assert error["extensions"]["code"] == "validation_error"
+        assert error["extensions"]["details"] == {
+            "coverImageUrl": [f"L'image doit être hébergée sur {STORAGE_HOST}."]
+        }
+
+    def test_create_trip_gives_the_owner_role(self, graphql, owner):
+        variables = {
+            "input": {"title": "Lisbonne", "startDate": "2027-09-01", "endDate": "2027-09-05"}
+        }
+
+        data = graphql_data(graphql(CREATE_TRIP_ROLE, variables=variables, user=owner))
+
+        assert data["createTrip"]["trip"]["myRole"] == "OWNER"
 
 
 @pytest.mark.django_db

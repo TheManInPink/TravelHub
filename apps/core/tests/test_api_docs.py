@@ -24,6 +24,24 @@ class TestDocumentation:
         patch = paths["/api/trips/{id}/"]["patch"]
         assert {"200", "400", "401", "403", "404"} <= set(patch["responses"])
 
+    def test_participant_list_is_documented_as_a_plain_list(self, api_client):
+        paths = api_client.get(reverse("schema"), {"format": "json"}).json()["paths"]
+        response = paths["/api/trips/{id}/participants/"]["get"]["responses"]["200"]
+
+        assert response["content"]["application/json"]["schema"] == {
+            "type": "array",
+            "items": {"$ref": "#/components/schemas/Participant"},
+        }
+
+    def test_trip_documents_cover_image_and_read_only_role(self, api_client):
+        schemas = api_client.get(reverse("schema"), {"format": "json"}).json()["components"]
+        trip, trip_request = schemas["schemas"]["Trip"], schemas["schemas"]["TripRequest"]
+
+        assert trip["properties"]["my_role"]["readOnly"] is True
+        assert "my_role" in trip["required"]
+        assert "my_role" not in trip_request["properties"]
+        assert "cover_image_url" in trip_request["properties"]
+
     @pytest.mark.parametrize("name", ["swagger-ui", "redoc"])
     def test_ui_pages_are_public(self, api_client, name):
         assert api_client.get(reverse(name)).status_code == 200

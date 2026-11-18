@@ -83,6 +83,7 @@ def test_trip_change_page_shows_inlines_and_readonly_timestamps(admin_client, de
     assert response.status_code == 200
     content = response.content.decode()
     assert 'name="created_at"' not in content
+    assert 'name="cover_image_url"' in content
     assert "Dakar" in content
     assert len(response.context["inline_admin_formsets"]) == 2
 

@@ -1,10 +1,14 @@
 from datetime import date
 from decimal import Decimal
+from types import SimpleNamespace
 
 import pytest
+from django.contrib.auth import get_user_model
+from django.test import override_settings
 from django.urls import reverse
 
 from apps.trips.models import Trip, TripParticipant
+from apps.trips.serializers import TripSerializer
 
 Role = TripParticipant.Role
 
@@ -297,3 +301,158 @@ class TestFilteringOrderingPagination:
         assert len(first["results"]) == 20
         assert len(second["results"]) == 1
         assert second["next"] is None
+
+
+STORAGE_HOST = "abcdefgh.supabase.co"
+COVER_URL = f"https://{STORAGE_HOST}/storage/v1/object/public/travelhub-images/trips/1/a.webp"
+
+
+@pytest.mark.django_db
+class TestCoverImageUrl:
+    """cover_image_url : https seulement, et sur SUPABASE_STORAGE_HOST s'il est défini."""
+
+    def cover_error(self, response):
+        assert response.status_code == 400
+        return response.data["error"]["details"]["cover_image_url"]
+
+    def test_empty_by_default(self, client_for, owner, trip):
+        assert client_for(owner).get(detail_url(trip)).data["cover_image_url"] == ""
+
+    @override_settings(SUPABASE_STORAGE_HOST=STORAGE_HOST)
+    def test_accepts_https_url_on_storage_host(self, client_for, members, trip):
+        response = client_for(members["editor"]).patch(
+            detail_url(trip), {"cover_image_url": COVER_URL}
+        )
+
+        assert response.status_code == 200
+        assert response.data["cover_image_url"] == COVER_URL
+        trip.refresh_from_db()
+        assert trip.cover_image_url == COVER_URL
+
+    @override_settings(SUPABASE_STORAGE_HOST="")
+    def test_any_https_host_without_storage_host(self, client_for, owner):
+        url = "https://images.example.org/japon.jpg"
+
+        response = client_for(owner).post(LIST_URL, {**PAYLOAD, "cover_image_url": url})
+
+        assert response.status_code == 201
+        assert response.data["cover_image_url"] == url
+
+    @override_settings(SUPABASE_STORAGE_HOST=STORAGE_HOST)
+    def test_refuses_http(self, client_for, owner, trip):
+        http_url = COVER_URL.replace("https://", "http://", 1)
+
+        response = client_for(owner).patch(detail_url(trip), {"cover_image_url": http_url})
+
+        assert self.cover_error(response) == ["L'adresse de l'image doit commencer par https://."]
+
+    @pytest.mark.parametrize(
+        "url",
+        [
+            "https://evil.example/a.webp",
+            f"https://{STORAGE_HOST}.evil.example/a.webp",
+            f"https://{STORAGE_HOST}@evil.example/a.webp",
+        ],
+    )
+    @override_settings(SUPABASE_STORAGE_HOST=STORAGE_HOST)
+    def test_refuses_other_hosts(self, client_for, owner, trip, url):
+        response = client_for(owner).patch(detail_url(trip), {"cover_image_url": url})
+
+        assert self.cover_error(response) == [f"L'image doit être hébergée sur {STORAGE_HOST}."]
+        trip.refresh_from_db()
+        assert trip.cover_image_url == ""
+
+    def test_malformed_url_gives_a_single_error(self, client_for, owner, trip):
+        response = client_for(owner).patch(detail_url(trip), {"cover_image_url": "pas une adresse"})
+
+        assert len(self.cover_error(response)) == 1
+
+    @override_settings(SUPABASE_STORAGE_HOST=STORAGE_HOST)
+    def test_refuses_more_than_500_characters(self, client_for, owner, trip):
+        url = f"https://{STORAGE_HOST}/" + "a" * 480 + ".webp"
+
+        response = client_for(owner).patch(detail_url(trip), {"cover_image_url": url})
+
+        assert response.status_code == 400
+
+    @override_settings(SUPABASE_STORAGE_HOST=STORAGE_HOST)
+    def test_empty_string_removes_the_image(self, client_for, owner, make_trip):
+        trip = make_trip(cover_image_url=COVER_URL)
+
+        response = client_for(owner).patch(detail_url(trip), {"cover_image_url": ""})
+
+        assert response.status_code == 200
+        trip.refresh_from_db()
+        assert trip.cover_image_url == ""
+
+    @override_settings(SUPABASE_STORAGE_HOST=STORAGE_HOST)
+    def test_viewer_cannot_change_the_image(self, client_for, members, trip):
+        response = client_for(members["viewer"]).patch(
+            detail_url(trip), {"cover_image_url": COVER_URL}
+        )
+
+        assert response.status_code == 403
+
+    @override_settings(SUPABASE_STORAGE_HOST=STORAGE_HOST)
+    def test_clone_does_not_share_the_image(self, client_for, owner, make_trip):
+        # L'image appartient au voyage d'origine. Quand on la remplace, l'ancien fichier
+        # est supprimé du bucket. La copie ne doit donc pas pointer vers lui.
+        trip = make_trip(cover_image_url=COVER_URL)
+
+        response = client_for(owner).post(reverse("trip-clone", args=[trip.pk]))
+
+        assert response.status_code == 201
+        assert response.data["cover_image_url"] == ""
+
+
+@pytest.mark.django_db
+class TestMyRole:
+    def test_list_gives_the_role_of_each_member(self, client_for, owner, trip, members):
+        for user, role in (
+            (owner, "owner"),
+            (members["editor"], "editor"),
+            (members["viewer"], "viewer"),
+        ):
+            [item] = client_for(user).get(LIST_URL).data["results"]
+            assert item["my_role"] == role
+
+    def test_detail_create_and_update_include_the_role(self, client_for, owner, trip, members):
+        assert client_for(members["viewer"]).get(detail_url(trip)).data["my_role"] == "viewer"
+        assert client_for(owner).post(LIST_URL, PAYLOAD).data["my_role"] == "owner"
+        patched = client_for(members["editor"]).patch(detail_url(trip), {"title": "Japon"})
+        assert patched.data["my_role"] == "editor"
+
+    def test_role_follows_an_ownership_transfer(self, client_for, owner, trip, members):
+        editor = members["editor"]
+        url = reverse("trip-participant-detail", args=[trip.pk, editor.pk])
+        assert client_for(owner).patch(url, {"role": "owner"}).status_code == 200
+
+        assert client_for(editor).get(detail_url(trip)).data["my_role"] == "owner"
+        assert client_for(owner).get(detail_url(trip)).data["my_role"] == "editor"
+
+    def test_list_query_count_is_unchanged_for_a_participant(
+        self, client_for, members, make_trip, django_assert_max_num_queries
+    ):
+        for i in range(5):
+            trip = make_trip(title=f"Voyage {i}")
+            TripParticipant.objects.create(trip=trip, user=members["viewer"])
+        # Comptage et page, comme pour le propriétaire : le rôle vient d'une sous-requête.
+        with django_assert_max_num_queries(2):
+            response = client_for(members["viewer"]).get(LIST_URL)
+        assert {item["my_role"] for item in response.data["results"]} == {"viewer"}
+
+    def test_serializer_computes_the_role_of_a_trip_without_annotation(self, trip, members):
+        def role_for(user):
+            context = {"request": SimpleNamespace(user=user)}
+            return TripSerializer(trip, context=context).data["my_role"]
+
+        assert role_for(members["viewer"]) == "viewer"
+        assert role_for(members["stranger"]) is None
+        assert TripSerializer(trip).data["my_role"] is None  # sans requête dans le contexte
+
+    def test_demo_roles_on_automne_a_paris(self, client_for, demo_data):
+        trip = Trip.objects.get(title="Automne à Paris")
+        users = get_user_model().objects.in_bulk(["alice", "yuki"], field_name="username")
+
+        assert client_for(users["alice"]).get(detail_url(trip)).data["my_role"] == "editor"
+        assert client_for(users["yuki"]).get(detail_url(trip)).data["my_role"] == "viewer"

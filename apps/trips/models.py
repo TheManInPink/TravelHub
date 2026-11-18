@@ -1,12 +1,49 @@
+from urllib.parse import urlsplit
+
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.core.validators import MinValueValidator
+from django.core.validators import MinValueValidator, URLValidator
 from django.db import models
-from django.db.models import Count, DecimalField, Exists, F, OuterRef, Q, Sum, Value
+from django.db.models import (
+    Case,
+    CharField,
+    Count,
+    DecimalField,
+    Exists,
+    F,
+    OuterRef,
+    Q,
+    Subquery,
+    Sum,
+    Value,
+    When,
+)
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 
 from apps.core.models import TimeStampedModel
+
+
+def validate_cover_image_url(value):
+    """L'image de couverture doit être en https, et sur SUPABASE_STORAGE_HOST s'il est défini.
+
+    Une URL mal formée est déjà refusée par le validateur de URLField. On ne répète donc
+    pas l'erreur ici.
+    """
+    try:
+        URLValidator()(value)
+    except ValidationError:
+        return
+    parts = urlsplit(value)
+    if parts.scheme.lower() != "https":
+        raise ValidationError(
+            "L'adresse de l'image doit commencer par https://.", code="https_required"
+        )
+    expected_host = settings.SUPABASE_STORAGE_HOST
+    if expected_host and parts.hostname != expected_host.lower():
+        raise ValidationError(
+            f"L'image doit être hébergée sur {expected_host}.", code="invalid_host"
+        )
 
 
 # Les choix sont définis au niveau du module. La classe Meta ne voit pas les attributs
@@ -46,6 +83,25 @@ class TripQuerySet(models.QuerySet):
             role__in=TripParticipant.EDITOR_ROLES,
         )
         return self.filter(Q(owner=user) | Exists(membership))
+
+    def with_role(self, user):
+        """Ajoute my_role, le rôle de user dans chaque voyage (owner, editor ou viewer).
+
+        Le rôle est lu dans une sous-requête. La liste garde donc le même nombre de requêtes,
+        et le Sum de with_totals() n'est pas faussé par une jointure de plus.
+        """
+        if user is None or not user.is_authenticated:
+            return self.annotate(my_role=Value(None, output_field=CharField()))
+        membership_role = TripParticipant.objects.filter(trip=OuterRef("pk"), user=user).values(
+            "role"
+        )[:1]
+        return self.annotate(
+            my_role=Case(
+                When(owner=user, then=Value(ParticipantRole.OWNER.value)),
+                default=Subquery(membership_role),
+                output_field=CharField(),
+            )
+        )
 
     def upcoming(self):
         """Voyages qui commencent aujourd'hui ou plus tard, hors voyages annulés ou terminés."""
@@ -98,6 +154,14 @@ class Trip(TimeStampedModel):
         blank=True,
         validators=[MinValueValidator(0, "Le budget ne peut pas être négatif.")],
     )
+    cover_image_url = models.URLField(
+        "image de couverture",
+        max_length=500,
+        blank=True,
+        default="",
+        validators=[validate_cover_image_url],
+        help_text="Adresse https publique de l'image (Supabase Storage). Vide si aucune image.",
+    )
     participants = models.ManyToManyField(
         settings.AUTH_USER_MODEL,
         through="TripParticipant",
@@ -137,6 +201,18 @@ class Trip(TimeStampedModel):
 
     def __str__(self):
         return self.title
+
+    def role_of(self, user):
+        """Rôle de user dans ce voyage, ou None s'il n'y participe pas.
+
+        Sert quand le voyage n'a pas l'annotation de with_role(), par exemple s'il est
+        atteint par destination.trip.
+        """
+        if user is None or not user.is_authenticated:
+            return None
+        if self.owner_id == user.pk:
+            return ParticipantRole.OWNER.value
+        return self.memberships.filter(user=user).values_list("role", flat=True).first()
 
     def clean(self):
         super().clean()

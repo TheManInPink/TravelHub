@@ -34,7 +34,18 @@ FORGED = {
 @pytest.mark.parametrize(
     "serializer_class, writable",
     [
-        (TripSerializer, {"title", "description", "start_date", "end_date", "status", "budget"}),
+        (
+            TripSerializer,
+            {
+                "title",
+                "description",
+                "start_date",
+                "end_date",
+                "status",
+                "budget",
+                "cover_image_url",
+            },
+        ),
         (
             DestinationSerializer,
             {
@@ -100,6 +111,15 @@ class TestRest:
         trip_a.refresh_from_db()
         assert (trip_a.pk, trip_a.owner) == (response.data["id"], user_a)
         assert list(trip_a.participants.all()) == [user_a]
+
+    def test_my_role_cannot_be_forged(self, client_for, trip, members):
+        url = reverse("trip-detail", args=[trip.pk])
+
+        response = client_for(members["editor"]).patch(url, {"my_role": "owner"}, format="json")
+
+        assert response.status_code == 200
+        assert response.data["my_role"] == "editor"
+        assert trip.memberships.get(user=members["editor"]).role == TripParticipant.Role.EDITOR
 
     def test_destination_ignores_forged_identifiers(self, client_a, trip_a):
         payload = {
