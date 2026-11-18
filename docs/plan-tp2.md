@@ -23,15 +23,15 @@ Commencez par quatre petites corrections du back-end Django, pas par l'interface
 
 ### 1.2 Les dix premières actions
 
-1. Invitez le deuxième membre comme collaborateur du dépôt `TheManInPink/TravelHub`. Chacun configure `git config user.name` et `user.email` avec sa propre identité.
+1. Configurez `git config user.name` et `user.email` avec votre propre identité.
 2. Protégez `master` : pull request obligatoire, une relecture, la CI « Lint et tests » verte.
 3. Enregistrez ce plan dans le dépôt (docs/plan-tp2.md) pour que l'assistant puisse le lire. Fusionnez ou fermez la PR Dependabot #5, puis lancez `git fetch --prune`.
-4. Installez Node.js 24 LTS (24.15 ou plus) sur les deux postes. Chaque membre lance aussi l'API en local (README : venv ou docker compose up --build, puis seed\_demo) et suit les chapitres 1 à 12 du cours officiel Learn Next.js (nextjs.org/learn), environ trois heures.
+4. Installez Node.js 26 LTS (26.13 ou plus). Lancez aussi l'API en local (README : venv ou docker compose up --build, puis seed\_demo) et suivez les chapitres 1 à 12 du cours officiel Learn Next.js (nextjs.org/learn), environ trois heures.
 5. Créez les comptes gratuits : Vercel, Supabase, Neon (PostgreSQL) et Render (API Django).
-6. Membre A : branche `backend/tp2-ajustements` avec le prompt P1 (section 7).
-7. Membre B : branche `frontend/socle` avec le prompt P2. L'application est créée dans `frontend/`.
-8. Membre A : couche d'accès aux données et authentification (P3, P4).
-9. Membre B : mise en page, navigation et états de chargement (P5).
+6. Branche `backend/tp2-ajustements` avec le prompt P1 (section 7).
+7. Branche `frontend/socle` avec le prompt P2. L'application est créée dans `frontend/`.
+8. Couche d'accès aux données (P3), puis mise en page, navigation et états de chargement (P5).
+9. Authentification et routes protégées (P4), qui branche la session sur la mise en page de P5.
 10. Fin de la première semaine : premier déploiement Vercel + Render + Neon (P6), même avec une seule page.
 
 Question ouverte : la date de remise n'est pas dans l'énoncé fourni. Le plan compte donc en jours de travail (J1 à J14).
@@ -135,7 +135,7 @@ L'énoncé impose la sécurité, les variables d'environnement, le build et le d
 | Monitoring et journaux | Savoir pourquoi une requête a échoué | Journaux Vercel et Render ; Next.js envoie un `X-Request-ID` que Django journalise déjà ; vérification manuelle de `/health/` avant la démo, sans sonde permanente (elle empêcherait Neon de s'endormir et épuiserait son quota gratuit) | Recommandé |
 | Sauvegardes et reprise | Pouvoir restaurer la base et revenir à une version saine | `scripts/backup.ps1` contre Neon (`PGSSLMODE=require`), restauration Neon (6 heures d'historique sur le plan Free), retour arrière en un clic sur Vercel et Render, Git comme sauvegarde du code | Recommandé |
 | Performance | Page connectée utilisable en moins de 3 s une fois l'API réveillée | Rendu serveur, streaming avec `Suspense`, `next/image`, pas de waterfall de requêtes | Recommandé |
-| Maintenabilité | Code lisible par l'autre membre | ESLint, TypeScript sans `any`, PR relues, conventions de nommage (section 5) | Exigé |
+| Maintenabilité | Code lisible et facile à expliquer pendant la démonstration | ESLint, TypeScript sans `any`, PR relues, conventions de nommage (section 5) | Exigé |
 
 ## 5. Architecture et décisions techniques
 
@@ -174,7 +174,7 @@ Le navigateur n'appelle que Vercel. Next.js appelle Django avec le JWT lu dans l
 
 | Outil | Version | Pourquoi |
 | --- | --- | --- |
-| Node.js | 24 LTS (24.15 ou plus), `engines.node: "24.x"` | Vitest 5, jsdom 31 et MSW 3 exigent Node 22 ou plus ; Node 20 n'est plus supporté |
+| Node.js | 26 LTS (26.13 ou plus), `engines.node: "26.x"` | Version par défaut de Vercel depuis le 29 octobre 2026. Vitest 5, jsdom 31 et MSW 3 exigent Node 22 ou plus ; Node 20 n'est plus supporté |
 | Next.js | 16.4.x, dernier correctif | Version stable actuelle. Vercel bloque les versions vulnérables, gardez le dernier correctif |
 | React | 19.3 | Installé par create-next-app |
 | TypeScript | ^5 (5.9.3) | Installé par create-next-app. Évitez la 7.0, sans API de programmation avant la 7.1 |
@@ -338,47 +338,47 @@ Les activités sont créées et modifiées dans un dialogue de la page destinati
 
 - Branches : `backend/<sujet>`, `frontend/<sujet>`, `infra/<sujet>`, `docs/rapport-tp2`. Une branche par étape de la section 6.
 - Commits : petits et explicites, en français, chacun sous sa propre identité Git, par exemple `trips : formulaire de création avec validation Zod`.
-- Pull requests : chacune est relue par l'autre membre et fusionnée avec la CI verte. Fusion par « Create a merge commit » pour garder les commits de chacun visibles dans l'historique.
+- Pull requests : nous relisons chacune avant de la fusionner (prompt « Relecture de PR », section 7), et nous la fusionnons seulement avec la CI verte. Fusion par « Create a merge commit » pour garder chaque commit visible dans l'historique.
 - Code en anglais. Textes de l'interface, commentaires et messages d'erreur en français, comme au TP1.
 - Fichiers : composants en `PascalCase.tsx`, hooks en `useQuelqueChose.ts`, modules en `camelCase.ts`.
 
 ## 6. Feuille de route étape par étape
 
-Le plan tient en 14 jours de travail et quatre jalons. Le membre A porte le back-end, l'authentification, l'itinéraire GraphQL, Supabase et le déploiement. Le membre B porte le socle Next.js, la mise en page, le tableau de bord, les voyages, la météo et les tests. Chaque étape = une branche, une PR relue par l'autre membre, et le prompt de la section 7.
+Le plan tient en 14 jours de travail et quatre jalons, comptés pour deux personnes en parallèle. Comme nous faisons les étapes l'une après l'autre, chaque phase prendra plus de jours que la colonne Jours. Chaque étape = une branche, une PR relue puis fusionnée avec la CI verte, et le prompt de la section 7.
 
-| Phase | Jours | Membre A | Membre B | Jalon à la fin de la phase |
-| --- | --- | --- | --- | --- |
-| Fondations | J1 à J2 | 1 Back-end | 2 Socle + CI | Jalon 1, fin J2 : CI verte, back-end fusionné |
-| En ligne | J3 à J5 | 3 Données, 4 Auth, 6 Déploiement | 5 Mise en page, 7 Tableau de bord | Jalon 2, fin J5 : connexion réussie sur l'URL Vercel |
-| Cœur métier | J6 à J9 | 9 Itinéraire (GraphQL) | 8 Voyages (REST), 10 Météo, pays | Jalon 3, fin J9 : CRUD REST et GraphQL complets |
-| Finitions | J10 à J12 | 11 Images, 13 Production | 12 Tests | Jalon 4, fin J12 : tests verts, production complète |
-| Remise | J12 à J14 | 14 Rapport et vidéo (A et B) | 14 Rapport et vidéo (A et B) | Remise : tag v2.0 |
+| Phase | Jours | Étapes, dans l'ordre | Jalon à la fin de la phase |
+| --- | --- | --- | --- |
+| Fondations | J1 à J2 | 1 Back-end, 2 Socle + CI | Jalon 1, fin J2 : CI verte, back-end fusionné |
+| En ligne | J3 à J5 | 3 Données, 5 Mise en page, 4 Auth, 6 Déploiement, 7 Tableau de bord | Jalon 2, fin J5 : connexion réussie sur l'URL Vercel |
+| Cœur métier | J6 à J9 | 8 Voyages (REST), 9 Itinéraire (GraphQL), 10 Météo, pays | Jalon 3, fin J9 : CRUD REST et GraphQL complets |
+| Finitions | J10 à J12 | 11 Images, 12 Tests, 13 Production | Jalon 4, fin J12 : tests verts, production complète |
+| Remise | J12 à J14 | 14 Rapport et vidéo | Remise : tag v2.0 |
 
 Les numéros renvoient aux étapes du tableau ci-dessous.
 
 Le jalon 2 compte le plus : une version en ligne dès J5 fait apparaître tôt les problèmes de cookies, d'ALLOWED\_HOSTS et de variables d'environnement, quand il reste du temps pour les régler.
 
-| # | Étape | Jours | Membre | Branche | Prompt | Terminé quand | Statut |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| 0 | Préparation du dépôt et des comptes | J1 | A + B | `master` (réglages) | P0 | Les deux membres ont poussé une branche et ouvert une PR | À faire |
-| 1 | Compléments du back-end | J1-J2 | A | `backend/tp2-ajustements` | P1 | pytest vert, `cover_image_url` et `my_role` visibles dans Swagger, CORS de production réglé | À faire |
-| 2 | Socle Next.js, Tailwind, shadcn, Vitest, CI | J1-J2 | B | `frontend/socle` | P2 | `npm run lint`, `npm test` et `npm run build` verts dans GitHub Actions | À faire |
-| 3 | Types et couche d'accès aux données | J3 | A | `frontend/acces-donnees` | P3 | Tests MSW verts pour un appel REST, un appel GraphQL et une erreur | À faire |
-| 4 | Authentification et routes protégées | J3-J4 | A | `frontend/auth` | P4 | `/dashboard` sans cookie mène à `/login` ; la session survit à l'expiration du jeton d'accès | À faire |
-| 5 | Mise en page, navigation, états | J3-J4 | B | `frontend/layout` | P5 | Menu mobile fonctionnel ; chargement, erreur et page introuvable visibles | À faire |
-| 6 | Premier déploiement | J5 | A | `infra/deploiement` | P6 | Connexion réussie sur l'URL Vercel avec l'API Render et la base Neon | À faire |
-| 7 | Tableau de bord | J5 | B | `frontend/dashboard` | P7 | Compteurs et prochains voyages justes pour `alice` | À faire |
-| 8 | Voyages : liste, détail, création, modification, suppression (REST) | J6-J7 | B | `frontend/voyages` | P8 | Les quatre opérations marchent et les erreurs 400 s'affichent sous les champs | À faire |
-| 9 | Destinations et activités (GraphQL) | J7-J9 | A | `frontend/itineraire` | P9 | Une query et trois mutations au moins passent par `/graphql/` ; l'itinéraire se met à jour sans rechargement | À faire |
-| 10 | Météo et fiche pays | J9 | B | `frontend/enrichissement` | P10 | Météo en CSR avec ses états ; fiche pays en streaming | À faire |
-| 11 | Images Supabase | J10 | A | `frontend/images` | P11 | Image envoyée, URL enregistrée dans Django, clé absente du bundle | À faire |
-| 12 | Tests et qualité | J10-J11 | B (+ A) | `frontend/tests` | P12 | Au moins 5 tests exigés verts, plus ceux de chaque étape ; vérification responsive et clavier | À faire |
-| 13 | Déploiement final, monitoring, sauvegardes | J12 | A | `infra/production` | P13 | Parcours complet en production ; vérification de `/health/` ; sauvegarde pg\_dump de Neon faite ; procédure de réveil écrite | À faire |
-| 14 | Rapport LaTeX et vidéo OBS | J12-J14 | A + B | `docs/rapport-tp2` | P14 | PDF compilé, vidéo de la version déployée, checklist 8.4 cochée, tag v2.0 poussé | À faire |
+| # | Étape | Jours | Branche | Prompt | Terminé quand | Statut |
+| --- | --- | --- | --- | --- | --- | --- |
+| 0 | Préparation du dépôt et des comptes | J1 | `master` (réglages) | P0 | Une branche poussée et une PR ouverte | À faire |
+| 1 | Compléments du back-end | J1-J2 | `backend/tp2-ajustements` | P1 | pytest vert, `cover_image_url` et `my_role` visibles dans Swagger, CORS de production réglé | À faire |
+| 2 | Socle Next.js, Tailwind, shadcn, Vitest, CI | J1-J2 | `frontend/socle` | P2 | `npm run lint`, `npm test` et `npm run build` verts dans GitHub Actions | À faire |
+| 3 | Types et couche d'accès aux données | J3 | `frontend/acces-donnees` | P3 | Tests MSW verts pour un appel REST, un appel GraphQL et une erreur | À faire |
+| 4 | Authentification et routes protégées | J3-J4 | `frontend/auth` | P4 | `/dashboard` sans cookie mène à `/login` ; la session survit à l'expiration du jeton d'accès | À faire |
+| 5 | Mise en page, navigation, états | J3-J4 | `frontend/layout` | P5 | Menu mobile fonctionnel ; chargement, erreur et page introuvable visibles | À faire |
+| 6 | Premier déploiement | J5 | `infra/deploiement` | P6 | Connexion réussie sur l'URL Vercel avec l'API Render et la base Neon | À faire |
+| 7 | Tableau de bord | J5 | `frontend/dashboard` | P7 | Compteurs et prochains voyages justes pour `alice` | À faire |
+| 8 | Voyages : liste, détail, création, modification, suppression (REST) | J6-J7 | `frontend/voyages` | P8 | Les quatre opérations marchent et les erreurs 400 s'affichent sous les champs | À faire |
+| 9 | Destinations et activités (GraphQL) | J7-J9 | `frontend/itineraire` | P9 | Une query et trois mutations au moins passent par `/graphql/` ; l'itinéraire se met à jour sans rechargement | À faire |
+| 10 | Météo et fiche pays | J9 | `frontend/enrichissement` | P10 | Météo en CSR avec ses états ; fiche pays en streaming | À faire |
+| 11 | Images Supabase | J10 | `frontend/images` | P11 | Image envoyée, URL enregistrée dans Django, clé absente du bundle | À faire |
+| 12 | Tests et qualité | J10-J11 | `frontend/tests` | P12 | Au moins 5 tests exigés verts, plus ceux de chaque étape ; vérification responsive et clavier | À faire |
+| 13 | Déploiement final, monitoring, sauvegardes | J12 | `infra/production` | P13 | Parcours complet en production ; vérification de `/health/` ; sauvegarde pg\_dump de Neon faite ; procédure de réveil écrite | À faire |
+| 14 | Rapport LaTeX et vidéo OBS | J12-J14 | `docs/rapport-tp2` | P14 | PDF compilé, vidéo de la version déployée, checklist 8.4 cochée, tag v2.0 poussé | À faire |
 
-Règles de travail : poussez votre branche chaque soir, même inachevée. L'autre membre relit la PR le jour même. Ne fusionnez jamais une PR dont la CI est rouge. Si vous prenez du retard, retirez d'abord les bonus (section 2.3), jamais une exigence de la section 3.
+Règles de travail : poussez votre branche chaque soir, même inachevée. Relisez la PR le jour même avec le prompt « Relecture de PR ». Ne fusionnez jamais une PR dont la CI est rouge. Si vous prenez du retard, retirez d'abord les bonus (section 2.3), jamais une exigence de la section 3.
 
-**Ordre conseillé pour éviter les blocages.** J3 : A fait P3 seulement et le fusionne le soir même ; B fait P5 sans appel à Django. J4 et J5 : A fait P4 puis P6 ; B fait P7, qui crée `TripCard`. J6 : A commence P9 par les schémas Zod, les documents GraphQL et les actions ; B commence P8. J8 : B prépare P10 en composants isolés, puis les branche après la fusion de P9. J11 : A sert de tampon et aide B sur les tests.
+**Ordre conseillé.** P1, P2, P3, puis P5 avant P4, car P4 branche la session sur le `UserMenu` créé par P5. Ensuite P6, P7 (qui crée `TripCard`), P8, P9, P10 (qui a besoin de la page destination de P9), P11, P12, P13 et P14. Fusionnez chaque étape avant de commencer la suivante.
 
 **À retirer en premier en cas de retard**, car l'énoncé ne les exige pas : regex CORS des previews (P1), contrôle des premiers octets des images (P11), couverture, Lighthouse et Playwright (P12), Dockerfile du front-end et Vercel Analytics (P13).
 
@@ -390,7 +390,7 @@ Collez **P0** une fois au début de chaque session de l'assistant, puis le promp
 
 ```text
 Tu m'aides à réaliser le TP2 de TravelHub (cours INF37407, UQAR) : le front-end Web d'une plateforme de planification de voyages, branché sur le back-end Django du TP1 (tag v1.0, même dépôt, dossier frontend/ pour Next.js). Le plan complet est dans docs/plan-tp2.md : lis-le quand une étape y renvoie.
-Stack front-end imposée : Next.js 16.4 (App Router, src/, Turbopack, sans Cache Components), React 19.3, TypeScript 5.9 strict, Tailwind CSS 4.3, shadcn/ui (variante Radix, toasts Sonner), Fetch API, Zod 4, React Hook Form 7, @supabase/supabase-js 2, Vitest 5 + React Testing Library 16 + MSW 3. Node 24 LTS. Windows 11, VS Code, PowerShell.
+Stack front-end imposée : Next.js 16.4 (App Router, src/, Turbopack, sans Cache Components), React 19.3, TypeScript 5.9 strict, Tailwind CSS 4.3, shadcn/ui (variante Radix, toasts Sonner), Fetch API, Zod 4, React Hook Form 7, @supabase/supabase-js 2, Vitest 5 + React Testing Library 16 + MSW 3. Node 26 LTS. Windows 11, VS Code, PowerShell.
 Back-end existant (ne pas le réécrire) : Django 5.2 LTS, DRF, SimpleJWT (en-tête Bearer, accès 15 min, refresh 1 jour avec rotation et liste noire), Graphene-Django sur /graphql/, PostgreSQL 18. Erreurs REST : {"error": {"code", "message", "details"}}. Erreurs GraphQL : HTTP 200 avec errors[].extensions.code pour les erreurs des resolvers ; HTTP 401 (token_not_valid) et 429 (throttled) sans data ; HTTP 400 sans code pour une erreur de syntaxe. Slash final obligatoire sur les routes REST. Montants et dates en chaînes.
 Architecture : Next.js sert de BFF. Le navigateur ne parle qu'à Next.js. Les jetons vivent dans des cookies httpOnly (th_access, th_refresh) posés par des Server Actions. Seul le code serveur (Server Components, Server Actions, Route Handlers) appelle Django, par src/lib/api/django.ts et src/lib/api/graphql.ts. Supabase Storage ne sert qu'aux images ; la clé sb_secret_ reste côté serveur (import "server-only").
 Répartition : REST pour l'authentification et le CRUD des voyages ; GraphQL pour la page destination (query) et les mutations de destinations et d'activités ; météo en CSR par un Route Handler qui appelle /api/destinations/{id}/weather/.
@@ -400,7 +400,7 @@ Si une API a changé dans Next.js 16 (proxy.ts au lieu de middleware.ts, cookies
 Pour le rapport, le README et les commentaires : écris comme un étudiant, avec « nous », des phrases simples, peu de deux-points et de points-virgules.
 ```
 
-### P1 — Compléments du back-end (membre A)
+### P1 — Compléments du back-end
 
 ```text
 Étape 1 : compléments du back-end Django pour le TP2 (branche backend/tp2-ajustements).
@@ -413,26 +413,26 @@ Lis d'abord apps/trips/models.py, apps/trips/serializers.py, apps/trips/views.py
 6. Facultatif : corrige le schéma OpenAPI de GET /api/trips/{id}/participants/ (liste simple, pas paginée).
 7. .env.example : toutes les variables sans valeur (par exemple SECRET_KEY=), l'exemple en commentaire au-dessus de chaque ligne, nouvelles variables comprises. Mets aussi à jour le README et la collection Postman (cover_image_url, my_role).
 Tests pytest : URL refusée en http, refusée pour un autre hôte, vide acceptée ; my_role juste pour owner, editor et viewer en REST ; myRole juste via trip(id) et via destination(id) { trip { myRole } } (EDITOR pour alice et VIEWER pour yuki sur « Automne à Paris ») ; nombre de requêtes de la liste inchangé.
-Terminé quand : ruff check, ruff format --check et pytest passent avec une couverture d'au moins 80 % ; Swagger montre cover_image_url et my_role ; le membre B a relu la PR.
+Terminé quand : ruff check, ruff format --check et pytest passent avec une couverture d'au moins 80 % ; Swagger montre cover_image_url et my_role ; la PR a été relue.
 ```
 
-### P2 — Socle Next.js, shadcn, Vitest et CI (membre B)
+### P2 — Socle Next.js, shadcn, Vitest et CI
 
 ```text
 Étape 2 : socle du front-end (branche frontend/socle), depuis la racine du dépôt.
 1. npx create-next-app@latest frontend --ts --tailwind --eslint --app --src-dir --import-alias "@/*" --use-npm --no-cache-components --no-react-compiler
    Explique chaque option. Vérifie que next.config.ts n'active pas cacheComponents.
-2. package.json : "engines": {"node": "24.x"} ; @types/node passé en ^24 (sinon Vitest 5 refuse de s'installer avec une erreur ERESOLVE) ; scripts dev, build, start, "lint": "eslint .", "typecheck": "next typegen && tsc --noEmit", "test": "vitest run", "test:watch": "vitest".
+2. package.json : "engines": {"node": "26.x"} ; @types/node passé en ^26 (sinon Vitest 5 refuse de s'installer avec une erreur ERESOLVE) ; scripts dev, build, start, "lint": "eslint .", "typecheck": "next typegen && tsc --noEmit", "test": "vitest run", "test:watch": "vitest".
 3. npx shadcn@latest init -t next -b radix, puis ajoute button card input label textarea select badge dialog alert-dialog dropdown-menu sheet skeleton separator sonner field breadcrumb tabs. shadcn détecte Tailwind 4 par package.json et par @import "tailwindcss" dans globals.css : garde le chargeur @tailwindcss/turbopack du gabarit, sans postcss.config.mjs.
 4. Dépendances, installées une seule fois ici pour éviter plus tard les conflits de package-lock.json : npm i zod react-hook-form @hookform/resolvers server-only @supabase/supabase-js, puis npm i -D vitest @vitejs/plugin-react jsdom @testing-library/react @testing-library/dom @testing-library/user-event @testing-library/jest-dom vite-tsconfig-paths msw graphql @vitest/coverage-v8 (MSW 3 n'installe plus graphql). vitest.config.mts : environnement jsdom, setupFiles tests/setup.ts, alias de "server-only" vers un module vide. tests/setup.ts : import "@testing-library/jest-dom/vitest" et serveur MSW démarré avant les tests. Un premier test de rendu de la page d'accueil.
 5. Lis docs/plan-tp2.md et crée l'arborescence de sa section 5.4, avec src/lib/utils.ts, src/lib/format.ts (dates et montants fr-CA à partir de chaînes décimales) et .env.example (noms seulement). frontend/.gitignore exclut node_modules, .next, .env*.local et .vercel. Le gabarit contient .env*, qui ignore aussi .env.example : ajoute la ligne !.env.example et vérifie avec git ls-files frontend/.env.example. Ajoute frontend/ au .dockerignore de la racine.
-6. CI : ajoute un job "Front-end" à .github/workflows/ci.yml. actions/setup-node avec node-version 24, cache npm et cache-dependency-path: frontend/package-lock.json ; working-directory frontend pour les étapes run ; npm ci, lint, typecheck, test, puis build avec une valeur factice pour chaque variable de .env.example (par exemple SUPABASE_URL=https://exemple.supabase.co). Ajoute l'écosystème npm (directory /frontend) à .github/dependabot.yml.
+6. CI : ajoute un job "Front-end" à .github/workflows/ci.yml. actions/setup-node avec node-version 26, cache npm et cache-dependency-path: frontend/package-lock.json ; working-directory frontend pour les étapes run ; npm ci, lint, typecheck, test, puis build avec une valeur factice pour chaque variable de .env.example (par exemple SUPABASE_URL=https://exemple.supabase.co). Ajoute l'écosystème npm (directory /frontend) à .github/dependabot.yml.
 7. Page d'accueil statique en français : présentation de TravelHub, boutons Se connecter et Créer un compte.
 8. À la racine du dépôt : un package.json minimal ("private": true) avec "test": "npm --prefix frontend test" et "build": "npm --prefix frontend run build", pour que npm test marche aussi depuis la racine. Dans le README, une section « Lancer le front-end » : Node 24, cd frontend, npm ci, Copy-Item .env.example .env.local, npm run dev, npm test.
 Terminé quand : npm run lint, npm run typecheck, npm test et npm run build passent en local et dans la CI de la PR ; npm test marche aussi depuis la racine.
 ```
 
-### P3 — Types et couche d'accès aux données (membre A)
+### P3 — Types et couche d'accès aux données
 
 ```text
 Étape 3 : types et accès aux données (branche frontend/acces-donnees).
@@ -446,7 +446,7 @@ Terminé quand : npm run lint, npm run typecheck, npm test et npm run build pass
 Terminé quand : npm run typecheck et npm test passent ; aucun any ; aucun appel à Django en dehors de src/lib/api/. Fusionne cette PR le jour même : les étapes 4, 5 et 7 en dépendent.
 ```
 
-### P4 — Authentification et routes protégées (membre A)
+### P4 — Authentification et routes protégées
 
 ```text
 Étape 4 : authentification et routes protégées (branche frontend/auth).
@@ -461,7 +461,7 @@ Tests : LoginForm affiche les erreurs de validation sans appeler l'action ; une 
 Terminé quand : /dashboard sans cookie mène à /login ; après connexion, on revient à la page demandée ; après suppression de th_access dans les outils du navigateur, la page se recharge sans déconnexion ; après suppression des deux cookies, retour à /login ; un th_access invalide mène à /login?expired=1 sans boucle ; aucun jeton dans localStorage ni dans document.cookie.
 ```
 
-### P5 — Mise en page, navigation et états (membre B)
+### P5 — Mise en page, navigation et états
 
 ```text
 Étape 5 : mise en page, navigation et états de l'interface (branche frontend/layout). Cette étape n'appelle pas Django : l'étape 4 branchera la session.
@@ -475,19 +475,19 @@ Tests : EmptyState affiche son action ; ErrorState appelle onRetry au clic ; Mob
 Terminé quand : la navigation marche au clavier (Tab, Entrée, Échap) ; l'affichage reste correct à 360, 768 et 1280 px ; les états de chargement, d'erreur et de page introuvable sont visibles quand on les simule.
 ```
 
-### P6 — Premier déploiement (membre A)
+### P6 — Premier déploiement
 
 ```text
 Étape 6 : premier déploiement (branche infra/deploiement). But : l'URL Vercel affiche la connexion, et la connexion marche avec l'API publique.
 1. Neon : explique la création du projet (PostgreSQL 18, région proche de Render) et la récupération de DATABASE_URL avec ?sslmode=require. Depuis mon poste en PowerShell, avec $env:DATABASE_URL qui pointe sur Neon : migrate, createsuperuser, seed_demo --password <secret>. Le plan gratuit de Render n'a pas de shell, d'où ce passage par mon poste.
 2. Render : render.yaml à la racine (service web, runtime docker, plan free, branch master, healthCheckPath /health/, autoDeployTrigger: checksPass ; le champ autoDeploy est obsolète). La commande de pré-déploiement est réservée aux plans payants : migrate passe donc par dockerCommand: sh -c "python manage.py migrate --noinput && exec gunicorn config.wsgi", la même commande que docker-compose.yml. Sans sh -c, Render passe && à manage.py et le déploiement échoue. Variables : DJANGO_SETTINGS_MODULE=config.settings.prod ; SECRET_KEY générée sur mon poste avec python -c "import secrets; print(secrets.token_urlsafe(50))" (generateValue ne donne que 44 caractères, sous le minimum de 50) ; DATABASE_URL ; ALLOWED_HOSTS=<service>.onrender.com,localhost ; CORS_ALLOWED_ORIGINS=https://<projet>.vercel.app ; NUM_PROXIES=1 ; THROTTLE_ANON_RATE=300/hour ; LOG_FILE vide ; WEB_CONCURRENCY=2.
-3. Vercel : import du dépôt, Root Directory = frontend, Node 24.x, variables Production et Preview (DJANGO_API_URL et NEXT_PUBLIC_SITE_URL ; les variables SUPABASE_* arrivent à l'étape 11). Rappelle qu'un changement de variable demande un redéploiement.
+3. Vercel : import du dépôt, Root Directory = frontend, Node 26.x, variables Production et Preview (DJANGO_API_URL et NEXT_PUBLIC_SITE_URL ; les variables SUPABASE_* arrivent à l'étape 11). Rappelle qu'un changement de variable demande un redéploiement.
 4. Vérifications : curl https://<api>/health/ ; connexion d'alice sur l'URL Vercel ; en-têtes d'une requête OPTIONS envoyée à l'API depuis l'origine Vercel, puis depuis une origine refusée. Rappelle dans le README que le CORS ne joue que si un navigateur appelle Django directement : nos appels partent du serveur Next.js.
 5. README : section « Déploiement » (URL, variables, commandes). Postman : environnement TravelHub-prod sans aucun secret.
 Terminé quand : la connexion réussit sur l'URL Vercel publique ; Render répond 200 sur /health/ ; aucun secret dans le dépôt (git grep sb_secret et git grep "SECRET_KEY=" ne trouvent aucune valeur).
 ```
 
-### P7 — Tableau de bord (membre B)
+### P7 — Tableau de bord
 
 ```text
 Étape 7 : tableau de bord (branche frontend/dashboard). Page app/(app)/dashboard/page.tsx en Server Component (SSR). Avant de vérifier, relance seed_demo --reset --password <secret> en local : les dates de démo sont relatives au jour du lancement.
@@ -503,7 +503,7 @@ Tests : StatsCards affiche les montants au format fr-CA ; DashboardView vide aff
 Terminé quand : les chiffres d'alice correspondent à ceux de Swagger ; le streaming se voit en ralentissant le réseau dans les outils du navigateur.
 ```
 
-### P8 — Voyages en REST (membre B)
+### P8 — Voyages en REST
 
 ```text
 Étape 8 : CRUD des voyages en REST (branche frontend/voyages).
@@ -517,7 +517,7 @@ Tests : TripForm bloque une date de fin antérieure et affiche le message ; Conf
 Terminé quand : créer, modifier et supprimer un voyage marche et se voit dans Swagger ; yuki, lecteur sur « Automne à Paris », ne voit pas les boutons de modification et voit l'écran d'accès refusé s'il ouvre /edit à la main.
 ```
 
-### P9 — Destinations et activités en GraphQL (membre A)
+### P9 — Destinations et activités en GraphQL
 
 ```text
 Étape 9 : destinations et activités en GraphQL (branche frontend/itineraire).
@@ -530,7 +530,7 @@ Tests : ActivityForm refuse une date hors du séjour ; createActivity envoie les
 Terminé quand : on ajoute, modifie et supprime une destination et une activité sans recharger la page ; les journaux du serveur Next.js montrent les POST vers /graphql/, et aucun appel GraphQL ne part du navigateur.
 ```
 
-### P10 — Météo et fiche pays (membre B)
+### P10 — Météo et fiche pays
 
 ```text
 Étape 10 : informations enrichies d'une destination (branche frontend/enrichissement). Avant de tester, relance seed_demo --reset --password <secret> en local : « Automne à Paris » couvre J-3 à J+4 du jour du seed, et Django ne renvoie de météo que jusqu'à la date de fin du séjour.
@@ -543,7 +543,7 @@ Tests : WeatherPanel montre le squelette puis les prévisions (MSW) ; il montre 
 Terminé quand : la météo s'affiche pour « Automne à Paris » (compte alice) ; l'état vide s'affiche pour « Printemps au Japon » ; l'onglet Réseau ne montre aucun appel vers open-meteo.com ni trevorblades.com.
 ```
 
-### P11 — Images avec Supabase Storage (membre A)
+### P11 — Images avec Supabase Storage
 
 ```text
 Étape 11 : images de couverture avec Supabase Storage (branche frontend/images).
@@ -558,7 +558,7 @@ Tests : ImageUploader refuse un fichier de 6 Mo et un PDF sans appeler l'action 
 Terminé quand : l'image reste après rechargement et apparaît dans une autre session ; une recherche de « sb_secret » dans frontend/.next/static ne trouve rien ; un lecteur ne voit pas le bouton d'envoi.
 ```
 
-### P12 — Tests et qualité (membre B, avec A)
+### P12 — Tests et qualité
 
 ```text
 Étape 12 : tests et qualité (branche frontend/tests).
@@ -575,7 +575,7 @@ Terminé quand : l'image reste après rechargement et apparaît dans une autre s
 Terminé quand : npm test est vert avec les cinq tests exigés et ceux des étapes précédentes ; la CI est verte ; un tableau test → exigence est prêt pour le rapport.
 ```
 
-### P13 — Production, monitoring et sauvegardes (membre A)
+### P13 — Production, monitoring et sauvegardes
 
 ```text
 Étape 13 : production, monitoring et sauvegardes (branche infra/production).
@@ -588,14 +588,14 @@ Terminé quand : npm test est vert avec les cinq tests exigés et ceux des étap
 Terminé quand : le parcours complet (inscription, connexion, voyage, destination, activité, météo, pays, image, déconnexion) passe sur les URL publiques ; une sauvegarde pg_dump de Neon existe ; le README décrit la production.
 ```
 
-### P14 — Rapport LaTeX et vidéo OBS (membres A et B)
+### P14 — Rapport LaTeX et vidéo OBS
 
 ```text
 Étape 14 : rapport et vidéo (branche docs/rapport-tp2). Le modèle est dans Modèle_de_Rapport_LaTex/. Ne change pas la mise en page (includes.tex) ; garde les macros de ajouts.tex (\code, \capture, listings json et graphql, TikZ).
 1. Crée report_tp2.tex (copie de report_v1.0.tex) et un dossier sections-tp2/. Ne modifie pas les sections du TP1, qui décrivent la remise v1.0. Mets \reporttitle à « Travail Pratique 2 : TravelHub, front-end ». Plan : Introduction ; Environnement et versions ; Architecture (schéma TikZ navigateur, Vercel, Render, Neon, Supabase) ; Organisation du projet Next.js ; Routage et navigation ; Server et Client Components (raison de chaque "use client") ; Stratégies de rendu et données (tableau page, type de composant, rendu, justification) ; REST et GraphQL (qui fait quoi, exemples de requêtes et de réponses) ; Authentification (choix du cookie httpOnly justifié ; src/proxy.ts, le middleware recommandé par l'énoncé, renommé proxy depuis Next.js 16 ; verifySession ; rafraîchissement ; limites) ; Validation et erreurs ; Supabase ; Tests (tableau test → exigence, capture de npm test) ; Déploiement, CI et exploitation (dont le CORS : origine Vercel configurée, simple défense en profondeur puisque Django est appelé de serveur à serveur, et ALLOWED_HOSTS qui contient l'hôte Render) ; Corrections du back-end du TP1 ; Collaboration (branches, PR, répartition) ; Conclusion et limites.
 2. Bibliographie : Next.js, React, TypeScript, Tailwind CSS, shadcn/ui, Supabase, Vercel, Vitest, Render, Neon.
 3. Captures dans figures/ : tableau de bord, liste des voyages (bureau et mobile), destination avec météo et pays, formulaire avec erreurs, projet Vercel, bucket Supabase, CI verte, npm test, liste des PR GitHub.
-4. Compilation : l'image Docker travelhub-tex:latest n'existe que sur un poste. Ajoute son Dockerfile au dépôt (ou utilisez Overleaf) pour que les deux membres puissent compiler. Compile dans une copie temporaire pour garder les fichiers auxiliaires hors du dépôt.
+4. Compilation : l'image Docker travelhub-tex:latest n'existe que sur un poste. Ajoute son Dockerfile au dépôt (ou utilisez Overleaf) pour pouvoir compiler sur un autre poste. Compile dans une copie temporaire pour garder les fichiers auxiliaires hors du dépôt.
 5. Vidéo OBS de 8 à 10 min : script minute par minute sur la version déployée (URL Vercel visible) : connexion, tableau de bord, CRUD d'un voyage, destination avec météo et pays, activité, image, erreur de validation, route protégée, déconnexion, puis npm test et la CI.
 6. Après la fusion de cette branche et une dernière vérification en production : git tag -a v2.0 -m "TravelHub v2.0 : rendu du TP2", git push origin v2.0, puis git archive --format=zip -o TravelHub-TP2.zip v2.0.
 Terminé quand : le PDF compile sans erreur ; le tableau des stratégies de rendu et la justification du cookie y sont ; la vidéo montre l'URL publique ; le tag v2.0 est poussé.
@@ -635,7 +635,7 @@ Quatre réglages évitent la plupart des échecs dans Vitest :
 1. Une branche est poussée et une PR est ouverte.
 2. GitHub Actions lance trois jobs : « Lint et tests » (Django), « Image Docker » et le nouveau « Front-end » (lint, typecheck, test, build). Depuis Next.js 16, `next build` ne lance plus ESLint : le lint est une étape à part.
 3. Vercel publie une preview de la PR. Elle appelle Django de serveur à serveur : le CORS, appliqué seulement par les navigateurs, ne la concerne pas. Elle marche si DJANGO\_API\_URL est défini pour Preview et si l'hôte Render est dans ALLOWED\_HOSTS.
-4. L'autre membre relit et approuve. La protection de `master` exige les trois jobs verts.
+4. Nous relisons la PR (prompt « Relecture de PR »), puis nous la fusionnons. La protection de `master` exige les trois jobs verts, même pour l'administrateur du dépôt.
 5. À la fusion, Vercel déploie la production et Render reconstruit l'image de l'API. `migrate` tourne au démarrage du conteneur, grâce au dockerCommand de render.yaml.
 
 ### 8.3 Ordre de déploiement
@@ -654,7 +654,7 @@ Quatre réglages évitent la plupart des échecs dans Vitest :
 - [ ] `git grep` ne trouve ni `sb_secret_` ni valeur de `SECRET_KEY`.
 - [ ] L'URL Vercel marche de bout en bout ; `/health/` répond 200 sur Render.
 - [ ] CORS : l'origine de production et les previews passent, une autre origine est refusée.
-- [ ] Les deux membres ont des commits réguliers, des branches et au moins trois PR fusionnées après relecture.
+- [ ] Des commits réguliers, des branches et au moins trois PR fusionnées après relecture (l'énoncé demande des commits des deux membres de l'équipe).
 - [ ] Le rapport contient le tableau des stratégies de rendu, la raison de chaque `"use client"`, le choix du cookie, les corrections du back-end et le tableau des tests.
 - [ ] La vidéo OBS montre la version déployée et les fonctions principales.
 - [ ] La veille de la remise : Supabase n'est pas en pause, Render est réveillé, `seed_demo --reset` a été relancé, puis les cookies des navigateurs de démo supprimés et l'image de couverture renvoyée ; une sauvegarde pg\_dump de Neon est faite.
@@ -682,7 +682,7 @@ La plupart des pièges viennent des nouveautés de 2026 (Next.js 16.4, Vitest 5,
 | Risque | Effet | Parade |
 | --- | --- | --- |
 | Cache Components activé par défaut (create-next-app 16.4) | Erreur « blocking-route » dès qu'une page lit un cookie hors `Suspense` | `--no-cache-components` à la création (P2) |
-| `@types/node ^20` du gabarit | `npm i -D vitest` échoue (ERESOLVE) | Passer `@types/node` en `^24` avant d'installer Vitest |
+| `@types/node ^20` du gabarit | `npm i -D vitest` échoue (ERESOLVE) | Passer `@types/node` en `^26` avant d'installer Vitest |
 | `.env*` dans le `.gitignore` généré par Next.js | `frontend/.env.example` absent du dépôt et de l'archive | Ligne `!.env.example`, puis `git ls-files` (P2) |
 | Variables absentes dans la CI | `npm run build` échoue dès l'ajout de Supabase | Valeur factice pour chaque variable de `.env.example` ; client Supabase créé dans une fonction |
 | Rotation du refresh avec liste noire | Déconnexions aléatoires si deux rafraîchissements partent en même temps | Rafraîchir seulement dans le proxy, exclure les préchargements, aucun nouvel essai dans les Server Actions ; limite décrite dans le rapport |
@@ -708,4 +708,4 @@ La plupart des pièges viennent des nouveautés de 2026 (Next.js 16.4, Vitest 5,
 
 ## Sources
 
-Versions et comportements vérifiés le 17 novembre 2026 sur les pages officielles suivantes : [Next.js 16.4](https://nextjs.org/blog/next-16-4), [create-next-app](https://nextjs.org/docs/app/api-reference/cli/create-next-app), [proxy.ts](https://nextjs.org/docs/app/api-reference/file-conventions/proxy), [migration vers Next.js 16](https://nextjs.org/docs/app/guides/upgrading/version-16), [authentification](https://nextjs.org/docs/app/guides/authentication), [backend for frontend](https://nextjs.org/docs/app/guides/backend-for-frontend), [Vitest avec Next.js](https://nextjs.org/docs/app/guides/testing/vitest), [serverActions](https://nextjs.org/docs/app/api-reference/config/next-config-js/serverActions), [next/image](https://nextjs.org/docs/app/api-reference/components/image), [React 19.3](https://react.dev/blog/2026/09/09/react-19-3), [Tailwind CSS avec Next.js](https://tailwindcss.com/docs/installation/framework-guides/nextjs), [CLI shadcn](https://ui.shadcn.com/docs/cli), [Base UI par défaut dans shadcn](https://ui.shadcn.com/docs/changelog/2026-07-base-ui-default), [formulaires shadcn](https://ui.shadcn.com/docs/forms/react-hook-form), [Vitest 5](https://vitest.dev/blog/vitest-5), [MSW 3](https://github.com/mswjs/msw/releases/tag/v3.0.0), [clés d'API Supabase](https://supabase.com/docs/guides/api/api-keys), [buckets Supabase](https://supabase.com/docs/guides/storage/buckets/fundamentals), [pause des projets gratuits Supabase](https://supabase.com/docs/guides/platform/free-plan-pausing), [limites des fonctions Vercel](https://vercel.com/docs/functions/limitations), [variables Vercel](https://vercel.com/docs/environment-variables), [URL de preview Vercel](https://vercel.com/docs/deployments/generated-urls), [Vercel et Git](https://vercel.com/docs/git), [blocage des versions vulnérables par Vercel](https://vercel.com/changelog/new-deployments-of-vulnerable-next-js-applications-are-now-blocked-by), [Render gratuit](https://render.com/docs/free), [tarifs Neon](https://neon.com/pricing), [liste blanche PythonAnywhere](https://www.pythonanywhere.com/whitelist/), [versions de Node.js](https://nodejs.org/en/about/previous-releases), [TypeScript 7.0](https://devblogs.microsoft.com/typescript/announcing-typescript-7-0/). Les numéros de version exacts viennent du registre npm. Les faits sur le back-end viennent de la lecture du dépôt au tag v1.0.
+Versions et comportements vérifiés le 17 novembre 2026 sur les pages officielles suivantes : [Next.js 16.4](https://nextjs.org/blog/next-16-4), [create-next-app](https://nextjs.org/docs/app/api-reference/cli/create-next-app), [proxy.ts](https://nextjs.org/docs/app/api-reference/file-conventions/proxy), [migration vers Next.js 16](https://nextjs.org/docs/app/guides/upgrading/version-16), [authentification](https://nextjs.org/docs/app/guides/authentication), [backend for frontend](https://nextjs.org/docs/app/guides/backend-for-frontend), [Vitest avec Next.js](https://nextjs.org/docs/app/guides/testing/vitest), [serverActions](https://nextjs.org/docs/app/api-reference/config/next-config-js/serverActions), [next/image](https://nextjs.org/docs/app/api-reference/components/image), [React 19.3](https://react.dev/blog/2026/09/09/react-19-3), [Tailwind CSS avec Next.js](https://tailwindcss.com/docs/installation/framework-guides/nextjs), [CLI shadcn](https://ui.shadcn.com/docs/cli), [Base UI par défaut dans shadcn](https://ui.shadcn.com/docs/changelog/2026-07-base-ui-default), [formulaires shadcn](https://ui.shadcn.com/docs/forms/react-hook-form), [Vitest 5](https://vitest.dev/blog/vitest-5), [MSW 3](https://github.com/mswjs/msw/releases/tag/v3.0.0), [clés d'API Supabase](https://supabase.com/docs/guides/api/api-keys), [buckets Supabase](https://supabase.com/docs/guides/storage/buckets/fundamentals), [pause des projets gratuits Supabase](https://supabase.com/docs/guides/platform/free-plan-pausing), [limites des fonctions Vercel](https://vercel.com/docs/functions/limitations), [variables Vercel](https://vercel.com/docs/environment-variables), [URL de preview Vercel](https://vercel.com/docs/deployments/generated-urls), [Vercel et Git](https://vercel.com/docs/git), [blocage des versions vulnérables par Vercel](https://vercel.com/changelog/new-deployments-of-vulnerable-next-js-applications-are-now-blocked-by), [Render gratuit](https://render.com/docs/free), [tarifs Neon](https://neon.com/pricing), [liste blanche PythonAnywhere](https://www.pythonanywhere.com/whitelist/), [versions de Node.js](https://nodejs.org/en/about/previous-releases), [TypeScript 7.0](https://devblogs.microsoft.com/typescript/announcing-typescript-7-0/). Node.js 26 vérifié le 18 novembre 2026 : [versions Node.js sur Vercel](https://vercel.com/docs/functions/runtimes/node-js/node-js-versions), [Node.js 26 LTS sur Vercel](https://vercel.com/changelog/node-js-26-lts-is-now-generally-available-on-vercel). Les numéros de version exacts viennent du registre npm. Les faits sur le back-end viennent de la lecture du dépôt au tag v1.0.
