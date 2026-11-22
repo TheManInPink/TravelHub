@@ -40,7 +40,12 @@ def validate_cover_image_url(value):
             "L'adresse de l'image doit commencer par https://.", code="https_required"
         )
     expected_host = settings.SUPABASE_STORAGE_HOST
-    if expected_host and parts.hostname != expected_host.lower():
+    # On compare toute la partie hôte (netloc) et pas seulement parts.hostname. Python et les
+    # navigateurs ne lisent pas l'hôte de la même façon si l'adresse contient « @ » ou « \ ».
+    # Dans https://evil.example\@<hôte>/a.webp, Python trouve <hôte>, mais un navigateur
+    # charge l'image depuis evil.example. Une adresse publique de Supabase n'a ni
+    # identifiants ni port, on peut donc exiger l'hôte seul.
+    if expected_host and parts.netloc.lower() != expected_host.lower():
         raise ValidationError(
             f"L'image doit être hébergée sur {expected_host}.", code="invalid_host"
         )

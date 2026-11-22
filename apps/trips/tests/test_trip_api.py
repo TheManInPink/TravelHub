@@ -352,6 +352,10 @@ class TestCoverImageUrl:
             "https://evil.example/a.webp",
             f"https://{STORAGE_HOST}.evil.example/a.webp",
             f"https://{STORAGE_HOST}@evil.example/a.webp",
+            # Python lit l'hôte de Supabase, mais un navigateur va sur evil.example.
+            rf"https://evil.example\@{STORAGE_HOST}/a.webp",
+            f"https://alice:secret@{STORAGE_HOST}/a.webp",
+            f"https://{STORAGE_HOST}:8443/a.webp",
         ],
     )
     @override_settings(SUPABASE_STORAGE_HOST=STORAGE_HOST)
@@ -361,6 +365,14 @@ class TestCoverImageUrl:
         assert self.cover_error(response) == [f"L'image doit être hébergée sur {STORAGE_HOST}."]
         trip.refresh_from_db()
         assert trip.cover_image_url == ""
+
+    @override_settings(SUPABASE_STORAGE_HOST=STORAGE_HOST)
+    def test_host_is_not_case_sensitive(self, client_for, owner, trip):
+        url = COVER_URL.replace(STORAGE_HOST, STORAGE_HOST.upper(), 1)
+
+        response = client_for(owner).patch(detail_url(trip), {"cover_image_url": url})
+
+        assert response.status_code == 200
 
     def test_malformed_url_gives_a_single_error(self, client_for, owner, trip):
         response = client_for(owner).patch(detail_url(trip), {"cover_image_url": "pas une adresse"})
