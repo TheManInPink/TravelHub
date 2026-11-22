@@ -5,6 +5,7 @@ l'absence de trace de pile dans les réponses d'erreur."""
 
 import importlib
 import os
+import re
 import subprocess
 import sys
 from datetime import timedelta
@@ -13,6 +14,8 @@ import pytest
 from django.conf import settings
 from django.test import override_settings
 from django.urls import reverse
+from rest_framework.test import APIRequestFactory
+from rest_framework.throttling import AnonRateThrottle
 from rest_framework_simplejwt.tokens import AccessToken
 
 from apps.core.testing import error_of
@@ -75,11 +78,90 @@ class TestCors:
 
         assert "Access-Control-Allow-Origin" not in response
 
+    @override_settings(CORS_ALLOWED_ORIGINS=[ALLOWED])
+    def test_request_id_and_retry_after_are_exposed(self, client_a):
+        response = client_a.get(ME_URL, HTTP_ORIGIN=self.ALLOWED)
+
+        exposed = {
+            name.strip().lower() for name in response["Access-Control-Expose-Headers"].split(",")
+        }
+        assert {"x-request-id", "retry-after"} <= exposed
+
+    @pytest.mark.parametrize(
+        ("origin", "allowed"),
+        [
+            ("https://travelhub-git-frontend-auth-equipe.vercel.app", True),
+            ("https://evil.vercel.app", False),
+            ("https://travelhub-abc-equipe.vercel.app.evil.example", False),
+        ],
+    )
+    @override_settings(
+        CORS_ALLOWED_ORIGINS=[],
+        CORS_ALLOWED_ORIGIN_REGEXES=[r"^https://travelhub-[a-z0-9-]+-equipe\.vercel\.app$"],
+    )
+    def test_preview_regex_accepts_only_team_previews(self, api_client, origin, allowed):
+        response = self.preflight(api_client, origin)
+
+        assert (response.get("Access-Control-Allow-Origin") == origin) is allowed
+
     def test_no_wildcard_and_no_credentials(self):
         assert not getattr(settings, "CORS_ALLOW_ALL_ORIGINS", False)
-        assert not getattr(settings, "CORS_ALLOW_CREDENTIALS", False)
-        assert not getattr(settings, "CORS_ALLOWED_ORIGIN_REGEXES", [])
+        assert settings.CORS_ALLOW_CREDENTIALS is False
         assert "*" not in settings.CORS_ALLOWED_ORIGINS
+        # Les regex des previews sont facultatives, mais toujours ancrées des deux côtés.
+        for pattern in settings.CORS_ALLOWED_ORIGIN_REGEXES:
+            assert pattern.startswith("^") and pattern.endswith("$"), pattern
+            assert not re.match(pattern, "https://evil.vercel.app"), pattern
+
+
+@pytest.fixture
+def base_with_env(monkeypatch):
+    """Recharge config.settings.base avec d'autres variables d'environnement.
+
+    django.conf.settings ne change pas. Le module est rechargé une deuxième fois à la
+    fin, avec l'environnement d'origine.
+    """
+
+    def _load(**variables):
+        for name, value in variables.items():
+            monkeypatch.setenv(name, value)
+        return load_settings("config.settings.base")
+
+    yield _load
+    monkeypatch.undo()
+    load_settings("config.settings.base")
+
+
+class TestSettingsFromEnvironment:
+    def test_preview_regexes_are_split_on_semicolons(self, base_with_env):
+        # La virgule de {1,30} ne coupe pas la regex.
+        base = base_with_env(
+            CORS_ALLOWED_ORIGIN_REGEXES=(
+                r"^https://travelhub-[a-z0-9-]{1,30}-equipe\.vercel\.app$ ; "
+                r"^https://travelhub\.example$;"
+            )
+        )
+
+        assert base.CORS_ALLOWED_ORIGIN_REGEXES == [
+            r"^https://travelhub-[a-z0-9-]{1,30}-equipe\.vercel\.app$",
+            r"^https://travelhub\.example$",
+        ]
+
+    def test_num_proxies_and_storage_host(self, base_with_env):
+        base = base_with_env(NUM_PROXIES="1", SUPABASE_STORAGE_HOST="abcdefgh.supabase.co")
+
+        assert base.REST_FRAMEWORK["NUM_PROXIES"] == 1
+        assert base.SUPABASE_STORAGE_HOST == "abcdefgh.supabase.co"
+
+    def test_throttling_uses_the_address_added_by_the_proxy(self):
+        # Le client peut écrire ce qu'il veut dans X-Forwarded-For. Seule la dernière
+        # adresse, ajoutée par le proxy de Render, est fiable.
+        request = APIRequestFactory().get(
+            "/", HTTP_X_FORWARDED_FOR="198.51.100.7, 203.0.113.9", REMOTE_ADDR="10.0.0.1"
+        )
+
+        with override_settings(REST_FRAMEWORK={**settings.REST_FRAMEWORK, "NUM_PROXIES": 1}):
+            assert AnonRateThrottle().get_ident(request) == "203.0.113.9"
 
 
 @pytest.mark.django_db

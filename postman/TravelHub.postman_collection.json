@@ -499,7 +499,11 @@
                   "                    pm.expect(body.destination_count).to.eql(0);",
                   "                    pm.expect(body.total_cost).to.eql(\"0.00\");",
                   "                });",
-                  "                pm.environment.set(\"trip_id\", body.id);"
+                  "                pm.environment.set(\"trip_id\", body.id);",
+                  "                pm.test(\"Rôle owner et aucune image\", () => {",
+                  "                    pm.expect(body.my_role).to.eql(\"owner\");",
+                  "                    pm.expect(body.cover_image_url).to.eql(\"\");",
+                  "                });"
                 ]
               }
             }
@@ -1192,7 +1196,8 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test(\"Statut 200\", () => pm.response.to.have.status(200));"
+                  "pm.test(\"Statut 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Rôle viewer\", () => pm.expect(pm.response.json().my_role).to.eql(\"viewer\"));"
                 ]
               }
             }
@@ -1318,7 +1323,8 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test(\"Statut 200\", () => pm.response.to.have.status(200));"
+                  "pm.test(\"Statut 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Rôle editor\", () => pm.expect(pm.response.json().my_role).to.eql(\"editor\"));"
                 ]
               }
             }
@@ -1645,7 +1651,7 @@
             "body": {
               "mode": "graphql",
               "graphql": {
-                "query": "query Trip($id: ID!) {\n  trip(id: $id) {\n    title\n    totalCost\n    destinations { city countryCode activities { name category cost } }\n    participants { role user { username email } }\n  }\n}",
+                "query": "query Trip($id: ID!) {\n  trip(id: $id) {\n    title\n    totalCost\n    myRole\n    coverImageUrl\n    destinations { city countryCode activities { name category cost } }\n    participants { role user { username email } }\n  }\n}",
                 "variables": "{\"id\": \"{{trip_id}}\"}"
               }
             }
@@ -1662,6 +1668,10 @@
                   "                pm.test(\"Destination et activité\", () => {",
                   "                    pm.expect(trip.destinations[0].city).to.eql(\"Kyoto\");",
                   "                    pm.expect(trip.destinations[0].activities[0].category).to.eql(\"CULTURE\");",
+                  "                });",
+                  "                pm.test(\"Rôle OWNER et aucune image\", () => {",
+                  "                    pm.expect(trip.myRole).to.eql(\"OWNER\");",
+                  "                    pm.expect(trip.coverImageUrl).to.eql(\"\");",
                   "                });"
                 ]
               }
@@ -2149,6 +2159,45 @@
                   "    pm.expect(error).to.have.all.keys(\"code\", \"message\", \"details\");",
                   "});",
                   "pm.test(\"Erreur sur le champ budget\", () => pm.expect(error.details).to.have.property(\"budget\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "400 — image de couverture en http",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/trips/{{trip_id}}/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cover_image_url\": \"http://exemple.supabase.co/storage/v1/object/public/travelhub-images/trips/1/a.webp\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 400\", () => pm.response.to.have.status(400));",
+                  "const error = pm.response.json().error;",
+                  "pm.test(\"Code d'erreur validation_error\", () => pm.expect(error.code).to.eql(\"validation_error\"));",
+                  "pm.test(\"Enveloppe {code, message, details}\", () => {",
+                  "    pm.expect(error).to.have.all.keys(\"code\", \"message\", \"details\");",
+                  "});",
+                  "pm.test(\"Erreur sur le champ cover_image_url\", () => pm.expect(error.details).to.have.property(\"cover_image_url\"));"
                 ]
               }
             }

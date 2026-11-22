@@ -41,9 +41,10 @@ USER travelhub
 
 EXPOSE 8000
 
-# /health/ vérifie la base et le cache. Il n'est pas redirigé vers HTTPS.
+# /health/ vérifie la base et le cache. Il n'est pas redirigé vers HTTPS. Le port est
+# celui de Gunicorn : PORT s'il est défini (Render), sinon 8000.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-    CMD ["python", "-c", "import urllib.request as u; u.urlopen('http://localhost:8000/health/', timeout=4)"]
+    CMD ["python", "-c", "import os, urllib.request as u; u.urlopen('http://localhost:%s/health/' % (os.environ.get('PORT') or '8000'), timeout=4)"]
 
 # Les options sont dans gunicorn.conf.py (lu depuis /app).
 CMD ["gunicorn", "config.wsgi"]

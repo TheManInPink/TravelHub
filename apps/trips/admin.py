@@ -1,4 +1,5 @@
 from django.contrib import admin
+from django.db import models
 from django.utils import timezone
 
 from apps.itinerary.models import Destination
@@ -65,6 +66,9 @@ class TripAdmin(admin.ModelAdmin):
     autocomplete_fields = ("owner",)
     readonly_fields = ("created_at", "updated_at")
     inlines = (TripParticipantInline, DestinationInline)
+    # cover_image_url n'accepte que https. Une adresse saisie sans schéma le reçoit donc
+    # (c'est aussi le comportement par défaut de Django 6.0).
+    formfield_overrides = {models.URLField: {"assume_scheme": "https"}}
 
     def get_queryset(self, request):
         return super().get_queryset(request).with_totals()

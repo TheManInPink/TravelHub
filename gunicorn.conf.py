@@ -6,7 +6,10 @@ Le nombre de processus se règle avec WEB_CONCURRENCY, que Gunicorn lit lui-mêm
 import os
 
 # Dans le conteneur, on écoute sur toutes les interfaces. Docker publie le port.
-bind = os.environ.get("GUNICORN_BIND", "0.0.0.0:8000")  # noqa: S104
+# GUNICORN_BIND passe en premier. Sinon on prend PORT, que Render donne au conteneur,
+# et 8000 par défaut.
+_port = os.environ.get("PORT") or "8000"
+bind = os.environ.get("GUNICORN_BIND") or f"0.0.0.0:{_port}"  # noqa: S104
 workers = int(os.environ.get("WEB_CONCURRENCY", "2"))
 timeout = 30
 # Pas de socket de contrôle (gunicornc, Gunicorn 25.1+). Il serait créé dans $HOME,
