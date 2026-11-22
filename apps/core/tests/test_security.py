@@ -12,6 +12,7 @@ from datetime import timedelta
 
 import pytest
 from django.conf import settings
+from django.core.exceptions import ImproperlyConfigured
 from django.test import override_settings
 from django.urls import reverse
 from rest_framework.test import APIRequestFactory
@@ -152,6 +153,20 @@ class TestSettingsFromEnvironment:
 
         assert base.REST_FRAMEWORK["NUM_PROXIES"] == 1
         assert base.SUPABASE_STORAGE_HOST == "abcdefgh.supabase.co"
+
+    def test_storage_host_is_trimmed_and_lowercased(self, base_with_env):
+        base = base_with_env(SUPABASE_STORAGE_HOST=" ABCDEFGH.supabase.co ")
+
+        assert base.SUPABASE_STORAGE_HOST == "abcdefgh.supabase.co"
+
+    @pytest.mark.parametrize(
+        "value",
+        ["https://abcdefgh.supabase.co", "abcdefgh.supabase.co/", "abcdefgh.supabase.co:443"],
+    )
+    def test_storage_host_must_be_a_bare_host(self, base_with_env, value):
+        # Avec l'URL du projet, toutes les images seraient refusées. Django ne démarre pas.
+        with pytest.raises(ImproperlyConfigured, match="SUPABASE_STORAGE_HOST"):
+            base_with_env(SUPABASE_STORAGE_HOST=value)
 
     def test_throttling_uses_the_address_added_by_the_proxy(self):
         # Le client peut écrire ce qu'il veut dans X-Forwarded-For. Seule la dernière

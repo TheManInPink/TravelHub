@@ -106,8 +106,8 @@ Les variables sont lues dans l'environnement, sinon dans `.env` (le modèle est 
 | `DEBUG` | | `False` (`True` en dev) | Ignorée en production (`config.settings.prod`) |
 | `ALLOWED_HOSTS` | en production | `localhost,127.0.0.1` en dev | Noms d'hôte acceptés, séparés par des virgules |
 | `CORS_ALLOWED_ORIGINS` | | aucune | Origines du front-end autorisées (le domaine Vercel en production) |
-| `CORS_ALLOWED_ORIGIN_REGEXES` | | aucune | Regex des previews Vercel, séparées par `;`. Chaque regex commence par `^` et finit par `$` |
-| `SUPABASE_STORAGE_HOST` | | aucun | Seul hôte accepté pour `cover_image_url` (ex. `<ref>.supabase.co`). Si la variable est vide, toute adresse https est acceptée |
+| `CORS_ALLOWED_ORIGIN_REGEXES` | | aucune | Regex des previews Vercel, séparées par `;`. Chaque regex commence par `^` et finit par `$`. Inutile avec le BFF, donc vide en production |
+| `SUPABASE_STORAGE_HOST` | | aucun | Seul hôte accepté pour `cover_image_url` (ex. `<ref>.supabase.co`). On met l'hôte seul, sans `https://` ni `/`, sinon Django refuse de démarrer. Si la variable est vide, toute adresse https est acceptée |
 | `DB_CONN_MAX_AGE` | | `60` | Durée de vie des connexions PostgreSQL, en secondes |
 | `THROTTLE_ANON_RATE`, `THROTTLE_USER_RATE` | | `100/hour`, `1000/hour` | Limites de requêtes (REST et GraphQL) |
 | `NUM_PROXIES` | | aucun | Nombre de proxys devant Gunicorn (`1` sur Render). La limite de requêtes prend alors l'adresse ajoutée par le proxy à `X-Forwarded-For` |
@@ -307,7 +307,7 @@ On ne peut pas retirer ni rétrograder le propriétaire (400). Il doit d'abord d
 Deux champs ont été ajoutés aux voyages pour le front-end du TP2 :
 
 - `my_role` (lecture seule) donne le rôle de l'utilisateur connecté dans le voyage : `owner`, `editor` ou `viewer`. L'interface s'en sert pour masquer les boutons, mais c'est toujours l'API qui décide. Le rôle est lu dans une sous-requête, donc la liste fait toujours deux requêtes SQL.
-- `cover_image_url` est l'adresse de l'image de couverture, envoyée dans Supabase Storage par le front-end. Elle doit commencer par `https://` et, si `SUPABASE_STORAGE_HOST` est défini, être sur cet hôte. Une chaîne vide retire l'image. La duplication d'un voyage ne copie pas l'image.
+- `cover_image_url` est l'adresse de l'image de couverture, envoyée dans Supabase Storage par le front-end. Elle doit commencer par `https://` et, si `SUPABASE_STORAGE_HOST` est défini, être sur cet hôte, sans identifiants ni port. Une chaîne vide retire l'image. La duplication d'un voyage ne copie pas l'image.
 
 ### Météo (Open-Meteo)
 
