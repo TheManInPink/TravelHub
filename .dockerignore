@@ -23,6 +23,7 @@ logs/
 # Pas utile au service web
 Dockerfile
 docker-compose.yml
+render.yaml
 .dockerignore
 Modèle_de_Rapport_LaTex/
 # Le front-end Next.js est déployé à part, sur Vercel.

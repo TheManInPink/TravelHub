@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Toaster } from "@/components/ui/sonner";
+import { siteUrl } from "@/lib/site";
 import "./globals.css";
 
 // globals.css (shadcn) lit la police dans --font-sans.
@@ -15,6 +16,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: siteUrl(),
   title: {
     default: "TravelHub",
     template: "%s · TravelHub",
