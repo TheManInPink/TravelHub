@@ -1,7 +1,15 @@
 // Données de test qui imitent les réponses de Django. Elles sont typées avec types/api.ts
 // et types/graphql.ts : si un type change, TypeScript signale aussi les données de test.
 
-import type { Paginated, Trip, TripDetail, TripStats, UserSummary } from "@/types/api";
+import type {
+  Paginated,
+  TokenPair,
+  Trip,
+  TripDetail,
+  TripStats,
+  User,
+  UserSummary,
+} from "@/types/api";
 import type { GqlDestinationPage } from "@/types/graphql";
 
 export const alice: UserSummary = {
@@ -129,3 +137,20 @@ export const kyotoPage: GqlDestinationPage = {
     },
   ],
 };
+
+// Authentification. L'API simulée accepte seulement ces jetons et ce mot de passe.
+
+export const aliceAccount: User = {
+  ...alice,
+  email: "alice@example.com",
+  date_joined: "2026-10-01T12:00:00Z",
+};
+
+export const ALICE_PASSWORD = "Voyage-Montreal-2027";
+
+/** Paire de jetons valide, par exemple dans les cookies d'un utilisateur connecté. */
+export const validTokens: TokenPair = { access: "access-valide", refresh: "refresh-valide" };
+
+/** Paire renvoyée par la connexion, l'inscription ou le rafraîchissement. */
+export const newTokens: TokenPair = { access: "access-neuf", refresh: "refresh-neuf" };
+
