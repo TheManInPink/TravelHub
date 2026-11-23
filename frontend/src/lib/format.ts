@@ -11,7 +11,8 @@ const DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
 const TIME_PATTERN = /^(\d{2}):(\d{2})(?::\d{2}(?:\.\d+)?)?$/;
 const DECIMAL_PATTERN = /^-?\d+(?:\.\d+)?$/;
 
-type DateStyle = "long" | "medium" | "short";
+/** « full » ajoute le jour de la semaine : « vendredi 9 avril 2027 ». */
+type DateStyle = "full" | "long" | "medium" | "short";
 
 // Une date sans heure est lue en UTC et affichée en UTC. Sinon, new Date("2026-11-22")
 // tombe le 21 novembre au soir à Toronto, et le serveur (en UTC) ne donnerait pas
