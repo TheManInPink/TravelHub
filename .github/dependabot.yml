@@ -24,7 +24,8 @@ updates:
       # Les plugins tirés par eslint-config-next 16.4 n'acceptent pas encore ESLint 10.
       - dependency-name: eslint
         update-types: ["version-update:semver-major"]
-      # TypeScript 7.0 n'a pas d'API de programmation avant la 7.1 (plan, section 5.2).
+      # « typescript » est un alias vers @typescript/typescript6, l'API de TypeScript 6 dont
+      # typescript-eslint a besoin. TypeScript 7 est installé à part, sous le nom typescript7.
       - dependency-name: typescript
         update-types: ["version-update:semver-major"]
 

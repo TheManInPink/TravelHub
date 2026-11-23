@@ -102,7 +102,9 @@ npm test                            # tests Vitest
 
 Le fichier `.env.local` reste hors de Git. Seules les variables qui commencent par `NEXT_PUBLIC_` arrivent dans le navigateur. La clé secrète de Supabase n'a donc jamais ce préfixe.
 
-D'autres commandes se lancent aussi depuis `frontend/`. `npm run lint` lance ESLint et `npm run typecheck` génère les types des routes avant de lancer `tsc`. `npm run build` fait le build de production, comme sur Vercel. Les tests sont dans `frontend/tests/` et `npm run test:watch` les relance à chaque modification.
+D'autres commandes se lancent aussi depuis `frontend/`. `npm run lint` lance ESLint et `npm run typecheck` génère les types des routes avant de lancer `tsc` de TypeScript 7. `npm run build` fait le build de production, comme sur Vercel. Les tests sont dans `frontend/tests/` et `npm run test:watch` les relance à chaque modification.
+
+TypeScript 7.0 n'a pas encore d'API JavaScript, et `typescript-eslint` en a besoin. Nous suivons donc la méthode de l'équipe TypeScript, avec deux paquets. Le paquet `typescript7` est TypeScript 7.0, que `npm run typecheck` utilise. Le nom `typescript` est un alias vers `@typescript/typescript6`, qui fournit l'API de TypeScript 6 à `typescript-eslint` et la commande `tsc6`. `next build` la trouve tout seul pour sa propre vérification des types. Nous pourrons revenir à un seul paquet quand TypeScript 7.1 aura son API.
 
 Depuis la racine du dépôt, `npm test` et `npm run build` lancent les mêmes commandes dans `frontend/`, grâce au petit `package.json` de la racine. Il n'y a rien à installer à la racine.
 
