@@ -10,6 +10,24 @@ updates:
       pip-minor-patch:
         update-types: [minor, patch]
 
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+    groups:
+      npm-minor-patch:
+        update-types: [minor, patch]
+    ignore:
+      # @types/node suit la version majeure de Node.js (26 LTS, comme engines et la CI).
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
+      # Les plugins tirés par eslint-config-next 16.4 n'acceptent pas encore ESLint 10.
+      - dependency-name: eslint
+        update-types: ["version-update:semver-major"]
+      # TypeScript 7.0 n'a pas d'API de programmation avant la 7.1 (plan, section 5.2).
+      - dependency-name: typescript
+        update-types: ["version-update:semver-major"]
+
   - package-ecosystem: github-actions
     directory: /
     schedule:

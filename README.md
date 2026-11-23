@@ -2,7 +2,9 @@
 
 TravelHub est le back-end Django du TP1. Il sert à planifier et gérer des voyages. Il propose une API REST (Django REST Framework) et une API GraphQL (Graphene-Django), utilise PostgreSQL et appelle deux services externes, Open-Meteo et Countries GraphQL.
 
-Sommaire : [installation locale](#installation-powershell) · [Docker](#docker) · [variables d'environnement](#variables-denvironnement) · [comptes de démonstration](#comptes-de-démonstration) · [exploitation (journaux, santé)](#exploitation) · [sauvegarde et restauration](#sauvegarde-et-restauration) · [API REST](#api-rest) · [API GraphQL](#api-graphql) · [sécurité](#sécurité-owasp-api-security-top-10-2023) · [tests](#tests-et-qualité)
+Le front-end du TP2 est une application Next.js qui se trouve dans le dossier `frontend/`. Elle est décrite dans la section [Lancer le front-end](#lancer-le-front-end).
+
+Sommaire : [installation locale](#installation-powershell) · [Docker](#docker) · [front-end](#lancer-le-front-end) · [variables d'environnement](#variables-denvironnement) · [comptes de démonstration](#comptes-de-démonstration) · [exploitation (journaux, santé)](#exploitation) · [sauvegarde et restauration](#sauvegarde-et-restauration) · [API REST](#api-rest) · [API GraphQL](#api-graphql) · [sécurité](#sécurité-owasp-api-security-top-10-2023) · [tests](#tests-et-qualité)
 
 ## Prérequis
 
@@ -11,6 +13,7 @@ Sommaire : [installation locale](#installation-powershell) · [Docker](#docker) 
 | Python | 3.14 (`C:\Python314\python.exe`) |
 | PostgreSQL | 18 (service `postgresql-x64-18`) |
 | pgAdmin | 4 |
+| Node.js | 26 LTS, pour le front-end |
 | Git | 2.x |
 
 Sur ce poste, la commande `py` lance Python 3.15. Il faut donc créer l'environnement virtuel avec Python 3.14 en donnant son chemin complet.
@@ -85,15 +88,35 @@ Le `Dockerfile` installe les dépendances dans une première étape (`python:3.1
 
 Dans `docker-compose.yml`, le service `web` remplace `DATABASE_URL` pour viser l'hôte `db`. Il désactive aussi la redirection HTTPS et HSTS, parce qu'en local on passe par HTTP. En vraie production, derrière un proxy HTTPS, on garde les valeurs par défaut.
 
+## Lancer le front-end
+
+Le front-end est une application Next.js 16 (App Router, TypeScript, Tailwind CSS et shadcn/ui). Il faut Node.js 26 LTS, et `node -v` doit afficher une version 26. Le navigateur ne parle qu'à Next.js. C'est le serveur Next.js qui appelle l'API Django, donc nous démarrons d'abord Django (voir plus haut).
+
+```powershell
+cd frontend
+npm ci                              # installe les versions exactes de package-lock.json
+Copy-Item .env.example .env.local   # puis remplir les valeurs (exemples en commentaire)
+npm run dev                         # http://localhost:3000
+npm test                            # tests Vitest
+```
+
+Le fichier `.env.local` reste hors de Git. Seules les variables qui commencent par `NEXT_PUBLIC_` arrivent dans le navigateur. La clé secrète de Supabase n'a donc jamais ce préfixe.
+
+D'autres commandes se lancent aussi depuis `frontend/`. `npm run lint` lance ESLint et `npm run typecheck` génère les types des routes avant de lancer `tsc`. `npm run build` fait le build de production, comme sur Vercel. Les tests sont dans `frontend/tests/` et `npm run test:watch` les relance à chaque modification.
+
+Depuis la racine du dépôt, `npm test` et `npm run build` lancent les mêmes commandes dans `frontend/`, grâce au petit `package.json` de la racine. Il n'y a rien à installer à la racine.
+
 ## Intégration continue
 
-Le fichier `.github/workflows/ci.yml` tourne à chaque push sur `master` et à chaque pull request. Il contient deux tâches.
+Le fichier `.github/workflows/ci.yml` tourne à chaque push sur `master` et à chaque pull request. Il contient trois tâches.
 
 La tâche **Lint et tests** démarre un service PostgreSQL 18 et utilise le cache pip. Elle lance `ruff check`, `ruff format --check` et `pytest --cov-fail-under=80`. Le résumé de couverture s'affiche sur la page de l'exécution, et `coverage.xml` et `htmlcov/` sont publiés dans l'artefact `coverage`.
 
 La tâche **Image Docker** construit l'image avec le cache de GitHub Actions. Elle lance ensuite `docker compose up --wait web`, qui attend que `/health/` réponde, puis vérifie `/health/`, `/api/docs/` et `/api/schema/`.
 
-Dependabot (`.github/dependabot.yml`) propose chaque semaine les mises à jour de pip et de GitHub Actions.
+La tâche **Front-end** installe Node.js 26 avec le cache npm, puis lance `npm ci` dans `frontend/`. Elle enchaîne ensuite le lint, la vérification des types, les tests Vitest et le build. Pour le build, chaque variable de `frontend/.env.example` reçoit une valeur factice.
+
+Dependabot (`.github/dependabot.yml`) propose chaque semaine les mises à jour de pip, de npm (dossier `frontend/`) et de GitHub Actions. Pour npm, il ne propose pas de nouvelle version majeure de `@types/node`, d'ESLint ni de TypeScript, parce qu'elles ne marchent pas encore avec le reste du projet.
 
 ## Variables d'environnement
 
@@ -443,6 +466,8 @@ logs/              journaux JSON rotatifs (ignoré par Git)
 backups/           archives pg_dump (ignoré par Git)
 .github/           CI (workflows/ci.yml) et Dependabot
 postman/           collection Postman v2.1 et environnement local
+frontend/          front-end Next.js du TP2 (src/, tests/, .env.example)
+package.json       raccourcis npm test et npm run build vers frontend/
 ```
 
 ## Sécurité (OWASP API Security Top 10, 2023)

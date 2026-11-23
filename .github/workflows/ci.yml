@@ -114,3 +114,44 @@ jobs:
       - name: Arrêter docker compose
         if: ${{ always() }}
         run: docker compose down --volumes
+
+  frontend:
+    name: Front-end
+    runs-on: ubuntu-26.04
+    defaults:
+      run:
+        working-directory: frontend
+    env:
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Installer les dépendances
+        run: npm ci
+
+      # Depuis Next.js 16, next build ne lance plus ESLint : le lint est une étape à part.
+      - name: ESLint
+        run: npm run lint
+
+      - name: Types (next typegen et tsc)
+        run: npm run typecheck
+
+      - name: Tests Vitest
+        run: npm test
+
+      # Une valeur factice pour chaque variable de frontend/.env.example. Le build ne doit
+      # appeler ni Django ni Supabase, il a seulement besoin que les variables existent.
+      - name: Build de production
+        run: npm run build
+        env:
+          DJANGO_API_URL: http://localhost:8000
+          SUPABASE_URL: https://exemple.supabase.co
+          SUPABASE_SECRET_KEY: cle-factice-pour-la-ci
+          SUPABASE_BUCKET: travelhub-images
+          NEXT_PUBLIC_SITE_URL: http://localhost:3000

@@ -1,0 +1,9 @@
+{
+  "name": "travelhub",
+  "private": true,
+  "description": "Raccourcis pour lancer depuis la racine les commandes du front-end (dossier frontend/).",
+  "scripts": {
+    "test": "npm --prefix frontend test",
+    "build": "npm --prefix frontend run build"
+  }
+}
