@@ -73,6 +73,14 @@ class TestWebService:
     def test_frontend_changes_do_not_redeploy_the_api(self, service):
         assert "frontend/**" in service["buildFilter"]["ignoredPaths"]
 
+    def test_neon_cli_files_do_not_redeploy_the_api(self, service):
+        # neon.ts et ses dépendances (package.json, .npmrc) ne servent qu'à la CLI Neon.
+        # Ils ne sont pas non plus copiés dans l'image (voir .dockerignore).
+        dockerignore = (settings.BASE_DIR / ".dockerignore").read_text(encoding="utf-8")
+        for name in ("package.json", ".npmrc", "neon.ts"):
+            assert name in service["buildFilter"]["ignoredPaths"], name
+            assert name in dockerignore.splitlines(), name
+
     def test_build_filter_paths_use_only_the_characters_render_accepts(self, service):
         # Règle appliquée par Render au moment de lire le Blueprint, mais absente de son
         # schéma JSON publié. L'ancien dossier « Modèle_de_Rapport_LaTex » était refusé à
