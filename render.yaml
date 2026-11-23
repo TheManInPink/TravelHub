@@ -28,13 +28,13 @@ projects:
             autoDeployTrigger: checksPass
             # Un commit qui touche seulement ces fichiers ne redéploie pas l'API. Aucun
             # d'eux n'entre dans l'image (voir .dockerignore). Render n'accepte que des
-            # caractères ASCII dans ces chemins : « Mod*le » remplace « Modèle ».
+            # caractères ASCII dans ces chemins, d'où le dossier du rapport sans accent.
             buildFilter:
               ignoredPaths:
                 - frontend/**
                 - docs/**
                 - postman/**
-                - Mod*le_de_Rapport_LaTex/**
+                - Modele_de_Rapport_LaTex/**
                 - .github/**
                 - "**/*.md"
             envVars:

@@ -75,7 +75,8 @@ class TestWebService:
 
     def test_build_filter_paths_use_only_the_characters_render_accepts(self, service):
         # Règle appliquée par Render au moment de lire le Blueprint, mais absente de son
-        # schéma JSON publié. « Modèle_de_Rapport_LaTex/** » était refusé à cause du « è ».
+        # schéma JSON publié. L'ancien dossier « Modèle_de_Rapport_LaTex » était refusé à
+        # cause du « è ». Nous l'avons renommé sans accent.
         allowed = re.compile(r"[A-Za-z0-9\-_./^*? \[\]]+")
         for path in service["buildFilter"]["ignoredPaths"]:
             assert allowed.fullmatch(path), path
@@ -83,8 +84,8 @@ class TestWebService:
     def test_build_filter_still_matches_the_report_folder(self, service):
         report = next(p for p in service["buildFilter"]["ignoredPaths"] if "Rapport" in p)
         folder = report.removesuffix("/**")
-        assert (settings.BASE_DIR / "Modèle_de_Rapport_LaTex").is_dir()
-        assert fnmatch.fnmatchcase("Modèle_de_Rapport_LaTex", folder)
+        folders = [path.name for path in settings.BASE_DIR.iterdir() if path.is_dir()]
+        assert any(fnmatch.fnmatchcase(name, folder) for name in folders), folder
 
 
 class TestStartCommand:
