@@ -102,7 +102,11 @@ npm test                            # tests Vitest
 
 Le fichier `.env.local` reste hors de Git. Seules les variables qui commencent par `NEXT_PUBLIC_` arrivent dans le navigateur. La clé secrète de Supabase n'a donc jamais ce préfixe.
 
-D'autres commandes se lancent aussi depuis `frontend/`. `npm run lint` lance ESLint et `npm run typecheck` génère les types des routes avant de lancer `tsc`. `npm run build` fait le build de production, comme sur Vercel. Les tests sont dans `frontend/tests/` et `npm run test:watch` les relance à chaque modification.
+D'autres commandes se lancent aussi depuis `frontend/`. `npm run lint` lance ESLint et `npm run typecheck` génère les types des routes avant de lancer `tsc` de TypeScript 7. `npm run build` fait le build de production, comme sur Vercel. Les tests sont dans `frontend/tests/` et `npm run test:watch` les relance à chaque modification.
+
+TypeScript 7.0 n'a pas encore d'API JavaScript, et `typescript-eslint` en a besoin. Nous suivons donc la méthode de l'équipe TypeScript, avec deux paquets. Le paquet `typescript7` est TypeScript 7.0, que `npm run typecheck` utilise. Le nom `typescript` est un alias vers `@typescript/typescript6`, qui fournit l'API de TypeScript 6 à `typescript-eslint` et la commande `tsc6`. `next build` la trouve tout seul pour sa propre vérification des types. Nous pourrons revenir à un seul paquet quand TypeScript 7.1 aura son API.
+
+Le lint utilise ESLint 10. Les plugins `react`, `import` et `jsx-a11y` de `eslint-config-next` n'acceptent pas encore ESLint 10. Nous avons donc écrit `eslint.config.mjs` nous-mêmes. Il reprend les règles de `eslint-config-next` avec `@next/eslint-plugin-next`, `eslint-plugin-react-hooks` et `typescript-eslint`, et avec trois remplaçants qui acceptent ESLint 10 : `@eslint-react/eslint-plugin`, `eslint-plugin-import-x` et `eslint-plugin-jsx-a11y-x`. Les `overrides` de `package.json` imposent `minimatch` 11 à deux paquets, ce qui corrige une faille signalée par `npm audit`.
 
 Depuis la racine du dépôt, `npm test` et `npm run build` lancent les mêmes commandes dans `frontend/`, grâce au petit `package.json` de la racine. Il n'y a rien à installer à la racine.
 
@@ -116,7 +120,7 @@ La tâche **Image Docker** construit l'image avec le cache de GitHub Actions. El
 
 La tâche **Front-end** installe Node.js 26 avec le cache npm, puis lance `npm ci` dans `frontend/`. Elle enchaîne ensuite le lint, la vérification des types, les tests Vitest et le build. Pour le build, chaque variable de `frontend/.env.example` reçoit une valeur factice.
 
-Dependabot (`.github/dependabot.yml`) propose chaque semaine les mises à jour de pip, de npm (dossier `frontend/`) et de GitHub Actions. Pour npm, il ne propose pas de nouvelle version majeure de `@types/node`, d'ESLint ni de TypeScript, parce qu'elles ne marchent pas encore avec le reste du projet.
+Dependabot (`.github/dependabot.yml`) propose chaque semaine les mises à jour de pip, de npm (dossier `frontend/`) et de GitHub Actions. Pour npm, il ne propose pas de nouvelle version majeure de `@types/node`, qui suit Node.js 26, ni de l'alias `typescript`, qui doit rester en version 6 pour `typescript-eslint`.
 
 ## Variables d'environnement
 
