@@ -108,7 +108,7 @@ TypeScript 7.0 n'a pas encore d'API JavaScript, et `typescript-eslint` en a beso
 
 Le lint utilise ESLint 10. Les plugins `react`, `import` et `jsx-a11y` de `eslint-config-next` n'acceptent pas encore ESLint 10. Nous avons donc écrit `eslint.config.mjs` nous-mêmes. Il reprend les règles de `eslint-config-next` avec `@next/eslint-plugin-next`, `eslint-plugin-react-hooks` et `typescript-eslint`, et avec trois remplaçants qui acceptent ESLint 10 : `@eslint-react/eslint-plugin`, `eslint-plugin-import-x` et `eslint-plugin-jsx-a11y-x`. Les `overrides` de `package.json` imposent `minimatch` 11 à deux paquets, ce qui corrige une faille signalée par `npm audit`.
 
-Depuis la racine du dépôt, `npm test` et `npm run build` lancent les mêmes commandes dans `frontend/`, grâce au petit `package.json` de la racine. Il n'y a rien à installer à la racine.
+Depuis la racine du dépôt, `npm test` et `npm run build` lancent les mêmes commandes dans `frontend/`, grâce au petit `package.json` de la racine. Ces deux commandes n'ont rien à installer à la racine. Les dépendances de la racine servent seulement à la CLI Neon (voir « Déploiement »).
 
 ## Intégration continue
 
@@ -121,6 +121,91 @@ La tâche **Image Docker** construit l'image avec le cache de GitHub Actions. El
 La tâche **Front-end** installe Node.js 26 avec le cache npm, puis lance `npm ci` dans `frontend/`. Elle enchaîne ensuite le lint, la vérification des types, les tests Vitest et le build. Pour le build, chaque variable de `frontend/.env.example` reçoit une valeur factice.
 
 Dependabot (`.github/dependabot.yml`) propose chaque semaine les mises à jour de pip, de npm (dossier `frontend/`) et de GitHub Actions. Pour npm, il ne propose pas de nouvelle version majeure de `@types/node`, qui suit Node.js 26, ni de l'alias `typescript`, qui doit rester en version 6 pour `typescript-eslint`.
+
+## Déploiement
+
+La version en ligne utilise trois services gratuits. Le navigateur parle seulement à Next.js, sur Vercel. Le serveur Next.js appelle l'API Django sur Render, et Django lit la base PostgreSQL de Neon. Les trois services sont dans l'est des États-Unis, près de Washington, pour que les appels entre eux restent courts.
+
+| Service | Adresse | Contenu |
+| --- | --- | --- |
+| Vercel | https://travelhub-uqar.vercel.app | Front-end Next.js (dossier `frontend/`), fonctions dans la région `iad1` |
+| Render | https://travelhub-uqar-api.onrender.com | API Django dans l'image du `Dockerfile`, région `virginia`. Swagger est sur `/api/docs/` |
+| Neon | projet `travelhub`, branche `production` | PostgreSQL 18, région `aws-us-east-1`, base `travelhub`, rôle `travelhub_owner` |
+
+### API sur Render
+
+Le service `travelhub-uqar-api` est décrit dans `render.yaml` (un Blueprint). Nous l'avons créé une seule fois dans le tableau de bord, avec *New > Blueprint* sur la branche `master`. Ensuite, Render relit ce fichier à chaque commit de `master` et redéploie l'API quand la CI est verte (`autoDeployTrigger: checksPass`). Un commit qui touche seulement le front-end, la documentation, Postman, le rapport ou les fichiers de la CLI Neon ne redéploie pas l'API (`buildFilter`).
+
+Le plan gratuit n'a ni commande de pré-déploiement ni shell. Le `CMD` du `Dockerfile` applique donc les migrations à chaque démarrage, puis lance Gunicorn. Render attend ensuite une réponse 200 de `/health/`. Le service s'endort après 15 minutes sans requête, et la requête suivante attend environ une minute.
+
+| Variable | Valeur | Où elle est définie |
+| --- | --- | --- |
+| `DJANGO_SETTINGS_MODULE` | `config.settings.prod` | `render.yaml` |
+| `NUM_PROXIES` | `1`, le proxy de Render | `render.yaml` |
+| `THROTTLE_ANON_RATE` | `300/hour`, car toutes les requêtes anonymes arrivent du serveur Vercel | `render.yaml` |
+| `LOG_FILE` | vide, donc les journaux vont seulement sur la console de Render | `render.yaml` |
+| `WEB_CONCURRENCY` | `2` | `render.yaml` |
+| `SECRET_KEY` | générée sur notre poste avec `python -c "import secrets; print(secrets.token_urlsafe(50))"` | tableau de bord |
+| `DATABASE_URL` | URL directe de Neon, sans `-pooler`, avec `sslmode=require` | tableau de bord |
+| `ALLOWED_HOSTS` | `travelhub-uqar-api.onrender.com,localhost` | tableau de bord |
+| `CORS_ALLOWED_ORIGINS` | `https://travelhub-uqar.vercel.app`, sans `/` à la fin | tableau de bord |
+
+Les quatre dernières variables ont `sync: false` dans `render.yaml`. Render les a demandées à la création du Blueprint, et leur valeur existe seulement dans le tableau de bord. Nous générons `SECRET_KEY` nous-mêmes, car `generateValue` de Render donne 44 caractères et Django en demande au moins 50. Une origine CORS avec un `/` final ou sans `https://` fait échouer les contrôles de Django (erreurs `corsheaders.E014` et `E013`), et donc tout le déploiement.
+
+### Base sur Neon
+
+Django utilise l'URL directe, sans `-pooler`. Les migrations ont besoin d'une connexion directe, et deux processus Gunicorn ouvrent peu de connexions. Sur le plan gratuit, la base s'endort après 5 minutes sans requête et se réveille à la requête suivante.
+
+Le dépôt est relié au projet par la CLI Neon (`npm install -g neon`, puis `neon login` et `neon init`). Le fichier `.neon`, hors de Git, garde le projet et la branche. `neon.ts` décrit la politique des branches, et ses deux dépendances sont dans le `package.json` de la racine. Le fichier `.npmrc` empêche npm de créer un `package-lock.json` à la racine, sinon Next.js prendrait tout le dépôt comme racine du front-end.
+
+Par défaut, `neon init`, `neon deploy` et `neon env pull` écrivent les variables de Neon dans `.env`. Elles y remplacent le `DATABASE_URL` local, et pytest ou `runserver` viseraient alors la base de production. Nous lançons donc toujours `neon deploy --no-env-pull`.
+
+Les commandes sur la base de production se lancent depuis notre poste, dans une fenêtre PowerShell réservée à cet usage. On n'y lance jamais pytest. Le mot de passe des comptes de démo en production n'est pas celui de ce README.
+
+```powershell
+$env:DATABASE_URL = neon connection-string production --database-name travelhub --role-name travelhub_owner --ssl require
+.\.venv\Scripts\python.exe manage.py migrate          # Render le fait aussi à chaque démarrage
+.\.venv\Scripts\python.exe manage.py createsuperuser
+$env:DEMO_PASSWORD = Read-Host "Mot de passe des comptes de démo en production"
+.\.venv\Scripts\python.exe manage.py seed_demo
+Remove-Item Env:DATABASE_URL, Env:DEMO_PASSWORD       # ou fermer la fenêtre
+```
+
+Pour changer le mot de passe du rôle, on lance `neon roles reset-password travelhub_owner`. On colle ensuite la nouvelle URL dans `DATABASE_URL` sur Render, puis on redéploie.
+
+### Front-end sur Vercel
+
+Le projet Vercel `travelhub-uqar` est relié au dépôt GitHub, avec `frontend` comme *Root Directory*. Vercel prend Node.js 26, car `engines.node` vaut `26.x`. Chaque commit de `master` part en production, et chaque PR reçoit une preview. La protection de Vercel (*Standard Protection*) demande une connexion pour les previews, mais pas pour le domaine de production.
+
+| Variable (Production et Preview) | Valeur |
+| --- | --- |
+| `DJANGO_API_URL` | `https://travelhub-uqar-api.onrender.com`, sans `/` à la fin. Seul le serveur Next.js la lit |
+| `NEXT_PUBLIC_SITE_URL` | `https://travelhub-uqar.vercel.app`. Elle sert de base aux liens des métadonnées (`metadataBase`) |
+
+Une variable changée sur Vercel ne s'applique qu'au déploiement suivant. Il faut donc redéployer (*Deployments*, puis *Redeploy*). Les variables `NEXT_PUBLIC_` sont même écrites dans le JavaScript au moment du build. Les variables `SUPABASE_` de `frontend/.env.example` ne servent pas encore.
+
+### Vérifier le déploiement
+
+```powershell
+# API et base. Réponse attendue 200 avec {"status": "ok", "checks": {"database": "ok", "cache": "ok"}}
+curl.exe -s -i --max-time 120 https://travelhub-uqar-api.onrender.com/health/
+
+# CORS depuis le domaine Vercel. La réponse contient access-control-allow-origin
+curl.exe -s -i -X OPTIONS https://travelhub-uqar-api.onrender.com/api/auth/token/ -H "Origin: https://travelhub-uqar.vercel.app" -H "Access-Control-Request-Method: POST"
+
+# CORS depuis une autre origine. Réponse 200 aussi, mais sans access-control-allow-origin
+curl.exe -s -i -X OPTIONS https://travelhub-uqar-api.onrender.com/api/auth/token/ -H "Origin: https://site-refuse.example" -H "Access-Control-Request-Method: POST"
+
+# Aucun secret dans le dépôt
+git grep -nE "sb_secret_[A-Za-z0-9]"
+git grep -n "SECRET_KEY="
+```
+
+La première recherche ne trouve rien. La seconde trouve seulement des lignes sans vraie valeur, par exemple les modèles `.env.example` vides et les clés factices de la CI et du build Docker.
+
+On se connecte ensuite avec `alice` sur https://travelhub-uqar.vercel.app/login. Dans les outils du navigateur, les cookies `th_access` et `th_refresh` sont `HttpOnly`, `Secure` et `SameSite=Lax`. L'onglet Réseau ne montre aucune requête vers `onrender.com`.
+
+Le CORS ne joue que si un navigateur appelle Django directement. Dans TravelHub, le navigateur appelle seulement Next.js, et les appels vers Django partent du serveur Next.js. Un serveur n'applique pas le CORS, donc ces appels marchent quelle que soit la valeur de `CORS_ALLOWED_ORIGINS`. Nous la réglons quand même sur le domaine Vercel, comme le demande l'énoncé. Elle protégerait l'API si une page l'appelait un jour depuis le navigateur.
 
 ## Variables d'environnement
 
@@ -538,6 +623,8 @@ Les pannes des services externes (500, délai, liste `errors`) et la panne du cl
 ### Collection Postman
 
 La collection est dans `postman/TravelHub.postman_collection.json` (format v2.1). L'environnement `TravelHub-local` est dans `postman/TravelHub.postman_environment.json` et contient `base_url`, `access`, `refresh`, `trip_id` et `destination_id`. L'autorisation *Bearer* `{{access}}` est définie sur la collection et chaque requête en hérite.
+
+L'environnement `TravelHub-prod` (`postman/TravelHub-prod.postman_environment.json`) a les mêmes variables, avec l'API Render comme `base_url`. Il ne contient aucun secret, car le script de connexion remplit `access` et `refresh` pendant l'exécution. Une exécution complète crée deux comptes de test et un voyage dans la base Neon. Le dossier « Nettoyage » supprime le voyage, mais les comptes restent. Pour un simple contrôle, nous lançons donc seulement quelques requêtes, par exemple `postman collection run postman/TravelHub.postman_collection.json -e postman/TravelHub-prod.postman_environment.json -i "401 — sans jeton"`.
 
 1. Dans Postman, cliquer sur *Import*, choisir les deux fichiers et sélectionner l'environnement « TravelHub-local ».
 2. Lancer le serveur avec `python manage.py runserver`.
