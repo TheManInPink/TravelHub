@@ -2,7 +2,7 @@
 // Code serveur : nous le testons dans Node, sans jsdom. Le fetch de Node refuse le
 // AbortSignal de jsdom.
 import { HttpResponse, http } from "msw";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { djangoFetch } from "@/lib/api/django";
 import { ApiError } from "@/lib/errors";
 import type { User } from "@/types/api";
@@ -178,5 +178,32 @@ describe("djangoFetch", () => {
     await expect(djangoFetch("//evil.test/api/")).rejects.toThrow("changer d'hôte");
     await expect(djangoFetch("/\\evil.test/api/")).rejects.toThrow("changer d'hôte");
     await expect(djangoFetch("api/trips/")).rejects.toThrow("commencer par");
+  });
+});
+
+describe("DJANGO_API_URL", () => {
+  afterEach(() => {
+    // Remet l'adresse de MSW posée par tests/setup.ts.
+    vi.unstubAllEnvs();
+  });
+
+  it("accepte une adresse complète avec des espaces autour", async () => {
+    vi.stubEnv("DJANGO_API_URL", ` ${DJANGO_URL} \n`);
+    server.use(http.get(`${DJANGO_URL}/api/auth/me/`, () => HttpResponse.json(alice)));
+
+    await expect(djangoFetch<User>("/api/auth/me/")).resolves.toEqual(alice);
+  });
+
+  // La première valeur est celle de ALLOWED_HOSTS, mise par erreur dans Vercel.
+  it.each([
+    "travelhub-uqar-api.onrender.com,localhost",
+    "travelhub-uqar-api.onrender.com",
+    "localhost:8000",
+  ])("refuse une adresse sans http:// ni https:// : %s", async (value) => {
+    vi.stubEnv("DJANGO_API_URL", value);
+
+    await expect(djangoFetch("/api/auth/me/")).rejects.toThrow(
+      `DJANGO_API_URL doit être une adresse complète, par exemple https://travelhub-uqar-api.onrender.com (valeur reçue : ${value}).`,
+    );
   });
 });
