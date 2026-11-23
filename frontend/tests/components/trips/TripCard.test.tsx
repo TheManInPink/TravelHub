@@ -34,6 +34,31 @@ describe("TripCard", () => {
     expect(screen.queryByText(status)).not.toBeInTheDocument();
   });
 
+  it("affiche le nombre de destinations au singulier ou au pluriel", () => {
+    const { rerender } = render(<TripCard trip={{ ...japanTrip, destination_count: 1 }} />);
+    expect(screen.getByText("1 destination")).toBeInTheDocument();
+
+    rerender(<TripCard trip={{ ...japanTrip, destination_count: 3 }} />);
+    expect(screen.getByText("3 destinations")).toBeInTheDocument();
+  });
+
+  it("affiche la couverture du voyage comme image décorative", () => {
+    const url = "https://abc.supabase.co/storage/v1/object/public/travelhub-images/trips/1/a.webp";
+    const { container } = render(<TripCard trip={{ ...japanTrip, cover_image_url: url }} />);
+
+    // alt="" : l'image n'est pas annoncée, le titre de la carte nomme déjà le voyage.
+    const image = container.querySelector("img");
+    expect(image).toHaveAttribute("src", url);
+    expect(image).toHaveAttribute("alt", "");
+  });
+
+  it("garde la place de la couverture sans image", () => {
+    const { container } = render(<TripCard trip={japanTrip} />);
+
+    expect(container.querySelector("img")).toBeNull();
+    expect(screen.queryByRole("img")).not.toBeInTheDocument();
+  });
+
   it("accepte un titre de niveau 2", () => {
     render(<TripCard trip={japanTrip} titleAs="h2" />);
 

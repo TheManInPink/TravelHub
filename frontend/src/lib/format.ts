@@ -97,6 +97,17 @@ export function formatAmount(value: string, currency = "CAD"): string {
   return new Intl.NumberFormat(LOCALE, { style: "currency", currency }).format(value);
 }
 
+const pluralRules = new Intl.PluralRules(LOCALE);
+
+/**
+ * 3 et « destination » donnent « 3 destinations ». En français, 0 et 1 prennent le
+ * singulier (« 0 destination »), ce que PluralRules sait déjà.
+ */
+export function formatCount(count: number, one: string, other: string): string {
+  const word = pluralRules.select(count) === "one" ? one : other;
+  return `${new Intl.NumberFormat(LOCALE).format(count)} ${word}`;
+}
+
 /** Ce qu'il faut d'un utilisateur pour l'afficher (User ou UserSummary de types/api.ts). */
 export interface NamedUser {
   username: string;

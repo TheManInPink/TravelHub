@@ -4,6 +4,7 @@ import type { ApiErrorBody, ApiErrorDetails } from "@/types/api";
 import {
   ALICE_PASSWORD,
   aliceAccount,
+  japanTrip,
   japanTripDetail,
   kyotoPage,
   newTokens,
@@ -14,6 +15,9 @@ import {
 // Adresse de l'API Django simulée. tests/setup.ts la met dans DJANGO_API_URL.
 export const DJANGO_URL = "http://django.test";
 export const GRAPHQL_URL = `${DJANGO_URL}/graphql/`;
+
+/** Identifiant que Django donne au voyage créé par POST /api/trips/. */
+export const CREATED_TRIP_ID = 5;
 
 // Depuis MSW 3, les gestionnaires GraphQL sont toujours liés à une adresse.
 export const djangoGraphql = graphql.link(GRAPHQL_URL);
@@ -97,6 +101,37 @@ export const handlers: AnyHandler[] = [
       return HttpResponse.json(japanTripDetail);
     }
     return HttpResponse.json(errorBody("not_found", "Pas trouvé."), { status: 404 });
+  }),
+
+  // Création d'un voyage : Django renvoie le voyage créé, avec l'identifiant 5.
+  http.post(`${DJANGO_URL}/api/trips/`, async ({ request }) => {
+    if (!hasValidAccess(request)) {
+      return invalidToken();
+    }
+    const body = await jsonBody(request);
+    return HttpResponse.json({ ...japanTrip, ...body, id: CREATED_TRIP_ID }, { status: 201 });
+  }),
+
+  // Modification : seul le voyage 1 existe.
+  http.patch(`${DJANGO_URL}/api/trips/:id/`, async ({ params, request }) => {
+    if (!hasValidAccess(request)) {
+      return invalidToken();
+    }
+    if (params.id !== String(japanTrip.id)) {
+      return HttpResponse.json(errorBody("not_found", "Pas trouvé."), { status: 404 });
+    }
+    return HttpResponse.json({ ...japanTrip, ...(await jsonBody(request)) });
+  }),
+
+  // Suppression : 204 sans corps pour le voyage 1, 404 pour les autres.
+  http.delete(`${DJANGO_URL}/api/trips/:id/`, ({ params, request }) => {
+    if (!hasValidAccess(request)) {
+      return invalidToken();
+    }
+    if (params.id !== String(japanTrip.id)) {
+      return HttpResponse.json(errorBody("not_found", "Pas trouvé."), { status: 404 });
+    }
+    return new HttpResponse(null, { status: 204 });
   }),
 
   // Page d'une destination en GraphQL : la destination "3" existe, les autres donnent

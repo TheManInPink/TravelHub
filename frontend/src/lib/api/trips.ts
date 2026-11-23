@@ -6,6 +6,7 @@ import { cache } from "react";
 import { djangoFetch } from "@/lib/api/django";
 import { parseId } from "@/lib/api/mappers";
 import { ApiError } from "@/lib/errors";
+import { isTripOrdering, type TripOrdering } from "@/lib/tripList";
 import type {
   IsoDate,
   Paginated,
@@ -17,23 +18,9 @@ import type {
   TripUpdatePayload,
 } from "@/types/api";
 
-/** Tris acceptés par Django (ordering_fields de TripViewSet), avec ou sans « - ». */
-export const TRIP_ORDERINGS = [
-  "start_date",
-  "-start_date",
-  "title",
-  "-title",
-  "created_at",
-  "-created_at",
-] as const;
-
-export type TripOrdering = (typeof TRIP_ORDERINGS)[number];
-
-/** Sert à vérifier un tri lu dans l'URL (searchParams) avant d'appeler listTrips. */
-export function isTripOrdering(value: string): value is TripOrdering {
-  const orderings: readonly string[] = TRIP_ORDERINGS;
-  return orderings.includes(value);
-}
+// Les tris vivent dans lib/tripList.ts, que les Client Components peuvent importer
+// (ce module-ci est « server-only »). Nous les réexportons pour les appelants existants.
+export { TRIP_ORDERINGS, isTripOrdering, type TripOrdering } from "@/lib/tripList";
 
 /** Filtres de GET /api/trips/, avec les noms de paramètres de Django. */
 export interface ListTripsParams {

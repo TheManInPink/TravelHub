@@ -2,6 +2,7 @@ import { useId, type ComponentProps } from "react";
 import {
   Controller,
   type Control,
+  type FieldPath,
   type FieldPathByValue,
   type FieldValues,
 } from "react-hook-form";
@@ -33,6 +34,11 @@ interface TextFieldProps<TValues extends FieldValues, TTransformed>
   label: string;
   /** Aide affichée sous le champ, par exemple les règles du mot de passe. */
   description?: string;
+  /**
+   * Champs à revalider quand celui-ci change. Par exemple, changer la date de début
+   * revérifie la date de fin, dont la règle dépend des deux dates.
+   */
+  deps?: FieldPath<TValues>[];
 }
 
 export function TextField<TValues extends FieldValues, TTransformed = TValues>({
@@ -40,6 +46,7 @@ export function TextField<TValues extends FieldValues, TTransformed = TValues>({
   name,
   label,
   description,
+  deps,
   ...inputProps
 }: TextFieldProps<TValues, TTransformed>) {
   const id = useId();
@@ -50,6 +57,7 @@ export function TextField<TValues extends FieldValues, TTransformed = TValues>({
     <Controller
       control={control}
       name={name}
+      rules={deps ? { deps } : undefined}
       render={({ field, fieldState }) => {
         const describedBy = [
           description ? descriptionId : null,
