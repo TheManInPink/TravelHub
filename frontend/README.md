@@ -9,4 +9,10 @@ npm run dev                         # http://localhost:3000
 npm test
 ```
 
+Le fichier `schema.graphql` est le schéma GraphQL produit par Django. Un test vérifie que nos documents GraphQL (`src/lib/api/itinerary.ts`) le respectent. Après un changement du schéma côté Django, nous le régénérons depuis la racine du dépôt :
+
+```powershell
+.\.venv\Scripts\python.exe manage.py graphql_schema --out frontend/schema.graphql
+```
+
 Les explications complètes sont dans la section « Lancer le front-end » du [README de la racine](../README.md#lancer-le-front-end). Le plan du TP2 est dans [docs/plan-tp2.md](../docs/plan-tp2.md).

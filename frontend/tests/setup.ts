@@ -25,6 +25,7 @@ afterEach(() => {
   // Sans globals: true, Testing Library ne démonte pas les composants tout seul.
   cleanup();
   server.resetHandlers();
+  server.events.removeAllListeners();
   cookieJar.clear();
   vi.restoreAllMocks();
 });
