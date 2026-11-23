@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { FlashToast } from "@/components/feedback/FlashToast";
 import { UserMenuSkeleton } from "@/components/feedback/Skeletons";
 import { Header } from "@/components/layout/Header";
 import { UserMenuSlot } from "@/components/layout/UserMenuSlot";
@@ -34,6 +35,11 @@ export default function AppLayout({ children }: LayoutProps<"/">) {
       >
         {children}
       </main>
+      {/* Toast de succès après une Server Action qui redirige (?toast=…). Suspense :
+          useSearchParams ne doit pas bloquer le rendu du layout. */}
+      <Suspense fallback={null}>
+        <FlashToast />
+      </Suspense>
     </>
   );
 }
