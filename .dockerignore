@@ -29,6 +29,12 @@ Modele_de_Rapport_LaTex/
 # Le front-end Next.js est déployé à part, sur Vercel.
 frontend/
 package.json
+# Configuration de la CLI Neon (neon.ts et ses dépendances). Elle sert sur notre poste
+# seulement, Django lit la base avec DATABASE_URL.
+.npmrc
+node_modules/
+neon.ts
+.neon
 postman/
 scripts/
 *.md

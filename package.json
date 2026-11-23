@@ -5,5 +5,9 @@
   "scripts": {
     "test": "npm --prefix frontend test",
     "build": "npm --prefix frontend run build"
+  },
+  "dependencies": {
+    "@neon/config": "^1.14.6",
+    "@neon/env": "^2.1.9"
   }
 }

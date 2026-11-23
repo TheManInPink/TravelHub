@@ -37,6 +37,11 @@ projects:
                 - Modele_de_Rapport_LaTex/**
                 - .github/**
                 - "**/*.md"
+                # Raccourcis npm du front-end et configuration de la CLI Neon. Ils servent
+                # seulement sur notre poste.
+                - package.json
+                - .npmrc
+                - neon.ts
             envVars:
               - key: DJANGO_SETTINGS_MODULE
                 value: config.settings.prod
