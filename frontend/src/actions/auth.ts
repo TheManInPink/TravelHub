@@ -3,12 +3,12 @@
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { z } from "zod";
+import { apiFailure, invalidInput } from "@/lib/actionFailure";
 import { obtainTokens, registerAccount, revokeRefreshToken } from "@/lib/api/auth";
 import { REFRESH_COOKIE } from "@/lib/auth/cookieNames";
 import { clearAuthCookies, setAuthCookies } from "@/lib/auth/cookies";
 import { safeNextPath } from "@/lib/auth/redirect";
-import { isApiError, toUserMessage } from "@/lib/errors";
+import { isApiError } from "@/lib/errors";
 import {
   loginSchema,
   registerSchema,
@@ -25,7 +25,8 @@ import type { ActionFailure } from "@/types/actions";
 // voit jamais les jetons.
 //
 // Un fichier "use server" ne peut exporter que des fonctions asynchrones. Les
-// constantes et les fonctions utilitaires ci-dessous restent donc privées.
+// constantes ci-dessous restent donc privées, et invalidInput et apiFailure viennent de
+// lib/actionFailure.ts, partagé avec les actions des voyages.
 
 const LOGIN_FIELDS: readonly LoginField[] = ["username", "password"];
 const REGISTER_FIELDS: readonly RegisterField[] = [
@@ -36,40 +37,6 @@ const REGISTER_FIELDS: readonly RegisterField[] = [
   "first_name",
   "last_name",
 ];
-
-/** Erreurs du schéma Zod. Le formulaire les a déjà montrées, sauf si l'appel est forgé. */
-function invalidInput<TField extends string>(error: z.ZodError): ActionFailure<TField> {
-  const { fieldErrors } = z.flattenError(error);
-  return {
-    ok: false,
-    message: "Vérifiez les champs indiqués.",
-    fieldErrors: fieldErrors as Partial<Record<TField, string[]>>,
-  };
-}
-
-/**
- * Erreur attendue de Django, transformée en message pour le formulaire. Les details d'un
- * validation_error ({"username": ["…"]}) vont sous les champs. Une erreur qui n'est pas
- * une ApiError est un bogue : nous la laissons remonter.
- */
-function apiFailure<TField extends string>(
-  error: unknown,
-  fields: readonly TField[],
-): ActionFailure<TField> {
-  if (!isApiError(error)) {
-    throw error;
-  }
-  const fieldErrors: Partial<Record<TField, string[]>> = {};
-  for (const field of fields) {
-    const messages = error.details[field];
-    if (Array.isArray(messages)) {
-      fieldErrors[field] = messages.filter((m): m is string => typeof m === "string");
-    }
-  }
-  // Le message vient du code (no_active_account, throttled, timeout…), jamais du texte
-  // anglais de SimpleJWT.
-  return { ok: false, message: toUserMessage(error), fieldErrors };
-}
 
 /**
  * Connexion. Pose les cookies, puis redirige vers next si c'est une page de TravelHub,

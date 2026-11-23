@@ -77,6 +77,14 @@ export async function verifyActionSession(): Promise<User> {
   if (user) {
     return user;
   }
+  return expireActionSession();
+}
+
+/**
+ * Pour une Server Action dont l'appel à Django reçoit un 401 (jeton expiré entre-temps) :
+ * supprime les cookies et redirige vers /login?expired=1, sans nouvel essai.
+ */
+export async function expireActionSession(): Promise<never> {
   await clearAuthCookies();
   const next = await requestedPath();
   redirect(`/login?expired=1&next=${encodeURIComponent(next)}`);
