@@ -85,6 +85,31 @@ export function StatsSkeleton() {
   );
 }
 
+/**
+ * Fiche pays d'une destination, en attendant CountryCard (même carte que CountryDetails).
+ * Il sert seul de fallback à Suspense, donc il annonce lui-même le chargement.
+ */
+export function CountrySkeleton() {
+  return (
+    <Card size="sm" role="status">
+      <span className="sr-only">Chargement de la fiche pays…</span>
+      <CardHeader aria-hidden="true">
+        <div className="flex items-center gap-2">
+          <Skeleton className="size-8 rounded-md" />
+          <Skeleton className="h-6 w-32" />
+        </div>
+        <Skeleton className="h-4 w-28" />
+      </CardHeader>
+      <CardContent aria-hidden="true" className="flex flex-col gap-2">
+        <Skeleton className="h-4 w-full" />
+        <Skeleton className="h-4 w-11/12" />
+        <Skeleton className="h-4 w-full" />
+        <Skeleton className="h-4 w-2/3" />
+      </CardContent>
+    </Card>
+  );
+}
+
 /** Titre et description d'une page, en attendant PageHeader. */
 export function PageHeaderSkeleton() {
   return (
