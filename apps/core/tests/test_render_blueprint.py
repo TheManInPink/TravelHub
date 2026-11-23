@@ -5,9 +5,9 @@ tôt, dans la CI.
 """
 
 import fnmatch
+import json
 import os
 import re
-import shlex
 import subprocess
 import sys
 
@@ -88,17 +88,25 @@ class TestWebService:
 
 
 class TestStartCommand:
-    def test_same_command_as_docker_compose(self, service):
-        compose = load_yaml("docker-compose.yml")
-        assert service["dockerCommand"] == compose["services"]["web"]["command"]
-
-    def test_runs_through_a_shell(self, service):
-        # Sans sh -c, Render passerait « && » à manage.py comme un simple argument.
-        assert shlex.split(service["dockerCommand"]) == [
+    def test_image_applies_migrations_then_starts_gunicorn(self):
+        dockerfile = (settings.BASE_DIR / "Dockerfile").read_text(encoding="utf-8")
+        # Le CMD du HEALTHCHECK est indenté. Seul le dernier CMD en début de ligne compte.
+        (*_, command) = [line for line in dockerfile.splitlines() if line.startswith("CMD ")]
+        # Forme JSON : Docker passe chaque argument tel quel, sans shell ni guillemets.
+        assert json.loads(command.removeprefix("CMD ")) == [
             "sh",
             "-c",
             "python manage.py migrate --noinput && exec gunicorn config.wsgi",
         ]
+
+    def test_render_uses_the_command_of_the_image(self, service):
+        # Render garde les guillemets d'un dockerCommand. Avec sh -c "…", sh cherchait une
+        # commande nommée « python manage.py migrate … » et le conteneur s'arrêtait (127).
+        assert "dockerCommand" not in service
+
+    def test_docker_compose_uses_the_command_of_the_image(self):
+        compose = load_yaml("docker-compose.yml")
+        assert "command" not in compose["services"]["web"]
 
 
 class TestEnvironment:

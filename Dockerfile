@@ -46,5 +46,9 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
     CMD ["python", "-c", "import os, urllib.request as u; u.urlopen('http://localhost:%s/health/' % (os.environ.get('PORT') or '8000'), timeout=4)"]
 
-# Les options sont dans gunicorn.conf.py (lu depuis /app).
-CMD ["gunicorn", "config.wsgi"]
+# Au démarrage, on applique les migrations, puis exec remplace le shell par Gunicorn, qui
+# reçoit alors lui-même les signaux d'arrêt. Les options de Gunicorn sont dans
+# gunicorn.conf.py (lu depuis /app). docker-compose.yml et Render utilisent cette commande.
+# Render garde les guillemets d'un dockerCommand comme sh -c "…", et sh cherchait alors
+# une commande nommée « python manage.py migrate … ». La forme JSON n'a pas ce problème.
+CMD ["sh", "-c", "python manage.py migrate --noinput && exec gunicorn config.wsgi"]

@@ -19,11 +19,10 @@ projects:
             branch: master
             dockerfilePath: ./Dockerfile
             dockerContext: .
-            # Le plan gratuit n'a pas de commande de pré-déploiement. Les migrations sont
-            # donc appliquées au démarrage du conteneur, avec la même commande que
-            # docker-compose.yml. Il faut sh -c, sinon Render passe « && » à manage.py
-            # comme un simple argument.
-            dockerCommand: sh -c "python manage.py migrate --noinput && exec gunicorn config.wsgi"
+            # Pas de dockerCommand. Le plan gratuit n'a pas de commande de pré-déploiement,
+            # donc le CMD du Dockerfile applique les migrations au démarrage du conteneur,
+            # puis lance Gunicorn. Render garde les guillemets d'un dockerCommand comme
+            # sh -c "…", et le premier déploiement échouait avec « not found ».
             healthCheckPath: /health/
             # Render attend que la CI GitHub soit verte avant de déployer un commit de master.
             autoDeployTrigger: checksPass
