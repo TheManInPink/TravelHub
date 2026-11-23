@@ -152,7 +152,7 @@ flowchart LR
         actions["Server Actions (mutations)"]
         route["Route Handler météo (CSR)"]
     end
-    subgraph render["Render · API Django 6.1"]
+    subgraph render["Render · API Django 5.2"]
         rest["REST /api/"]
         gql["GraphQL /graphql/"]
     end
@@ -184,7 +184,7 @@ Le navigateur n'appelle que Vercel. Next.js appelle Django avec le JWT lu dans l
 | Supabase JS | `@supabase/supabase-js` 2.x | Envoi des images côté serveur avec la clé `sb_secret_…` |
 | Tests | Vitest 5.1, React Testing Library 16, user-event 14, jest-dom 7, MSW 3, jsdom 31 | Pile décrite par le guide Vitest de Next.js, plus MSW pour simuler l'API |
 | Playwright (facultatif) | 1.65 | Seul moyen de tester les Server Components asynchrones |
-| Back-end | Django 6.1.3, DRF 3.18.3, SimpleJWT 5.5.1, Graphene-Django 3.2.3, Gunicorn 27, PostgreSQL 18 | Stack du TP1. Le 22 novembre 2026, nous sommes passés de Django 5.2 LTS à 6.1 (PR Dependabot #9). SimpleJWT, Graphene-Django, django-cors-headers et drf-spectacular ne déclarent pas encore Django 6.1 sur PyPI. Les tests pytest passent quand même, sans avertissement ni nouvelle migration |
+| Back-end | Django 5.2.19 LTS, DRF 3.18.3, SimpleJWT 5.5.1, Graphene-Django 3.2.3, Gunicorn 27, PostgreSQL 18 | Stack du TP1. Le 22 novembre 2026, nous avons essayé Django 6.1 (PR Dependabot #9), puis nous sommes revenus à 5.2 LTS. C'est la seule version que SimpleJWT, Graphene-Django, django-cors-headers et drf-spectacular déclarent toutes, et elle est suivie jusqu'en avril 2028. Django 6.1 n'est pas une LTS. Dependabot ignore donc les versions majeures de Django |
 
 ### 5.3 Décisions clés
 
@@ -391,7 +391,7 @@ Collez **P0** une fois au début de chaque session de l'assistant, puis le promp
 ```text
 Tu m'aides à réaliser le TP2 de TravelHub (cours INF37407, UQAR) : le front-end Web d'une plateforme de planification de voyages, branché sur le back-end Django du TP1 (tag v1.0, même dépôt, dossier frontend/ pour Next.js). Le plan complet est dans docs/plan-tp2.md : lis-le quand une étape y renvoie.
 Stack front-end imposée : Next.js 16.4 (App Router, src/, Turbopack, sans Cache Components), React 19.3, TypeScript 5.9 strict, Tailwind CSS 4.3, shadcn/ui (variante Radix, toasts Sonner), Fetch API, Zod 4, React Hook Form 7, @supabase/supabase-js 2, Vitest 5 + React Testing Library 16 + MSW 3. Node 26 LTS. Windows 11, VS Code, PowerShell.
-Back-end existant (ne pas le réécrire) : Django 6.1, DRF, SimpleJWT (en-tête Bearer, accès 15 min, refresh 1 jour avec rotation et liste noire), Graphene-Django sur /graphql/, PostgreSQL 18. Erreurs REST : {"error": {"code", "message", "details"}}. Erreurs GraphQL : HTTP 200 avec errors[].extensions.code pour les erreurs des resolvers ; HTTP 401 (token_not_valid) et 429 (throttled) sans data ; HTTP 400 sans code pour une erreur de syntaxe. Slash final obligatoire sur les routes REST. Montants et dates en chaînes.
+Back-end existant (ne pas le réécrire) : Django 5.2 LTS, DRF, SimpleJWT (en-tête Bearer, accès 15 min, refresh 1 jour avec rotation et liste noire), Graphene-Django sur /graphql/, PostgreSQL 18. Erreurs REST : {"error": {"code", "message", "details"}}. Erreurs GraphQL : HTTP 200 avec errors[].extensions.code pour les erreurs des resolvers ; HTTP 401 (token_not_valid) et 429 (throttled) sans data ; HTTP 400 sans code pour une erreur de syntaxe. Slash final obligatoire sur les routes REST. Montants et dates en chaînes.
 Architecture : Next.js sert de BFF. Le navigateur ne parle qu'à Next.js. Les jetons vivent dans des cookies httpOnly (th_access, th_refresh) posés par des Server Actions. Seul le code serveur (Server Components, Server Actions, Route Handlers) appelle Django, par src/lib/api/django.ts et src/lib/api/graphql.ts. Supabase Storage ne sert qu'aux images ; la clé sb_secret_ reste côté serveur (import "server-only").
 Répartition : REST pour l'authentification et le CRUD des voyages ; GraphQL pour la page destination (query) et les mutations de destinations et d'activités ; météo en CSR par un Route Handler qui appelle /api/destinations/{id}/weather/.
 Règles : "use client" seulement si nécessaire (état, événements, API du navigateur) ; aucun secret dans le code ; valeurs dans .env.local, noms dans .env.example ; code en anglais, textes d'interface et commentaires en français ; pas de any.

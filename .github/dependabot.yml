@@ -9,6 +9,12 @@ updates:
       # Les correctifs et les versions mineures sont regroupés. Une version majeure a sa propre PR.
       pip-minor-patch:
         update-types: [minor, patch]
+    ignore:
+      # Nous restons sur Django 5.2 LTS, la seule version que SimpleJWT, Graphene-Django,
+      # django-cors-headers et drf-spectacular déclarent toutes. Les correctifs 5.2.x
+      # arrivent toujours dans la PR groupée. Pour Django 6, nous attendrons la 6.2 LTS.
+      - dependency-name: "django"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: npm
     directory: /frontend
