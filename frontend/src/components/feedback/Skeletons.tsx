@@ -50,6 +50,41 @@ export function DetailSkeleton() {
   );
 }
 
+/** Une carte de chiffre : libellé, valeur et précision. */
+function StatCardSkeleton() {
+  return (
+    <Card size="sm" className="gap-2 px-(--card-spacing)">
+      <Skeleton className="h-4 w-20" />
+      <Skeleton className="h-7 w-28 max-w-full" />
+      <Skeleton className="h-3 w-16" />
+    </Card>
+  );
+}
+
+/**
+ * Chiffres du tableau de bord, en attendant NextTripStats (même grille que StatsCards).
+ * Il sert seul de fallback à Suspense, donc il annonce lui-même le chargement.
+ */
+export function StatsSkeleton() {
+  return (
+    <div role="status" className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+      <span className="sr-only">Chargement des statistiques…</span>
+      <div aria-hidden="true" className="grid grid-cols-2 gap-3">
+        <StatCardSkeleton />
+        <StatCardSkeleton />
+      </div>
+      <div aria-hidden="true" className="flex flex-col gap-3 rounded-xl bg-muted/50 p-3">
+        <Skeleton className="h-4 w-2/3" />
+        <div className="grid gap-3 sm:grid-cols-3">
+          <StatCardSkeleton />
+          <StatCardSkeleton />
+          <StatCardSkeleton />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /** Titre et description d'une page, en attendant PageHeader. */
 export function PageHeaderSkeleton() {
   return (
