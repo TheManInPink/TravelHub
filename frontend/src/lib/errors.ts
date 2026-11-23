@@ -135,3 +135,15 @@ export function toUserMessage(error: unknown): string {
   // déjà écrit en français pour l'utilisateur.
   return error.message || DEFAULT_MESSAGE;
 }
+
+/**
+ * Identifiant (digest) que Next.js ajoute à une erreur levée au serveur. En production,
+ * c'est la seule information qui arrive dans error.tsx : elle permet de retrouver
+ * l'erreur dans les journaux de Vercel.
+ */
+export function errorDigest(error: unknown): string | undefined {
+  if (typeof error === "object" && error !== null && "digest" in error) {
+    return typeof error.digest === "string" && error.digest ? error.digest : undefined;
+  }
+  return undefined;
+}
