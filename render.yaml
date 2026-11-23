@@ -1,0 +1,68 @@
+# Blueprint Render de l'API Django (https://render.com/docs/blueprint-spec).
+# Nous le créons une seule fois dans le tableau de bord (New > Blueprint, branche master).
+# Il crée aussi le projet TravelHub et son environnement Production. Ensuite, Render
+# relit ce fichier à chaque commit de master.
+projects:
+  - name: TravelHub
+    environments:
+      - name: Production
+        services:
+          - type: web
+            # Le nom donne l'adresse publique : https://travelhub-uqar-api.onrender.com.
+            # travelhub-api était déjà pris par un autre compte Render.
+            name: travelhub-uqar-api
+            runtime: docker
+            plan: free
+            # Même région que les fonctions Vercel (iad1, près de Washington) et que la
+            # base Neon (aws-us-east-1). Render ne permet plus de la changer ensuite.
+            region: virginia
+            branch: master
+            dockerfilePath: ./Dockerfile
+            dockerContext: .
+            # Le plan gratuit n'a pas de commande de pré-déploiement. Les migrations sont
+            # donc appliquées au démarrage du conteneur, avec la même commande que
+            # docker-compose.yml. Il faut sh -c, sinon Render passe « && » à manage.py
+            # comme un simple argument.
+            dockerCommand: sh -c "python manage.py migrate --noinput && exec gunicorn config.wsgi"
+            healthCheckPath: /health/
+            # Render attend que la CI GitHub soit verte avant de déployer un commit de master.
+            autoDeployTrigger: checksPass
+            # Un commit qui touche seulement ces fichiers ne redéploie pas l'API. Aucun
+            # d'eux n'entre dans l'image (voir .dockerignore).
+            buildFilter:
+              ignoredPaths:
+                - frontend/**
+                - docs/**
+                - postman/**
+                - Modèle_de_Rapport_LaTex/**
+                - .github/**
+                - "**/*.md"
+            envVars:
+              - key: DJANGO_SETTINGS_MODULE
+                value: config.settings.prod
+              # sync: false : Render demande la valeur dans le tableau de bord à la
+              # création du Blueprint, et elle n'est jamais écrite ici. SECRET_KEY et
+              # DATABASE_URL sont des secrets. Les deux autres dépendent des noms donnés
+              # par Render et par Vercel. SECRET_KEY est générée sur notre poste, car
+              # generateValue ne donne que 44 caractères et Django en demande au moins 50.
+              - key: SECRET_KEY
+                sync: false
+              - key: DATABASE_URL
+                sync: false
+              - key: ALLOWED_HOSTS
+                sync: false
+              - key: CORS_ALLOWED_ORIGINS
+                sync: false
+              # Le proxy de Render est le seul devant Gunicorn. Toutes les connexions
+              # anonymes arrivent du serveur Vercel, d'où une limite plus haute que les
+              # 100/hour par défaut.
+              - key: NUM_PROXIES
+                value: "1"
+              - key: THROTTLE_ANON_RATE
+                value: 300/hour
+              # Vide : les journaux vont seulement sur la console, que Render affiche. Le
+              # disque du plan gratuit est effacé à chaque redémarrage.
+              - key: LOG_FILE
+                value: ""
+              - key: WEB_CONCURRENCY
+                value: "2"
