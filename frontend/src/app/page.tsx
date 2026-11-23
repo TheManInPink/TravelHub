@@ -62,7 +62,10 @@ export default function HomePage() {
           <Card key={title}>
             <CardHeader>
               <Icon aria-hidden="true" className="mb-2 size-6 text-primary" />
-              <CardTitle>{title}</CardTitle>
+              {/* CardTitle est une div : le h2 garde la structure des titres de la page. */}
+              <CardTitle>
+                <h2>{title}</h2>
+              </CardTitle>
               <CardDescription>{description}</CardDescription>
             </CardHeader>
           </Card>
