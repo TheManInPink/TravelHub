@@ -3,6 +3,7 @@ import {
   ApiError,
   type ApiErrorInit,
   codeFromStatus,
+  errorDigest,
   isApiError,
   toUserMessage,
 } from "@/lib/errors";
@@ -126,5 +127,20 @@ describe("toUserMessage", () => {
   it("ne montre jamais le message technique d'un code créé par le front-end", () => {
     const error = apiError("invalid_query", { message: "Cannot query field 'x' on type 'Trip'." });
     expect(toUserMessage(error)).toBe("La requête envoyée au serveur est invalide.");
+  });
+});
+
+describe("errorDigest", () => {
+  it("lit le digest ajouté par Next.js", () => {
+    const error = Object.assign(new Error("Masqué en production"), { digest: "2905135410" });
+    expect(errorDigest(error)).toBe("2905135410");
+  });
+
+  it("renvoie undefined sans digest, ou pour une valeur qui n'est pas un objet", () => {
+    expect(errorDigest(new Error("x"))).toBeUndefined();
+    expect(errorDigest({ digest: 42 })).toBeUndefined();
+    expect(errorDigest({ digest: "" })).toBeUndefined();
+    expect(errorDigest("texte")).toBeUndefined();
+    expect(errorDigest(null)).toBeUndefined();
   });
 });
