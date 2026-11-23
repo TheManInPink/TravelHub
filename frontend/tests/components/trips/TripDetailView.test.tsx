@@ -70,9 +70,46 @@ describe("TripDetailView", () => {
     expect(within(destination).getByText("1 activité")).toBeInTheDocument();
   });
 
-  it("indique un itinéraire vide", () => {
+  it("mène de chaque destination à sa page", () => {
+    render(<TripDetailView trip={tripAs("viewer")} />);
+
+    expect(screen.getByRole("link", { name: "Kyoto" })).toHaveAttribute(
+      "href",
+      "/trips/1/destinations/3",
+    );
+  });
+
+  it("montre « Ajouter une destination » au propriétaire et aux éditeurs seulement", () => {
+    const { unmount } = render(<TripDetailView trip={tripAs("editor")} />);
+    expect(screen.getByRole("link", { name: "Ajouter une destination" })).toHaveAttribute(
+      "href",
+      "/trips/1/destinations/new",
+    );
+    unmount();
+
+    render(<TripDetailView trip={tripAs("viewer")} />);
+    expect(
+      screen.queryByRole("link", { name: "Ajouter une destination" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("propose d'ajouter la première destination quand l'itinéraire est vide", () => {
     render(<TripDetailView trip={{ ...tripAs("owner"), destinations: [] }} />);
 
-    expect(screen.getByText("Ce voyage n'a pas encore de destination.")).toBeInTheDocument();
+    const itinerary = screen.getByRole("region", { name: "Itinéraire" });
+    expect(
+      within(itinerary).getByRole("heading", { name: "Ce voyage n'a pas encore de destination" }),
+    ).toBeInTheDocument();
+    expect(
+      within(itinerary).getAllByRole("link", { name: "Ajouter une destination" }),
+    ).toHaveLength(1);
+  });
+
+  it("indique à un lecteur qui peut ajouter une destination", () => {
+    render(<TripDetailView trip={{ ...tripAs("viewer"), destinations: [] }} />);
+
+    expect(
+      screen.getByText("Le propriétaire ou un éditeur du voyage peut en ajouter."),
+    ).toBeInTheDocument();
   });
 });
