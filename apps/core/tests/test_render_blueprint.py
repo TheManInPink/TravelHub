@@ -4,7 +4,9 @@ Render ne lit ce fichier qu'au moment du déploiement. Ces tests trouvent les er
 tôt, dans la CI.
 """
 
+import fnmatch
 import os
+import re
 import shlex
 import subprocess
 import sys
@@ -70,6 +72,19 @@ class TestWebService:
 
     def test_frontend_changes_do_not_redeploy_the_api(self, service):
         assert "frontend/**" in service["buildFilter"]["ignoredPaths"]
+
+    def test_build_filter_paths_use_only_the_characters_render_accepts(self, service):
+        # Règle appliquée par Render au moment de lire le Blueprint, mais absente de son
+        # schéma JSON publié. « Modèle_de_Rapport_LaTex/** » était refusé à cause du « è ».
+        allowed = re.compile(r"[A-Za-z0-9\-_./^*? \[\]]+")
+        for path in service["buildFilter"]["ignoredPaths"]:
+            assert allowed.fullmatch(path), path
+
+    def test_build_filter_still_matches_the_report_folder(self, service):
+        report = next(p for p in service["buildFilter"]["ignoredPaths"] if "Rapport" in p)
+        folder = report.removesuffix("/**")
+        assert (settings.BASE_DIR / "Modèle_de_Rapport_LaTex").is_dir()
+        assert fnmatch.fnmatchcase("Modèle_de_Rapport_LaTex", folder)
 
 
 class TestStartCommand:
