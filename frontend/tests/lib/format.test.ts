@@ -5,6 +5,8 @@ import {
   formatDateRange,
   formatDateTime,
   formatTime,
+  userDisplayName,
+  userInitials,
 } from "@/lib/format";
 
 // fr-CA sépare les milliers et le symbole $ par une espace insécable (U+00A0).
@@ -81,5 +83,25 @@ describe("formatAmount", () => {
   it("renvoie telle quelle une valeur qui n'est pas un nombre décimal", () => {
     expect(formatAmount("abc")).toBe("abc");
     expect(formatAmount("")).toBe("");
+  });
+});
+
+describe("userDisplayName et userInitials", () => {
+  it("affiche le prénom et le nom", () => {
+    const user = { username: "alice", first_name: "Alice", last_name: "Martin" };
+    expect(userDisplayName(user)).toBe("Alice Martin");
+    expect(userInitials(user)).toBe("AM");
+  });
+
+  it("garde une lettre accentuée et accepte un nom absent", () => {
+    const user = { username: "elodie", first_name: "élodie", last_name: "" };
+    expect(userDisplayName(user)).toBe("élodie");
+    expect(userInitials(user)).toBe("É");
+  });
+
+  it("revient au nom d'utilisateur sans prénom ni nom", () => {
+    const user = { username: "bob", first_name: " ", last_name: "" };
+    expect(userDisplayName(user)).toBe("bob");
+    expect(userInitials(user)).toBe("B");
   });
 });

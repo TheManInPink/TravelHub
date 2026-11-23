@@ -97,3 +97,27 @@ export function formatAmount(value: string, currency = "CAD"): string {
   }
   return new Intl.NumberFormat(LOCALE, { style: "currency", currency }).format(value);
 }
+
+/** Ce qu'il faut d'un utilisateur pour l'afficher (User ou UserSummary de types/api.ts). */
+export interface NamedUser {
+  username: string;
+  first_name: string;
+  last_name: string;
+}
+
+/** « Alice Martin », ou le nom d'utilisateur quand le prénom et le nom sont vides. */
+export function userDisplayName(user: NamedUser): string {
+  const fullName = `${user.first_name.trim()} ${user.last_name.trim()}`.trim();
+  return fullName || user.username;
+}
+
+/** Première lettre, en majuscule. Array.from garde entier un caractère hors du BMP. */
+function initial(value: string): string {
+  return (Array.from(value.trim())[0] ?? "").toLocaleUpperCase(LOCALE);
+}
+
+/** « AM » pour Alice Martin, « É » pour Élodie sans nom, « B » pour l'utilisateur bob. */
+export function userInitials(user: NamedUser): string {
+  const initials = initial(user.first_name) + initial(user.last_name);
+  return initials || initial(user.username);
+}
