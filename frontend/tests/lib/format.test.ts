@@ -5,6 +5,8 @@ import {
   formatDate,
   formatDateRange,
   formatDateTime,
+  formatMeasure,
+  formatShortDay,
   formatTime,
   userDisplayName,
   userInitials,
@@ -57,6 +59,28 @@ describe("formatDateTime", () => {
 
   it("renvoie telle quelle une valeur illisible", () => {
     expect(formatDateTime("demain")).toBe("demain");
+  });
+});
+
+describe("formatShortDay", () => {
+  it("donne le jour, la date et le mois en abrégé", () => {
+    expect(formatShortDay("2027-04-09")).toBe("ven. 9 avr.");
+  });
+
+  it("renvoie telle quelle une date mal formée", () => {
+    expect(formatShortDay("demain")).toBe("demain");
+  });
+});
+
+describe("formatMeasure", () => {
+  it("garde une décimale et colle l'unité par une espace insécable", () => {
+    expect(formatMeasure(17.44, "°C")).toBe(`17,4${NBSP}°C`);
+    expect(formatMeasure(0, "mm")).toBe(`0${NBSP}mm`);
+    expect(formatMeasure(-3.5, "°C")).toBe(`-3,5${NBSP}°C`);
+  });
+
+  it("affiche « n. d. » quand Open-Meteo n'a pas de valeur", () => {
+    expect(formatMeasure(null, "km/h")).toBe("n. d.");
   });
 });
 

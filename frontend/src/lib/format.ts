@@ -59,6 +59,35 @@ export function formatDateRange(
   return dateFormatter(dateStyle).formatRange(startDate, endDate);
 }
 
+/** "2027-04-09" devient « ven. 9 avr. », pour une carte de prévision météo. */
+export function formatShortDay(value: string): string {
+  const date = parseDateOnly(value);
+  if (!date) {
+    return value;
+  }
+  return new Intl.DateTimeFormat(LOCALE, {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    timeZone: "UTC",
+  }).format(date);
+}
+
+/** Texte affiché quand Open-Meteo n'a pas donné de valeur (null). */
+export const NOT_AVAILABLE = "n. d.";
+
+/**
+ * Une mesure météo avec l'unité de la réponse : 17.4 et "°C" donnent « 17,4 °C ».
+ * Une décimale au plus, et une espace insécable entre le nombre et l'unité.
+ */
+export function formatMeasure(value: number | null, unit: string): string {
+  if (value === null || !Number.isFinite(value)) {
+    return NOT_AVAILABLE;
+  }
+  const number = new Intl.NumberFormat(LOCALE, { maximumFractionDigits: 1 }).format(value);
+  return unit ? `${number} ${unit}` : number;
+}
+
 /** Une date ISO avec heure (created_at) affichée à l'heure de Toronto. */
 export function formatDateTime(value: string): string {
   const date = new Date(value);
