@@ -5,10 +5,12 @@ Les valeurs sensibles (clé secrète, accès à la base, hôtes autorisés) ne s
 écrites ici. Elles sont lues dans les variables d'environnement ou dans le fichier .env.
 """
 
+import re
 from datetime import timedelta
 from pathlib import Path
 
 import environ
+from django.core.exceptions import ImproperlyConfigured
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
@@ -133,7 +135,8 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 CORS_ALLOWED_ORIGINS = env("CORS_ALLOWED_ORIGINS")
 # Facultatif, pour les previews Vercel. Les regex sont séparées par « ; », car une regex
-# peut contenir une virgule.
+# peut contenir une virgule. Avec le BFF, une preview appelle Django depuis son serveur et
+# n'a donc pas besoin du CORS. On laisse cette variable vide en production.
 CORS_ALLOWED_ORIGIN_REGEXES = [
     pattern.strip()
     for pattern in env.str("CORS_ALLOWED_ORIGIN_REGEXES", default="").split(";")
@@ -149,7 +152,14 @@ CORS_ALLOW_CREDENTIALS = False
 # Supabase Storage : si cette variable est définie, cover_image_url n'accepte que cet hôte
 # (ex. abcdefgh.supabase.co).
 
-SUPABASE_STORAGE_HOST = env.str("SUPABASE_STORAGE_HOST", default="")
+SUPABASE_STORAGE_HOST = env.str("SUPABASE_STORAGE_HOST", default="").strip().lower()
+# On attend l'hôte seul. Si on colle l'URL du projet (https://abcdefgh.supabase.co), toutes
+# les images seraient refusées. On arrête donc le démarrage avec un message clair.
+if SUPABASE_STORAGE_HOST and not re.fullmatch(r"[a-z0-9.-]+", SUPABASE_STORAGE_HOST):
+    raise ImproperlyConfigured(
+        "SUPABASE_STORAGE_HOST doit contenir l'hôte seul, sans https:// ni « / ». "
+        "Exemple : abcdefgh.supabase.co"
+    )
 
 
 # Django REST Framework. Tout est privé par défaut, et les vues publiques doivent
