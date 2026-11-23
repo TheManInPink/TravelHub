@@ -9,5 +9,5 @@ django-cors-headers==4.9.0
 django-environ==0.14.0
 psycopg[binary]==3.3.9
 requests==2.34.2
-gunicorn==26.2.0
+gunicorn==27.0.1
 whitenoise==6.12.0
