@@ -1,0 +1,605 @@
+type Query {
+  """Utilisateur connecté."""
+  me: User
+
+  """
+  Voyages dont vous êtes propriétaire ou participant, par pages de limit voyages ; myTripsCount donne le total.
+  """
+  myTrips(
+    status: TripStatus
+
+    """Voyages commençant à cette date ou après."""
+    startAfter: Date
+
+    """Mots cherchés dans le titre ou la description."""
+    search: String
+    orderBy: TripOrderBy
+
+    """Nombre de voyages, au plus 100."""
+    limit: Int = 20
+
+    """Nombre de voyages à sauter."""
+    offset: Int = 0
+  ): [Trip!]!
+
+  """
+  Nombre de voyages de myTrips avec les mêmes filtres, toutes pages confondues.
+  """
+  myTripsCount(
+    status: TripStatus
+
+    """Voyages commençant à cette date ou après."""
+    startAfter: Date
+
+    """Mots cherchés dans le titre ou la description."""
+    search: String
+  ): Int!
+  trip(id: ID!): Trip
+  destination(id: ID!): Destination
+  destinationOverview(id: ID!): DestinationOverview
+}
+
+"""
+Un utilisateur (propriétaire d'un voyage, participant ou utilisateur connecté).
+
+On n'expose que certains champs. Le mot de passe, les droits (is_staff,
+is_superuser, groupes) et les voyages des autres ne sont pas visibles. Le courriel
+n'est montré qu'à son titulaire.
+"""
+type User {
+  id: ID!
+
+  """
+  Requis. 150 caractères maximum. Uniquement des lettres, nombres et les caractères « @ », « . », « + », « - » et « _ ».
+  """
+  username: String!
+  firstName: String!
+  lastName: String!
+  dateJoined: DateTime!
+
+  """Courriel ; null sauf pour l'utilisateur connecté."""
+  email: String
+}
+
+"""
+The `DateTime` scalar type represents a DateTime
+value as specified by
+[iso8601](https://en.wikipedia.org/wiki/ISO_8601).
+"""
+scalar DateTime
+
+"""
+Voyage visible par l'utilisateur, qui en est propriétaire ou participant.
+"""
+type Trip {
+  id: ID!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+  owner: User!
+  title: String!
+  description: String!
+  startDate: Date!
+  endDate: Date!
+  status: TripStatus!
+  budget: Decimal
+
+  """
+  Adresse https publique de l'image (Supabase Storage). Vide si aucune image.
+  """
+  coverImageUrl: String!
+  destinations: [Destination!]!
+
+  """Participants et leur rôle, propriétaire compris."""
+  participants: [TripParticipant!]!
+
+  """Votre rôle dans ce voyage."""
+  myRole: ParticipantRole!
+  destinationCount: Int!
+  activityCount: Int!
+
+  """Somme des coûts de toutes les activités du voyage."""
+  totalCost: Decimal!
+}
+
+"""
+The `Date` scalar type represents a Date
+value as specified by
+[iso8601](https://en.wikipedia.org/wiki/ISO_8601).
+"""
+scalar Date
+
+"""Statut d'un voyage."""
+enum TripStatus {
+  """Brouillon"""
+  DRAFT
+
+  """Planifié"""
+  PLANNED
+
+  """En cours"""
+  ONGOING
+
+  """Terminé"""
+  COMPLETED
+
+  """Annulé"""
+  CANCELLED
+}
+
+"""The `Decimal` scalar type represents a python Decimal."""
+scalar Decimal
+
+type Destination {
+  id: ID!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+  trip: Trip!
+  city: String!
+  country: String!
+  countryCode: String!
+  arrivalDate: Date!
+  departureDate: Date!
+  order: Int!
+  latitude: Decimal
+  longitude: Decimal
+  activities: [Activity!]!
+
+  """
+  Météo du séjour (Open-Meteo, cache 30 min). Géocode la ville si besoin ; en cas d'échec, null et une erreur au code du service externe.
+  """
+  weather: Weather
+
+  """Pays du code pays (Countries GraphQL, cache 24 h)."""
+  countryInfo: CountryInfo
+}
+
+type Activity {
+  id: ID!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+  destination: Destination!
+  name: String!
+  description: String!
+  category: ActivityCategory!
+  date: Date!
+  startTime: Time
+  cost: Decimal!
+}
+
+"""Catégorie d'activité."""
+enum ActivityCategory {
+  """Visite"""
+  SIGHTSEEING
+
+  """Culture"""
+  CULTURE
+
+  """Restauration"""
+  FOOD
+
+  """Nature"""
+  NATURE
+
+  """Sport"""
+  SPORT
+
+  """Transport"""
+  TRANSPORT
+
+  """Hébergement"""
+  ACCOMMODATION
+
+  """Autre"""
+  OTHER
+}
+
+"""
+The `Time` scalar type represents a Time value as
+specified by
+[iso8601](https://en.wikipedia.org/wiki/ISO_8601).
+"""
+scalar Time
+
+"""
+Météo d'Open-Meteo, avec les conditions actuelles et les prévisions du séjour.
+"""
+type Weather {
+  latitude: Float!
+  longitude: Float!
+
+  """Fuseau de la destination."""
+  timezone: String!
+  units: WeatherUnits!
+  current: CurrentWeather!
+
+  """Jours du séjour compris dans les 16 jours de prévision."""
+  daily: [DailyForecast!]!
+}
+
+type WeatherUnits {
+  """°C"""
+  temperature: String!
+
+  """km/h"""
+  windSpeed: String!
+
+  """mm"""
+  precipitation: String!
+}
+
+type CurrentWeather {
+  """Heure locale de la destination (ISO 8601)."""
+  time: String!
+  temperature: Float
+  windSpeed: Float
+  precipitation: Float
+
+  """Code météo WMO."""
+  weatherCode: Int
+
+  """Libellé français du code météo."""
+  description: String!
+}
+
+type DailyForecast {
+  date: Date!
+  temperatureMax: Float
+  temperatureMin: Float
+  precipitationSum: Float
+  windSpeedMax: Float
+
+  """Code météo WMO."""
+  weatherCode: Int
+
+  """Libellé français du code météo."""
+  description: String!
+}
+
+"""Pays d'après Countries GraphQL (noms en anglais)."""
+type CountryInfo {
+  """Code ISO 3166-1 alpha-2."""
+  code: String!
+  name: String!
+
+  """Nom dans la langue du pays."""
+  native: String!
+  capital: String
+
+  """Drapeau."""
+  emoji: String!
+
+  """Codes ISO 4217 séparés par des virgules."""
+  currency: String
+  currencies: [String!]!
+  continent: String!
+  languages: [Language!]!
+}
+
+type Language {
+  """Nom anglais, ex. Japanese."""
+  name: String!
+
+  """Nom dans la langue, ex. 日本語."""
+  native: String!
+}
+
+type TripParticipant {
+  user: User!
+  role: ParticipantRole!
+  joinedAt: DateTime!
+  invitedBy: User
+}
+
+"""Rôle dans un voyage."""
+enum ParticipantRole {
+  """Propriétaire"""
+  OWNER
+
+  """Éditeur"""
+  EDITOR
+
+  """Lecteur"""
+  VIEWER
+}
+
+"""
+Tri de myTrips (START_DATE par défaut). Les ex æquo sont départagés par identifiant.
+"""
+enum TripOrderBy {
+  START_DATE
+  START_DATE_DESC
+  TITLE
+  TITLE_DESC
+  CREATED_AT
+  CREATED_AT_DESC
+}
+
+"""
+Base de données, météo et pays ensemble. Les deux services sont appelés en parallèle.
+
+Si une source échoue, son bloc vaut null et un avertissement est ajouté. La requête
+réussit quand même (dégradation partielle).
+"""
+type DestinationOverview {
+  destination: Destination!
+  trip: Trip!
+  activities: [Activity!]!
+  activityCount: Int!
+
+  """Somme des coûts des activités."""
+  totalCost: Decimal!
+  weather: Weather
+  country: CountryInfo
+  warnings: [SourceWarning!]!
+}
+
+"""
+Source externe qui a échoué dans une vue d'ensemble (dégradation partielle).
+"""
+type SourceWarning {
+  source: OverviewSource!
+
+  """Code d'erreur, ex. external_service_unavailable."""
+  code: String!
+  message: String!
+}
+
+"""Bloc de la vue d'ensemble resté vide (null)."""
+enum OverviewSource {
+  WEATHER
+  COUNTRY
+}
+
+type Mutation {
+  """Crée un voyage. Vous en devenez propriétaire et premier participant."""
+  createTrip(input: TripCreateInput!): CreateTrip
+
+  """Modifie un voyage. Réservé au propriétaire et aux éditeurs."""
+  updateTrip(id: ID!, input: TripUpdateInput!): UpdateTrip
+
+  """
+  Supprime un voyage, ses destinations et ses activités. Réservé au propriétaire.
+  """
+  deleteTrip(id: ID!): DeleteTrip
+
+  """
+  Copie un voyage, ses destinations et ses activités dans un brouillon à vous.
+  
+  Tout participant peut le faire. La copie se fait dans une transaction.
+  """
+  cloneTrip(
+    id: ID!
+
+    """« Copie de <titre> » par défaut."""
+    title: String
+  ): CloneTrip
+
+  """
+  Ajoute au voyage l'utilisateur inscrit sous ce courriel. Réservé au propriétaire.
+  """
+  addParticipant(
+    email: String!
+
+    """VIEWER par défaut."""
+    role: InvitableRole
+    tripId: ID!
+  ): AddParticipant
+
+  """
+  Retire un participant. Réservé au propriétaire, qui ne peut pas se retirer.
+  """
+  removeParticipant(tripId: ID!, userId: ID!): RemoveParticipant
+
+  """
+  Ajoute une destination à un voyage. Réservé au propriétaire et aux éditeurs.
+  """
+  createDestination(input: DestinationCreateInput!): CreateDestination
+
+  """
+  Modifie une destination. Réservé au propriétaire et aux éditeurs du voyage.
+  """
+  updateDestination(id: ID!, input: DestinationUpdateInput!): UpdateDestination
+
+  """
+  Supprime une destination et ses activités. Réservé au propriétaire et aux éditeurs.
+  """
+  deleteDestination(id: ID!): DeleteDestination
+
+  """
+  Ajoute une activité à une destination. Réservé au propriétaire et aux éditeurs.
+  """
+  createActivity(input: ActivityCreateInput!): CreateActivity
+
+  """
+  Modifie une activité. Réservé au propriétaire et aux éditeurs du voyage.
+  """
+  updateActivity(id: ID!, input: ActivityUpdateInput!): UpdateActivity
+
+  """
+  Supprime une activité. Réservé au propriétaire et aux éditeurs du voyage.
+  """
+  deleteActivity(id: ID!): DeleteActivity
+}
+
+"""Crée un voyage. Vous en devenez propriétaire et premier participant."""
+type CreateTrip {
+  trip: Trip
+}
+
+input TripCreateInput {
+  title: String!
+  description: String
+  startDate: Date!
+  endDate: Date!
+
+  """DRAFT par défaut."""
+  status: TripStatus
+  budget: Decimal
+
+  """Adresse https de l'image de couverture."""
+  coverImageUrl: String
+}
+
+"""Modifie un voyage. Réservé au propriétaire et aux éditeurs."""
+type UpdateTrip {
+  trip: Trip
+}
+
+"""Seuls les champs fournis sont modifiés."""
+input TripUpdateInput {
+  title: String
+  description: String
+  startDate: Date
+  endDate: Date
+  status: TripStatus
+  budget: Decimal
+
+  """
+  Adresse https de l'image de couverture, ou chaîne vide pour la retirer.
+  """
+  coverImageUrl: String
+}
+
+"""
+Supprime un voyage, ses destinations et ses activités. Réservé au propriétaire.
+"""
+type DeleteTrip {
+  ok: Boolean!
+
+  """Identifiant du voyage supprimé."""
+  id: ID!
+}
+
+"""
+Copie un voyage, ses destinations et ses activités dans un brouillon à vous.
+
+Tout participant peut le faire. La copie se fait dans une transaction.
+"""
+type CloneTrip {
+  trip: Trip
+}
+
+"""
+Ajoute au voyage l'utilisateur inscrit sous ce courriel. Réservé au propriétaire.
+"""
+type AddParticipant {
+  participant: TripParticipant
+}
+
+"""
+Rôles attribuables à l'ajout d'un participant (la propriété ne se donne pas ainsi).
+"""
+enum InvitableRole {
+  EDITOR
+  VIEWER
+}
+
+"""
+Retire un participant. Réservé au propriétaire, qui ne peut pas se retirer.
+"""
+type RemoveParticipant {
+  ok: Boolean!
+
+  """Le voyage, sans le participant retiré."""
+  trip: Trip
+}
+
+"""
+Ajoute une destination à un voyage. Réservé au propriétaire et aux éditeurs.
+"""
+type CreateDestination {
+  destination: Destination
+}
+
+input DestinationCreateInput {
+  """Voyage dont vous êtes propriétaire ou éditeur."""
+  trip: ID!
+  order: Int!
+  city: String!
+  country: String!
+
+  """ISO 3166-1 alpha-2, ex. JP."""
+  countryCode: String!
+  arrivalDate: Date!
+  departureDate: Date!
+  latitude: Decimal
+  longitude: Decimal
+}
+
+"""
+Modifie une destination. Réservé au propriétaire et aux éditeurs du voyage.
+"""
+type UpdateDestination {
+  destination: Destination
+}
+
+"""
+Seuls les champs fournis sont modifiés. Changer de ville efface les coordonnées.
+"""
+input DestinationUpdateInput {
+  order: Int
+  city: String
+  country: String
+  countryCode: String
+  arrivalDate: Date
+  departureDate: Date
+  latitude: Decimal
+  longitude: Decimal
+}
+
+"""
+Supprime une destination et ses activités. Réservé au propriétaire et aux éditeurs.
+"""
+type DeleteDestination {
+  ok: Boolean!
+
+  """Identifiant de la destination supprimée."""
+  id: ID!
+}
+
+"""
+Ajoute une activité à une destination. Réservé au propriétaire et aux éditeurs.
+"""
+type CreateActivity {
+  activity: Activity
+}
+
+input ActivityCreateInput {
+  """Destination d'un voyage dont vous êtes propriétaire ou éditeur."""
+  destination: ID!
+  name: String!
+  description: String
+
+  """OTHER par défaut."""
+  category: ActivityCategory
+  date: Date!
+  startTime: Time
+  cost: Decimal
+}
+
+"""
+Modifie une activité. Réservé au propriétaire et aux éditeurs du voyage.
+"""
+type UpdateActivity {
+  activity: Activity
+}
+
+"""Seuls les champs fournis sont modifiés."""
+input ActivityUpdateInput {
+  name: String
+  description: String
+  category: ActivityCategory
+  date: Date
+  startTime: Time
+  cost: Decimal
+}
+
+"""
+Supprime une activité. Réservé au propriétaire et aux éditeurs du voyage.
+"""
+type DeleteActivity {
+  ok: Boolean!
+
+  """Identifiant de l'activité supprimée."""
+  id: ID!
+}
