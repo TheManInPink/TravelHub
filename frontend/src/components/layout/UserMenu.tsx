@@ -1,20 +1,19 @@
-import Link from "next/link";
-import { LogOutIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { userDisplayName, userInitials } from "@/lib/format";
 import type { User } from "@/types/api";
+import { LogoutMenuItem } from "./LogoutMenuItem";
 
 // Menu du compte, à droite de l'en-tête : initiales, nom, courriel et Déconnexion.
 // Server Component : le menu déroulant de shadcn est un Client Component, mais nous
-// pouvons le composer ici sans "use client". L'utilisateur arrive en props.
+// pouvons le composer ici sans "use client". L'utilisateur arrive en props (UserMenuSlot),
+// et seul l'élément Déconnexion (LogoutMenuItem) est un Client Component.
 
 export type MenuUser = Pick<User, "username" | "email" | "first_name" | "last_name">;
 
@@ -45,13 +44,7 @@ export function UserMenu({ user }: { user: MenuUser }) {
           <span className="truncate text-xs font-normal">{user.email}</span>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
-        {/* Provisoire : l'étape 4 remplace ce lien par la Server Action logout(). */}
-        <DropdownMenuItem asChild>
-          <Link href="/">
-            <LogOutIcon aria-hidden="true" />
-            Déconnexion
-          </Link>
-        </DropdownMenuItem>
+        <LogoutMenuItem />
       </DropdownMenuContent>
     </DropdownMenu>
   );
