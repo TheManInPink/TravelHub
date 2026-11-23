@@ -38,11 +38,19 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function apiBaseUrl(): URL {
-  const value = process.env.DJANGO_API_URL;
+  const value = process.env.DJANGO_API_URL?.trim();
   if (!value) {
     throw new Error("DJANGO_API_URL n'est pas définie. Copiez .env.example en .env.local.");
   }
-  return new URL(value);
+  const url = URL.canParse(value) ? new URL(value) : null;
+  // Sans ce test, une valeur comme « travelhub-uqar-api.onrender.com,localhost » (celle
+  // de ALLOWED_HOSTS) donne seulement « TypeError: Invalid URL » au rendu de la page.
+  if (!url || (url.protocol !== "https:" && url.protocol !== "http:")) {
+    throw new Error(
+      `DJANGO_API_URL doit être une adresse complète, par exemple https://travelhub-uqar-api.onrender.com (valeur reçue : ${value}).`,
+    );
+  }
+  return url;
 }
 
 /** "/api/trips/12" devient "http://localhost:8000/api/trips/12/". */
