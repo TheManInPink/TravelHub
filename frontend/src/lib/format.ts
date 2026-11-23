@@ -3,10 +3,9 @@
 // ("4500.00") sous forme de chaînes. Nous ne passons jamais par un nombre flottant
 // pour les montants, et une valeur mal formée est renvoyée telle quelle.
 
-const LOCALE = "fr-CA";
+import { APP_TIME_ZONE } from "./dates";
 
-// Fuseau du back-end (TIME_ZONE de Django), pour les dates avec heure.
-const APP_TIME_ZONE = "America/Toronto";
+const LOCALE = "fr-CA";
 
 const DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
 const TIME_PATTERN = /^(\d{2}):(\d{2})(?::\d{2}(?:\.\d+)?)?$/;
