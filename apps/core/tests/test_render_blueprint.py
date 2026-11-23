@@ -5,9 +5,9 @@ tôt, dans la CI.
 """
 
 import fnmatch
+import json
 import os
 import re
-import shlex
 import subprocess
 import sys
 
@@ -75,7 +75,8 @@ class TestWebService:
 
     def test_build_filter_paths_use_only_the_characters_render_accepts(self, service):
         # Règle appliquée par Render au moment de lire le Blueprint, mais absente de son
-        # schéma JSON publié. « Modèle_de_Rapport_LaTex/** » était refusé à cause du « è ».
+        # schéma JSON publié. L'ancien dossier « Modèle_de_Rapport_LaTex » était refusé à
+        # cause du « è ». Nous l'avons renommé sans accent.
         allowed = re.compile(r"[A-Za-z0-9\-_./^*? \[\]]+")
         for path in service["buildFilter"]["ignoredPaths"]:
             assert allowed.fullmatch(path), path
@@ -83,22 +84,30 @@ class TestWebService:
     def test_build_filter_still_matches_the_report_folder(self, service):
         report = next(p for p in service["buildFilter"]["ignoredPaths"] if "Rapport" in p)
         folder = report.removesuffix("/**")
-        assert (settings.BASE_DIR / "Modèle_de_Rapport_LaTex").is_dir()
-        assert fnmatch.fnmatchcase("Modèle_de_Rapport_LaTex", folder)
+        folders = [path.name for path in settings.BASE_DIR.iterdir() if path.is_dir()]
+        assert any(fnmatch.fnmatchcase(name, folder) for name in folders), folder
 
 
 class TestStartCommand:
-    def test_same_command_as_docker_compose(self, service):
-        compose = load_yaml("docker-compose.yml")
-        assert service["dockerCommand"] == compose["services"]["web"]["command"]
-
-    def test_runs_through_a_shell(self, service):
-        # Sans sh -c, Render passerait « && » à manage.py comme un simple argument.
-        assert shlex.split(service["dockerCommand"]) == [
+    def test_image_applies_migrations_then_starts_gunicorn(self):
+        dockerfile = (settings.BASE_DIR / "Dockerfile").read_text(encoding="utf-8")
+        # Le CMD du HEALTHCHECK est indenté. Seul le dernier CMD en début de ligne compte.
+        (*_, command) = [line for line in dockerfile.splitlines() if line.startswith("CMD ")]
+        # Forme JSON : Docker passe chaque argument tel quel, sans shell ni guillemets.
+        assert json.loads(command.removeprefix("CMD ")) == [
             "sh",
             "-c",
             "python manage.py migrate --noinput && exec gunicorn config.wsgi",
         ]
+
+    def test_render_uses_the_command_of_the_image(self, service):
+        # Render garde les guillemets d'un dockerCommand. Avec sh -c "…", sh cherchait une
+        # commande nommée « python manage.py migrate … » et le conteneur s'arrêtait (127).
+        assert "dockerCommand" not in service
+
+    def test_docker_compose_uses_the_command_of_the_image(self):
+        compose = load_yaml("docker-compose.yml")
+        assert "command" not in compose["services"]["web"]
 
 
 class TestEnvironment:

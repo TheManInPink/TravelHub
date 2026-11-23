@@ -84,7 +84,7 @@ docker compose down              # arrête tout, --volumes efface aussi la base 
 | `db` | `db:5432`, réseau interne seulement | `postgres:18`, données dans le volume `postgres-data`, contrôle avec `pg_isready` |
 | `pgadmin` | http://localhost:5050 | Connexion avec `PGADMIN_DEFAULT_EMAIL` et `PGADMIN_DEFAULT_PASSWORD`. Le serveur « TravelHub (Docker) » est déjà déclaré |
 
-Le `Dockerfile` installe les dépendances dans une première étape (`python:3.14-slim`) et copie ensuite l'environnement virtuel dans l'image finale. Il lance `collectstatic` (les fichiers sont servis par WhiteNoise), puis Gunicorn (`gunicorn.conf.py`, avec `WEB_CONCURRENCY` processus). Gunicorn tourne avec un utilisateur non root qui peut seulement écrire dans `/app/logs`. Le `HEALTHCHECK` appelle `/health/` toutes les 30 s.
+Le `Dockerfile` installe les dépendances dans une première étape (`python:3.14-slim`) et copie ensuite l'environnement virtuel dans l'image finale. Il lance `collectstatic` (les fichiers sont servis par WhiteNoise). Au démarrage du conteneur, son `CMD` applique les migrations puis lance Gunicorn (`gunicorn.conf.py`, avec `WEB_CONCURRENCY` processus). Docker Compose et Render utilisent ce même `CMD`. Gunicorn tourne avec un utilisateur non root qui peut seulement écrire dans `/app/logs`. Le `HEALTHCHECK` appelle `/health/` toutes les 30 s.
 
 Dans `docker-compose.yml`, le service `web` remplace `DATABASE_URL` pour viser l'hôte `db`. Il désactive aussi la redirection HTTPS et HSTS, parce qu'en local on passe par HTTP. En vraie production, derrière un proxy HTTPS, on garde les valeurs par défaut.
 
