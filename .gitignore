@@ -39,3 +39,5 @@ Thumbs.db
 *.out
 *.synctex.gz
 *.toc
+.neon
+node_modules/
