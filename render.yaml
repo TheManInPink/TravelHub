@@ -28,13 +28,14 @@ projects:
             # Render attend que la CI GitHub soit verte avant de déployer un commit de master.
             autoDeployTrigger: checksPass
             # Un commit qui touche seulement ces fichiers ne redéploie pas l'API. Aucun
-            # d'eux n'entre dans l'image (voir .dockerignore).
+            # d'eux n'entre dans l'image (voir .dockerignore). Render n'accepte que des
+            # caractères ASCII dans ces chemins : « Mod*le » remplace « Modèle ».
             buildFilter:
               ignoredPaths:
                 - frontend/**
                 - docs/**
                 - postman/**
-                - Modèle_de_Rapport_LaTex/**
+                - Mod*le_de_Rapport_LaTex/**
                 - .github/**
                 - "**/*.md"
             envVars:
