@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   formatAmount,
+  formatCount,
   formatDate,
   formatDateRange,
   formatDateTime,
@@ -83,6 +84,18 @@ describe("formatAmount", () => {
   it("renvoie telle quelle une valeur qui n'est pas un nombre décimal", () => {
     expect(formatAmount("abc")).toBe("abc");
     expect(formatAmount("")).toBe("");
+  });
+});
+
+describe("formatCount", () => {
+  it("met le singulier pour 0 et 1, comme le veut le français", () => {
+    expect(formatCount(0, "destination", "destinations")).toBe("0 destination");
+    expect(formatCount(1, "destination", "destinations")).toBe("1 destination");
+    expect(formatCount(2, "destination", "destinations")).toBe("2 destinations");
+  });
+
+  it("sépare les milliers avec une espace insécable", () => {
+    expect(formatCount(1500, "voyage", "voyages")).toBe(`1${NBSP}500 voyages`);
   });
 });
 
