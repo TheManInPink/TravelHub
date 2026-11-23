@@ -1,18 +1,18 @@
 import "@testing-library/jest-dom/vitest";
 import { cleanup } from "@testing-library/react";
 import { afterAll, afterEach, beforeAll, vi } from "vitest";
-import { cookieJar } from "./mocks/cookies";
+import { resetRequestMocks } from "./mocks/cookies";
 import { DJANGO_URL } from "./msw/handlers";
 import { server } from "./msw/server";
 
 // Adresse de l'API Django simulée par MSW. djangoFetch la relit à chaque appel.
 process.env.DJANGO_API_URL = DJANGO_URL;
 
-// cookies() de next/headers ne marche que pendant une requête Next.js. Dans tous les
-// tests, il lit le faux magasin de tests/mocks/cookies.ts.
+// cookies() et headers() de next/headers ne marchent que pendant une requête Next.js.
+// Dans tous les tests, ils lisent les faux magasins de tests/mocks/cookies.ts.
 vi.mock("next/headers", async () => {
-  const { fakeCookies } = await import("./mocks/cookies");
-  return { cookies: fakeCookies };
+  const { fakeCookies, fakeHeaders } = await import("./mocks/cookies");
+  return { cookies: fakeCookies, headers: fakeHeaders };
 });
 
 // Une requête sans gestionnaire MSW fait échouer le test, au lieu de partir sur le réseau.
@@ -26,7 +26,7 @@ afterEach(() => {
   cleanup();
   server.resetHandlers();
   server.events.removeAllListeners();
-  cookieJar.clear();
+  resetRequestMocks();
   vi.restoreAllMocks();
 });
 

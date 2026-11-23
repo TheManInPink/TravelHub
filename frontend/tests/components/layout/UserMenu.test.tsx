@@ -1,7 +1,15 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { UserMenu } from "@/components/layout/UserMenu";
+
+// La vraie Server Action appellerait Django : ici, logout est une fonction simulée.
+const { logout } = vi.hoisted(() => ({ logout: vi.fn() }));
+vi.mock("@/actions/auth", () => ({ logout }));
+
+beforeEach(() => {
+  logout.mockReset();
+});
 
 const alice = {
   username: "alice",
@@ -23,6 +31,22 @@ describe("UserMenu", () => {
     const menu = await screen.findByRole("menu");
     expect(menu).toHaveTextContent("Alice Martin");
     expect(menu).toHaveTextContent("alice@example.com");
-    expect(screen.getByRole("menuitem", { name: "Déconnexion" })).toBeInTheDocument();
+  });
+
+  it("appelle la Server Action logout() depuis l'élément Déconnexion", async () => {
+    // Promesse jamais résolue : la déconnexion reste en cours.
+    logout.mockReturnValue(new Promise(() => {}));
+    const user = userEvent.setup();
+    render(<UserMenu user={alice} />);
+
+    await user.click(screen.getByRole("button", { name: "Alice Martin, menu du compte" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Déconnexion" }));
+
+    expect(logout).toHaveBeenCalledOnce();
+    // Le menu reste ouvert et montre que la déconnexion est en cours.
+    expect(await screen.findByRole("menuitem", { name: "Déconnexion…" })).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
   });
 });

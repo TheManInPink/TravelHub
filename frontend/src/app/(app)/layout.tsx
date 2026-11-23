@@ -1,16 +1,14 @@
+import { Suspense } from "react";
+import { UserMenuSkeleton } from "@/components/feedback/Skeletons";
 import { Header } from "@/components/layout/Header";
-import { UserMenu, type MenuUser } from "@/components/layout/UserMenu";
+import { UserMenuSlot } from "@/components/layout/UserMenuSlot";
 
 // Layout des pages protégées (tableau de bord, voyages) : en-tête, puis le contenu dans
 // un conteneur de 72 rem au plus, avec des marges qui grandissent avec l'écran.
-
-// Provisoire : l'étape 4 remplace cet utilisateur fictif par le compte lu dans Django.
-const PLACEHOLDER_USER: MenuUser = {
-  username: "alice",
-  email: "alice@example.com",
-  first_name: "Alice",
-  last_name: "Martin",
-};
+//
+// Le layout n'attend pas Django : UserMenuSlot charge l'utilisateur sous Suspense, et
+// le squelette tient sa place. La vérification de la session se fait dans chaque page
+// (verifySession()), car le layout n'est pas réexécuté à chaque navigation.
 
 export default function AppLayout({ children }: LayoutProps<"/">) {
   return (
@@ -22,7 +20,13 @@ export default function AppLayout({ children }: LayoutProps<"/">) {
       >
         Aller au contenu
       </a>
-      <Header userMenu={<UserMenu user={PLACEHOLDER_USER} />} />
+      <Header
+        userMenu={
+          <Suspense fallback={<UserMenuSkeleton />}>
+            <UserMenuSlot />
+          </Suspense>
+        }
+      />
       <main
         id="contenu"
         tabIndex={-1}
