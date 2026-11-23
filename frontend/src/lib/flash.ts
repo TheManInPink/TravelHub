@@ -13,6 +13,9 @@ export const FLASH_MESSAGES = {
   "trip-created": "Voyage créé.",
   "trip-updated": "Voyage modifié.",
   "trip-deleted": "Voyage supprimé.",
+  "destination-created": "Destination ajoutée.",
+  "destination-updated": "Destination modifiée.",
+  "destination-deleted": "Destination supprimée.",
 } as const satisfies Record<string, string>;
 
 export type FlashKey = keyof typeof FLASH_MESSAGES;
