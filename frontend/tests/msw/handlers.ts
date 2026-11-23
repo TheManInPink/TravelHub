@@ -7,6 +7,7 @@ import {
   japanTrip,
   japanTripDetail,
   kyotoPage,
+  kyotoWeather,
   newTokens,
   tripPage,
   validTokens,
@@ -176,6 +177,18 @@ export const handlers: AnyHandler[] = [
       return HttpResponse.json(errorBody("not_found", "Pas trouvé."), { status: 404 });
     }
     return new HttpResponse(null, { status: 204 });
+  }),
+
+  // Météo d'une destination : Django exige un jeton valide. Seule la destination 3 (Kyoto)
+  // existe, les autres donnent la 404 de Django.
+  http.get(`${DJANGO_URL}/api/destinations/:id/weather/`, ({ params, request }) => {
+    if (!hasValidAccess(request)) {
+      return invalidToken();
+    }
+    if (params.id !== String(kyotoWeather.destination)) {
+      return HttpResponse.json(errorBody("not_found", "Pas trouvé."), { status: 404 });
+    }
+    return HttpResponse.json(kyotoWeather);
   }),
 
   // Page d'une destination en GraphQL : la destination "3" existe, les autres donnent
