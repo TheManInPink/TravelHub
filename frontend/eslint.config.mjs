@@ -81,6 +81,25 @@ export default defineConfig([
     },
   },
 
+  // Seuls les modules de src/lib/api/ appellent Django. Ailleurs, lire l'adresse de
+  // l'API est donc une erreur : il faut passer par djangoFetch() ou gqlFetch().
+  {
+    name: "travelhub/django-seulement-dans-lib-api",
+    files: ["src/**/*.{ts,tsx}"],
+    ignores: ["src/lib/api/**"],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector:
+            "MemberExpression[object.property.name='env']:matches([property.name='DJANGO_API_URL'], [property.value='DJANGO_API_URL'])",
+          message:
+            "Seuls les modules de src/lib/api/ appellent Django. Utilisez djangoFetch() ou gqlFetch().",
+        },
+      ],
+    },
+  },
+
   // Fichiers générés par shadcn, que nous ne modifions pas à la main.
   {
     name: "travelhub/shadcn",
