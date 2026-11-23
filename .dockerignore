@@ -27,6 +27,7 @@ docker-compose.yml
 Modèle_de_Rapport_LaTex/
 # Le front-end Next.js est déployé à part, sur Vercel.
 frontend/
+package.json
 postman/
 scripts/
 *.md
