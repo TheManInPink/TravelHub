@@ -1,5 +1,5 @@
 import { HttpResponse, http, type AnyHandler } from "msw";
-import { graphql } from "msw/graphql";
+import { graphql, type GraphQLResponseBody, type GraphQLVariables } from "msw/graphql";
 import type { ApiErrorBody, ApiErrorDetails } from "@/types/api";
 import {
   ALICE_PASSWORD,
@@ -19,6 +19,10 @@ export const GRAPHQL_URL = `${DJANGO_URL}/graphql/`;
 /** Identifiant que Django donne au voyage créé par POST /api/trips/. */
 export const CREATED_TRIP_ID = 5;
 
+/** Identifiants GraphQL de la destination et de l'activité créées par les mutations. */
+export const CREATED_DESTINATION_ID = "8";
+export const CREATED_ACTIVITY_ID = "12";
+
 // Depuis MSW 3, les gestionnaires GraphQL sont toujours liés à une adresse.
 export const djangoGraphql = graphql.link(GRAPHQL_URL);
 
@@ -29,6 +33,46 @@ export function errorBody(
   details: ApiErrorDetails = {},
 ): ApiErrorBody {
   return { error: { code, message, details } };
+}
+
+/**
+ * Erreur d'un resolver GraphQL, comme Django l'envoie : statut 200, data à null pour le
+ * champ, et le code dans extensions. Les details sont en camelCase ({"date": ["…"]}).
+ */
+export function gqlErrorBody(
+  field: string,
+  code: string,
+  message: string,
+  details: Record<string, string[]> = {},
+): GraphQLResponseBody<Record<string, null>> {
+  return {
+    data: { [field]: null },
+    errors: [{ message, path: [field], extensions: { code, details } }],
+  };
+}
+
+/** Valeurs JSON simples, comme celles des variables d'une mutation. */
+type JsonRecord = Record<string, string | number | boolean | null>;
+
+/** Champs de variables.input, sans le parent (trip ou destination) que la réponse n'a pas. */
+function inputFields(variables: GraphQLVariables, parent?: string): JsonRecord {
+  const input = variables.input as JsonRecord;
+  return Object.fromEntries(Object.entries(input).filter(([key]) => key !== parent));
+}
+
+/** Le 401 de /graphql/ pour un jeton invalide : errors[] sans data. */
+function gqlInvalidToken(): HttpResponse<GraphQLResponseBody<null>> {
+  return HttpResponse.json(
+    {
+      errors: [
+        {
+          message: "Le jeton n'est pas valide.",
+          extensions: { code: "token_not_valid", details: {} },
+        },
+      ],
+    },
+    { status: 401 },
+  );
 }
 
 /** Le 401 de SimpleJWT pour un jeton expiré, invalide ou sur liste noire. */
@@ -150,5 +194,82 @@ export const handlers: AnyHandler[] = [
         },
       ],
     });
+  }),
+
+  // Mutations de l'itinéraire. Comme Django, elles exigent un jeton valide (sinon 401
+  // sans data). Seules la destination "3" et l'activité "7" existent : les autres
+  // donnent not_found dans errors[], avec le statut 200.
+  djangoGraphql.mutation("CreateDestination", ({ request, variables }) => {
+    if (!hasValidAccess(request)) {
+      return gqlInvalidToken();
+    }
+    const destination = {
+      ...kyotoPage,
+      latitude: null,
+      longitude: null,
+      ...inputFields(variables, "trip"),
+      id: CREATED_DESTINATION_ID,
+    };
+    return HttpResponse.json({ data: { createDestination: { destination } } });
+  }),
+
+  djangoGraphql.mutation("UpdateDestination", ({ request, variables }) => {
+    if (!hasValidAccess(request)) {
+      return gqlInvalidToken();
+    }
+    if (variables.id !== kyotoPage.id) {
+      return HttpResponse.json(
+        gqlErrorBody("updateDestination", "not_found", "Destination introuvable."),
+      );
+    }
+    const destination = { ...kyotoPage, ...inputFields(variables) };
+    return HttpResponse.json({ data: { updateDestination: { destination } } });
+  }),
+
+  djangoGraphql.mutation("DeleteDestination", ({ request, variables }) => {
+    if (!hasValidAccess(request)) {
+      return gqlInvalidToken();
+    }
+    if (variables.id !== kyotoPage.id) {
+      return HttpResponse.json(
+        gqlErrorBody("deleteDestination", "not_found", "Destination introuvable."),
+      );
+    }
+    return HttpResponse.json({ data: { deleteDestination: { ok: true, id: kyotoPage.id } } });
+  }),
+
+  djangoGraphql.mutation("CreateActivity", ({ request, variables }) => {
+    if (!hasValidAccess(request)) {
+      return gqlInvalidToken();
+    }
+    const activity = {
+      ...kyotoPage.activities[0],
+      ...inputFields(variables, "destination"),
+      id: CREATED_ACTIVITY_ID,
+    };
+    return HttpResponse.json({ data: { createActivity: { activity } } });
+  }),
+
+  djangoGraphql.mutation("UpdateActivity", ({ request, variables }) => {
+    const [existing] = kyotoPage.activities;
+    if (!hasValidAccess(request)) {
+      return gqlInvalidToken();
+    }
+    if (variables.id !== existing.id) {
+      return HttpResponse.json(gqlErrorBody("updateActivity", "not_found", "Activité introuvable."));
+    }
+    const activity = { ...existing, ...inputFields(variables) };
+    return HttpResponse.json({ data: { updateActivity: { activity } } });
+  }),
+
+  djangoGraphql.mutation("DeleteActivity", ({ request, variables }) => {
+    const [existing] = kyotoPage.activities;
+    if (!hasValidAccess(request)) {
+      return gqlInvalidToken();
+    }
+    if (variables.id !== existing.id) {
+      return HttpResponse.json(gqlErrorBody("deleteActivity", "not_found", "Activité introuvable."));
+    }
+    return HttpResponse.json({ data: { deleteActivity: { ok: true, id: existing.id } } });
   }),
 ];

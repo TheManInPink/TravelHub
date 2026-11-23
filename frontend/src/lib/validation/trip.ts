@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { TRIP_STATUSES } from "@/lib/tripStatus";
+import { isoDate } from "@/lib/validation/fields";
 import type { Trip } from "@/types/api";
 
 // Schéma du formulaire d'un voyage, partagé par TripForm (zodResolver) et par les Server
@@ -15,18 +16,6 @@ const BUDGET_INTEGER_DIGITS = 8;
 const BUDGET_DECIMALS = 2;
 
 const END_BEFORE_START = "La date de fin doit être postérieure ou égale à la date de début.";
-
-/**
- * Date "AAAA-MM-JJ" obligatoire. z.iso.date() refuse aussi les dates impossibles,
- * comme le 30 février. Le champ <input type="date"> donne toujours ce format.
- */
-function isoDate(requiredMessage: string) {
-  return z
-    .string()
-    .trim()
-    .min(1, requiredMessage)
-    .pipe(z.iso.date("Entrez une date valide au format AAAA-MM-JJ."));
-}
 
 /**
  * Budget facultatif. Le champ vide donne null (pas de budget), comme dans Django.

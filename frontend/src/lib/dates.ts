@@ -22,6 +22,12 @@ export function todayIsoDate(now: Date = new Date()): IsoDate {
   return `${part("year")}-${part("month")}-${part("day")}`;
 }
 
+/** Période du calendrier, bornes comprises : un voyage ou le séjour à une destination. */
+export interface DateRange {
+  start: IsoDate;
+  end: IsoDate;
+}
+
 /**
  * Vrai si la date est entre le début et la fin, bornes comprises. Des dates "AAAA-MM-JJ"
  * se comparent comme des chaînes, sans passer par new Date().

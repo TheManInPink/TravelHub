@@ -3,6 +3,18 @@ import type { ActivityCategory } from "@/types/api";
 // Libellés français des catégories d'activité. Ce sont ceux de ActivityCategory dans
 // Django (apps/itinerary/models.py). L'API REST n'envoie que la valeur ("food").
 
+/** Les 8 catégories, dans l'ordre de Django. Sert au schéma Zod et à la liste du formulaire. */
+export const ACTIVITY_CATEGORIES = [
+  "sightseeing",
+  "culture",
+  "food",
+  "nature",
+  "sport",
+  "transport",
+  "accommodation",
+  "other",
+] as const satisfies readonly ActivityCategory[];
+
 export const ACTIVITY_CATEGORY_LABELS: Readonly<Record<ActivityCategory, string>> = {
   sightseeing: "Visite",
   culture: "Culture",

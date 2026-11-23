@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { PencilIcon } from "lucide-react";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
+import { Figure } from "@/components/layout/Figure";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -20,15 +21,6 @@ import { TripStatusBadge } from "./TripStatusBadge";
 // propriétaire et les éditeurs, Supprimer pour le propriétaire seulement. Le bouton
 // Supprimer est un Client Component (dialogue de confirmation) : c'est le seul îlot
 // interactif de la page.
-
-function Figure({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="flex flex-col gap-1 rounded-xl border bg-card px-4 py-3">
-      <dt className="text-sm text-muted-foreground">{label}</dt>
-      <dd className="text-lg font-semibold tabular-nums">{children}</dd>
-    </div>
-  );
-}
 
 /** Boutons du voyage selon le rôle, ou undefined pour un lecteur (aucun bouton). */
 function tripActions(trip: TripDetail): ReactNode {
@@ -93,7 +85,11 @@ export function TripDetailView({ trip }: { trip: TripDetail }) {
         <Figure label="Activités">{trip.activity_count}</Figure>
       </dl>
 
-      <TripItinerary destinations={trip.destinations} />
+      <TripItinerary
+        tripId={trip.id}
+        destinations={trip.destinations}
+        canEdit={canEditTrip(trip.my_role)}
+      />
     </>
   );
 }

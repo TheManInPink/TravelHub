@@ -19,6 +19,10 @@ describe("formatDate", () => {
     expect(formatDate("2026-11-22", "medium")).toBe("22 nov. 2026");
   });
 
+  it("ajoute le jour de la semaine avec le style full", () => {
+    expect(formatDate("2027-04-09", "full")).toBe("vendredi 9 avril 2027");
+  });
+
   it("ne décale pas la date selon le fuseau horaire", () => {
     // new Date("2026-01-01") donnerait le 31 décembre à Toronto.
     expect(formatDate("2026-01-01")).toBe("1 janvier 2026");

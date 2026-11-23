@@ -2,29 +2,17 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import Link from "next/link";
-import { useId, useState, useTransition } from "react";
-import { Controller, useForm, useWatch } from "react-hook-form";
+import { useState, useTransition } from "react";
+import { useForm, useWatch } from "react-hook-form";
 import { LoaderCircleIcon } from "lucide-react";
 import { createTripAction, updateTripAction } from "@/actions/trips";
 import { applyFieldErrors } from "@/components/forms/applyFieldErrors";
 import { FormMessage } from "@/components/forms/FormMessage";
+import { SelectField } from "@/components/forms/SelectField";
+import { TextareaField } from "@/components/forms/TextareaField";
 import { TextField } from "@/components/forms/TextField";
 import { Button } from "@/components/ui/button";
-import {
-  Field,
-  FieldDescription,
-  FieldError,
-  FieldGroup,
-  FieldLabel,
-} from "@/components/ui/field";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
+import { FieldGroup } from "@/components/ui/field";
 import { TRIP_STATUSES, tripStatusLabel } from "@/lib/tripStatus";
 import {
   EMPTY_TRIP_INPUT,
@@ -44,6 +32,9 @@ import type { Trip } from "@/types/api";
 // « Voyage créé. » ou « Voyage modifié. ». Sinon, elle renvoie le message à afficher et
 // les erreurs de Django champ par champ.
 
+/** Les 5 statuts avec leur libellé, pour la liste déroulante. */
+const STATUS_OPTIONS = TRIP_STATUSES.map((value) => ({ value, label: tripStatusLabel(value) }));
+
 interface TripFormProps {
   /** Voyage à modifier, prérempli. Sans lui, le formulaire crée un nouveau voyage. */
   trip?: Trip;
@@ -52,8 +43,6 @@ interface TripFormProps {
 export function TripForm({ trip }: TripFormProps) {
   const [message, setMessage] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
-  const descriptionId = useId();
-  const statusId = useId();
   const form = useForm<TripInput, unknown, TripValues>({
     resolver: zodResolver(tripSchema),
     defaultValues: trip ? tripToInput(trip) : EMPTY_TRIP_INPUT,
@@ -85,25 +74,12 @@ export function TripForm({ trip }: TripFormProps) {
       <FieldGroup>
         <TextField control={form.control} name="title" label="Titre" autoComplete="off" />
 
-        <Controller
+        <TextareaField
           control={form.control}
           name="description"
-          render={({ field, fieldState }) => (
-            <Field data-invalid={fieldState.invalid}>
-              <FieldLabel htmlFor={descriptionId}>Description</FieldLabel>
-              <Textarea
-                {...field}
-                id={descriptionId}
-                rows={4}
-                aria-invalid={fieldState.invalid}
-                aria-describedby={`${descriptionId}-aide`}
-              />
-              <FieldDescription id={`${descriptionId}-aide`}>
-                Facultatif. Le programme, les personnes du voyage, les idées.
-              </FieldDescription>
-              {fieldState.invalid ? <FieldError errors={[fieldState.error]} /> : null}
-            </Field>
-          )}
+          label="Description"
+          rows={4}
+          description="Facultatif. Le programme, les personnes du voyage, les idées."
         />
 
         <div className="grid gap-6 sm:grid-cols-2">
@@ -124,33 +100,11 @@ export function TripForm({ trip }: TripFormProps) {
         </div>
 
         <div className="grid gap-6 sm:grid-cols-2">
-          <Controller
+          <SelectField
             control={form.control}
             name="status"
-            render={({ field, fieldState }) => (
-              <Field data-invalid={fieldState.invalid}>
-                <FieldLabel htmlFor={statusId}>Statut</FieldLabel>
-                <Select name={field.name} value={field.value} onValueChange={field.onChange}>
-                  <SelectTrigger
-                    id={statusId}
-                    ref={field.ref}
-                    onBlur={field.onBlur}
-                    aria-invalid={fieldState.invalid}
-                    className="w-full"
-                  >
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {TRIP_STATUSES.map((value) => (
-                      <SelectItem key={value} value={value}>
-                        {tripStatusLabel(value)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {fieldState.invalid ? <FieldError errors={[fieldState.error]} /> : null}
-              </Field>
-            )}
+            label="Statut"
+            options={STATUS_OPTIONS}
           />
           <TextField
             control={form.control}
