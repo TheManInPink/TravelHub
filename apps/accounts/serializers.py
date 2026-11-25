@@ -2,7 +2,9 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
+from rest_framework.exceptions import AuthenticationFailed
 from rest_framework_simplejwt.exceptions import TokenError
+from rest_framework_simplejwt.serializers import TokenRefreshSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
 
 User = get_user_model()
@@ -58,6 +60,24 @@ class RegisterSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         password = validated_data.pop("password")
         return User.objects.create_user(password=password, **validated_data)
+
+
+class TokenRefreshRotateSerializer(TokenRefreshSerializer):
+    """Rafraîchissement de SimpleJWT, avec un 401 pour un compte supprimé.
+
+    SimpleJWT 5.5.1 cherche le compte du jeton avec objects.get() sans attraper
+    DoesNotExist. Le refresh d'un compte supprimé (par exemple après seed_demo --reset)
+    donnait donc une erreur 500, avec sa trace dans le journal. Nous répondons comme pour
+    un compte désactivé : 401 no_active_account.
+    """
+
+    def validate(self, attrs):
+        try:
+            return super().validate(attrs)
+        except User.DoesNotExist:
+            raise AuthenticationFailed(
+                self.error_messages["no_active_account"], "no_active_account"
+            ) from None
 
 
 class TokenPairSerializer(serializers.Serializer):

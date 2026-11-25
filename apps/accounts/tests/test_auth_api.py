@@ -114,6 +114,26 @@ class TestToken:
     def test_garbage_refresh_is_rejected(self, api_client):
         assert api_client.post(REFRESH_URL, {"refresh": "pas-un-jwt"}).status_code == 401
 
+    def test_refresh_of_a_deleted_account_is_rejected_without_error_500(self, api_client, owner):
+        # Cas de seed_demo --reset : le navigateur garde le refresh d'un compte supprimé.
+        tokens = obtain_tokens(api_client, "owner")
+        owner.delete()
+
+        response = api_client.post(REFRESH_URL, {"refresh": tokens["refresh"]})
+
+        assert response.status_code == 401
+        assert response.data["error"]["code"] == "no_active_account"
+
+    def test_refresh_of_a_deactivated_account_is_rejected(self, api_client, owner):
+        tokens = obtain_tokens(api_client, "owner")
+        owner.is_active = False
+        owner.save(update_fields=["is_active"])
+
+        response = api_client.post(REFRESH_URL, {"refresh": tokens["refresh"]})
+
+        assert response.status_code == 401
+        assert response.data["error"]["code"] == "no_active_account"
+
 
 @pytest.mark.django_db
 class TestLogout:
