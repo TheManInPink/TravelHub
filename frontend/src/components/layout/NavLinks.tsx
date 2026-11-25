@@ -29,7 +29,8 @@ export function NavLinks({ orientation, onNavigate }: NavLinksProps) {
               aria-current={isActive ? "page" : undefined}
               onNavigate={onNavigate}
               className={cn(
-                "flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50",
+                // whitespace-nowrap : à 768 px, « Tableau de bord » passait sur deux lignes.
+                "flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium whitespace-nowrap outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50",
                 isActive ? "bg-muted text-foreground" : "text-muted-foreground",
               )}
             >
