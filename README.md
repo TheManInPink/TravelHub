@@ -145,6 +145,8 @@ La tâche **Front-end** installe Node.js 26 avec le cache npm, puis lance `npm c
 
 La tâche **Parcours E2E (Playwright)** démarre un service PostgreSQL 18, migre la base et lance Django avec `runserver`. Elle installe ensuite Chromium pour Playwright, fait le build de production de Next.js branché sur ce Django, puis lance `npm run test:e2e`. En cas d'échec, le rapport Playwright (avec la trace) et le journal de Django sont publiés dans l'artefact `e2e`.
 
+Nous gardons GitHub Actions et n'utilisons pas Vercel CI. Ce service, en bêta depuis octobre 2026, lance seulement des tâches Turborepo, et il ne prend pas encore les dépôts publics. TravelHub est un dépôt public, sans Turborepo, avec un back-end Python qui a besoin de PostgreSQL. Render attend aussi les vérifications de GitHub Actions avant de déployer (`autoDeployTrigger: checksPass`).
+
 Dependabot (`.github/dependabot.yml`) propose chaque semaine les mises à jour de pip, de npm (dossier `frontend/`) et de GitHub Actions. Pour npm, il ne propose pas de nouvelle version majeure de `@types/node`, qui suit Node.js 26, ni de l'alias `typescript`, qui doit rester en version 6 pour `typescript-eslint`.
 
 ## Déploiement
@@ -260,7 +262,7 @@ Nous avons repassé la configuration le 25 novembre 2026. Les valeurs restent da
 
 | Élément | Valeur attendue | Comment le vérifier |
 | --- | --- | --- |
-| Variables Vercel | Les cinq variables de [Front-end sur Vercel](#front-end-sur-vercel), cochées pour **Production** et pour **Preview** | *Settings > Environment Variables*, filtre par environnement. Sans `DJANGO_API_URL` en Preview, la page d'une PR plante. Redéployer après un changement |
+| Variables Vercel | Les cinq variables de [Front-end sur Vercel](#front-end-sur-vercel), cochées pour **Production** et pour **Preview** | `vercel env ls` (voir ci-dessous), ou *Settings > Environment Variables*. Sans `DJANGO_API_URL` en Preview, la page d'une PR plante. Redéployer après un changement |
 | `CORS_ALLOWED_ORIGINS` (Render) | `https://travelhub-uqar.vercel.app`, l'URL de production exacte | Le script ci-dessous. L'origine de Vercel reçoit `access-control-allow-origin`, une autre origine non |
 | `ALLOWED_HOSTS` (Render) | `travelhub-uqar-api.onrender.com,localhost` | `/health/` répond 200. Un hôte absent donnerait 400 |
 | `DEBUG` (Render) | Absente | `config.settings.prod` force `DEBUG = False`. Une route inconnue répond 404 en JSON, sans la page de débogage |
@@ -271,7 +273,15 @@ Nous avons repassé la configuration le 25 novembre 2026. Les valeurs restent da
 .\scripts\check-production.ps1     # sans mot de passe, ne modifie rien
 ```
 
-Le script réveille d'abord l'API, puis il vérifie `/health/`, le 404 en JSON, HSTS, le CORS, le refus du mot de passe du README, la page `/login` de Vercel avec ses en-têtes et la redirection de `/dashboard` sans cookie. Il affiche une ligne `OK` ou `ÉCHEC` par vérification. Le 25 novembre, les huit vérifications sont passées, et Render s'est réveillé en 41 s.
+La CLI Vercel affiche les noms des variables et leurs environnements, sans les valeurs. Elle s'installe avec npm, et la connexion se fait une seule fois dans le navigateur. Nous n'utilisons ni `vercel link` ni `vercel env pull`, qui peuvent écrire dans `frontend/.env.local` (le même piège que `neon init`).
+
+```powershell
+npm install -g vercel
+vercel login                                          # ouvre le navigateur une seule fois
+vercel env ls production --project travelhub-uqar     # puis preview à la place de production
+```
+
+Le script `check-production.ps1` réveille d'abord l'API, puis il vérifie `/health/`, le 404 en JSON, HSTS, le CORS, le refus du mot de passe du README, la page `/login` de Vercel avec ses en-têtes et la redirection de `/dashboard` sans cookie. Il affiche une ligne `OK` ou `ÉCHEC` par vérification. Le 25 novembre, les huit vérifications sont passées, et Render s'est réveillé en 41 s.
 
 ### Avant la démo et avant la correction
 
@@ -279,24 +289,36 @@ Les services gratuits s'endorment. Render arrête l'API après 15 minutes sans r
 
 1. Lancer `.\scripts\check-production.ps1`, ou ouvrir https://travelhub-uqar-api.onrender.com/health/ et attendre la réponse `{"status": "ok", …}`.
 2. Ouvrir le projet `travelhub` dans le tableau de bord de Supabase. S'il est en pause, cliquer sur *Restore project* et attendre quelques minutes.
-3. Se connecter une fois avec `alice` sur https://travelhub-uqar.vercel.app, puis ouvrir « Automne à Paris » et une de ses destinations. La couverture, la météo et la fiche pays doivent s'afficher.
+3. La veille seulement, lancer le [parcours complet sur les URL publiques](#parcours-complet-sur-les-url-publiques), puis `.\scripts\reset-demo.ps1` (voir [Données de démonstration en production](#données-de-démonstration-en-production)).
+4. Se connecter une fois avec `alice` sur https://travelhub-uqar.vercel.app, puis ouvrir « Automne à Paris » et une de ses destinations. La couverture, la météo et la fiche pays doivent s'afficher.
 
 Si plus de 15 minutes passent avant la démo, Render se rendort, et on refait l'étape 1.
 
-### Données de démonstration en production
+### Parcours complet sur les URL publiques
 
-Les dates de `seed_demo` dépendent du jour où on le lance. Nous le relançons donc la veille de la démo, pour avoir un voyage en cours avec sa météo. `--reset` supprime aussi les voyages ajoutés pendant les répétitions. Nous faisons d'abord une sauvegarde.
+Le test Playwright `frontend/e2e/production.spec.ts` parcourt la version en ligne dans un vrai navigateur. Il réveille d'abord l'API, puis il crée son propre compte `e2e-prod-…`, se déconnecte et se reconnecte. Il crée ensuite un voyage (REST) avec une image de couverture (Supabase), ajoute une destination et une activité (GraphQL), vérifie la fiche pays et la météo, supprime le voyage et se déconnecte. Il vérifie aussi que le navigateur n'appelle jamais Render ni Supabase directement. Il n'a besoin d'aucun mot de passe de démo.
 
 ```powershell
-# Fenêtre PowerShell réservée à la production, fermée à la fin
-$env:DATABASE_URL = neon connection-string production --database-name travelhub --role-name travelhub_owner --ssl require
-.\scripts\backup.ps1                                   # backups\travelhub-neon_AAAAMMJJ-HHMMSS.dump
-$env:DEMO_PASSWORD = Read-Host "Mot de passe des comptes de démo en production"
-.\.venv\Scripts\python.exe manage.py seed_demo --reset
-Remove-Item Env:DATABASE_URL, Env:DEMO_PASSWORD
+cd frontend
+$env:E2E_BASE_URL = "https://travelhub-uqar.vercel.app"
+$env:PLAYWRIGHT_CHANNEL = "msedge"
+npx playwright test               # environ 30 s quand l'API est réveillée
+Remove-Item Env:E2E_BASE_URL, Env:PLAYWRIGHT_CHANNEL
 ```
 
-Ensuite, dans chaque navigateur utilisé pendant les répétitions, nous nous déconnectons, puis nous supprimons les cookies de `travelhub-uqar.vercel.app` (`th_access` et `th_refresh`). `--reset` recrée les comptes avec de nouveaux identifiants. Avec un ancien `th_refresh`, le rafraîchissement du jeton fait répondre 500 à Django, car SimpleJWT 5.5.1 cherche le compte supprimé avec `objects.get()` sans attraper `DoesNotExist`. Le front-end renvoie alors vers `/login?expired=1`, mais l'erreur et sa trace arrivent dans le journal de Render.
+Avec `E2E_BASE_URL`, Playwright lance seulement ce test et ne démarre pas de serveur. Sans elle, `npm run test:e2e` et la CI lancent toujours `parcours.spec.ts` sur le build local. Le 25 novembre 2026, le parcours a réussi en 26 s. Il laisse un compte `e2e-prod-…`, que `reset-demo.ps1` supprime, et une petite image orpheline sous `trips/<id>/` dans le bucket. Nous avons supprimé les nôtres à la main.
+
+Le premier essai a échoué sur une API endormie. L'inscription a dépassé le délai de 15 s, et l'interface a affiché « Le serveur se réveille, réessayez dans un instant ». C'est le comportement prévu, et c'est pourquoi le test réveille maintenant l'API avant de commencer. Le deuxième essai a montré une course entre deux pages. Après le clic sur le fil d'Ariane, la page de la destination restait affichée un instant, avec son propre bouton « Supprimer ». Le test attend maintenant la page du voyage avant de cliquer.
+
+### Données de démonstration en production
+
+Les dates de `seed_demo` dépendent du jour où on le lance. Nous le relançons donc la veille de la démo, pour avoir un voyage en cours avec sa météo. `--reset` supprime aussi les voyages ajoutés pendant les répétitions. Le script `scripts/reset-demo.ps1` fait tout dans l'ordre. Il demande d'abord de taper `RESET`, puis deux fois le mot de passe des comptes de démo, sans l'afficher. Il refuse le mot de passe du README. Il lit ensuite l'URL de Neon avec la CLI Neon et fait une sauvegarde. Si la sauvegarde échoue, il s'arrête. Sinon, il lance `seed_demo --reset`, puis il supprime les comptes `e2e-prod-…` du parcours de production.
+
+```powershell
+.\scripts\reset-demo.ps1      # dans une fenêtre PowerShell ordinaire, car il pose des questions
+```
+
+Ensuite, dans chaque navigateur utilisé pendant les répétitions, nous nous déconnectons, puis nous supprimons les cookies de `travelhub-uqar.vercel.app` (`th_access` et `th_refresh`). `--reset` recrée les comptes avec de nouveaux identifiants. Avec un ancien `th_refresh`, Django répondait 500 au rafraîchissement du jeton, car SimpleJWT 5.5.1 cherche le compte supprimé avec `objects.get()` sans attraper `DoesNotExist`. Nous l'avons corrigé dans `TokenRefreshRotateSerializer` (`apps/accounts/serializers.py`). Django répond maintenant 401 `no_active_account`, comme pour un compte désactivé, et le front-end renvoie vers `/login?expired=1`. Supprimer les cookies reste utile, pour commencer la démo sur une page de connexion propre.
 
 Enfin, nous nous connectons avec `alice` et nous renvoyons l'image de couverture de démonstration sur « Automne à Paris » (bouton sur la couverture). Les anciennes images restent dans le bucket, sous `trips/<ancien id>/`. On peut les supprimer dans *Storage* sur Supabase.
 
@@ -320,9 +342,7 @@ Nous n'avons pas de sonde permanente sur `/health/`. Cette route interroge la ba
 Sur le plan Free, Neon garde 6 heures d'historique au plus. Sa restauration instantanée ne remonte donc pas plus loin, et ce n'est pas une vraie sauvegarde. La vraie sauvegarde est une archive `pg_dump` sur notre poste. Nous en faisons une avant la démo, avant la remise et avant chaque `seed_demo --reset`.
 
 ```powershell
-$env:DATABASE_URL = neon connection-string production --database-name travelhub --role-name travelhub_owner --ssl require
-.\scripts\backup.ps1               # backups\travelhub-neon_AAAAMMJJ-HHMMSS.dump
-Remove-Item Env:DATABASE_URL
+.\scripts\backup.ps1 -Neon         # backups\travelhub-neon_AAAAMMJJ-HHMMSS.dump, URL lue avec la CLI Neon
 # Vérification : l'archive relue dans une base locale neuve
 .\scripts\restore.ps1 -File .\backups\travelhub-neon_20261125-001810.dump -Database travelhub_neon
 ```

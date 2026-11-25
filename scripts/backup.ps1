@@ -30,13 +30,14 @@
     .\scripts\backup.ps1 -Docker -Keep 14
 
 .EXAMPLE
-    # Base de production sur Neon, dans une fenêtre PowerShell réservée à cet usage
-    $env:DATABASE_URL = neon connection-string production --database-name travelhub --role-name travelhub_owner --ssl require
-    .\scripts\backup.ps1
-    Remove-Item Env:DATABASE_URL
+    # Base de production sur Neon : l'URL vient de la CLI Neon, sans être affichée
+    .\scripts\backup.ps1 -Neon
 #>
 param(
     [switch]$Docker,
+    # Sauvegarde la base de production sur Neon. L'URL vient de neon connection-string et
+    # remplace DATABASE_URL pendant le script seulement.
+    [switch]$Neon,
     [string]$OutputDir = (Join-Path $PSScriptRoot "..\backups"),
     [ValidateRange(1, 1000)]
     [int]$Keep = 7,
@@ -114,9 +115,18 @@ New-Item -ItemType Directory -Force $OutputDir | Out-Null
 $OutputDir = (Resolve-Path $OutputDir).Path
 $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
 
+if ($Neon -and $Docker) { throw "Choisissez -Neon ou -Docker, pas les deux." }
+
 Push-Location $projectRoot
 $previousEnvironment = @{}
+$previousUrl = @{}
 try {
+    if ($Neon) {
+        # La CLI Neon trouve le projet dans le fichier .neon de la racine du dépôt.
+        $url = (neon connection-string production --database-name travelhub --role-name travelhub_owner --ssl require | Out-String).Trim()
+        if ($LASTEXITCODE -ne 0 -or -not $url) { throw "La CLI Neon n'a pas donné l'URL de la base (neon login ?)." }
+        $previousUrl = Set-Environment @{ DATABASE_URL = $url }
+    }
     if ($Docker) {
         $database = (Invoke-Native "docker" @("compose", "exec", "-T", "db", "printenv", "POSTGRES_DB") | Out-String).Trim()
         $prefix = "$database-docker"
@@ -154,6 +164,7 @@ catch {
 }
 finally {
     Restore-Environment $previousEnvironment
+    Restore-Environment $previousUrl
     Pop-Location
 }
 
