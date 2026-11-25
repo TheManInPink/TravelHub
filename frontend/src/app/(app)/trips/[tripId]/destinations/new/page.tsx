@@ -47,7 +47,12 @@ export default async function NewDestinationPage({
         <Breadcrumbs
           items={[{ label: "Mes voyages", href: "/trips" }, { label: "Nouvelle destination" }]}
         />
-        <ErrorState titleAs="h1" title="Le voyage n'a pas pu se charger" message={data.message} />
+        <ErrorState
+          titleAs="h1"
+          title="Le voyage n'a pas pu se charger"
+          message={data.message}
+          reference={data.reference}
+        />
       </>
     );
   }

@@ -1,7 +1,8 @@
 // @vitest-environment node
 import { HttpResponse, http } from "msw";
-import { describe, expect, it } from "vitest";
-import { gqlFetch } from "@/lib/api/graphql";
+import { describe, expect, it, vi } from "vitest";
+import { gqlFetch, operationName } from "@/lib/api/graphql";
+import { logDjangoFailure } from "@/lib/api/log";
 import { ApiError } from "@/lib/errors";
 import { rejection } from "../../helpers";
 import { cookieJar } from "../../mocks/cookies";
@@ -136,5 +137,34 @@ describe("gqlFetch", () => {
     );
     const error = await rejection(gqlFetch(QUERY, { id: "3" }));
     expect(error).toMatchObject({ status: 502, code: "internal_error" });
+  });
+});
+
+describe("journal des pannes GraphQL", () => {
+  it("trouve le nom de la query ou de la mutation, même après des fragments", () => {
+    expect(operationName(QUERY)).toBe("DestinationCity");
+    const withFragment = "fragment F on Trip { id } mutation DeleteTrip($id: ID!) { x }";
+    expect(operationName(withFragment)).toBe("DeleteTrip");
+    expect(operationName("{ destination(id: 3) { id } }")).toBeUndefined();
+  });
+
+  it("écrit une ligne avec le nom de l'opération pour une erreur interne d'un resolver", async () => {
+    vi.mocked(logDjangoFailure).mockClear();
+    server.use(
+      djangoGraphql.query("DestinationCity", () =>
+        HttpResponse.json({
+          data: { destination: null },
+          errors: [{ message: "Erreur.", extensions: { code: "internal_error", details: {} } }],
+        }),
+      ),
+    );
+
+    const error = await rejection(gqlFetch(QUERY, { id: "3" }));
+
+    expect(logDjangoFailure).toHaveBeenCalledExactlyOnceWith(error, {
+      method: "POST",
+      path: "/graphql/",
+      operation: "DestinationCity",
+    });
   });
 });

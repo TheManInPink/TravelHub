@@ -4,12 +4,17 @@ import "server-only";
 
 import { notFound } from "next/navigation";
 import { getTrip } from "@/lib/api/trips";
-import { isApiError, toUserMessage } from "@/lib/errors";
+import { errorReference, isApiError, toUserMessage } from "@/lib/errors";
 import type { TripDetail } from "@/types/api";
 
-/** Résultat du chargement : le voyage, un accès refusé, ou une erreur à afficher. */
+/**
+ * Résultat du chargement : le voyage, un accès refusé, ou une erreur à afficher avec sa
+ * référence (X-Request-ID) quand c'est une panne du serveur.
+ */
 export type TripPageData =
-  { kind: "trip"; trip: TripDetail } | { kind: "forbidden" } | { kind: "error"; message: string };
+  | { kind: "trip"; trip: TripDetail }
+  | { kind: "forbidden" }
+  | { kind: "error"; message: string; reference?: string };
 
 /**
  * GET /api/trips/{id}/ pour une page. Les erreurs attendues sont interceptées ici, car
@@ -34,6 +39,6 @@ export async function loadTripPage(tripId: string): Promise<TripPageData> {
     if (error.status === 403) {
       return { kind: "forbidden" };
     }
-    return { kind: "error", message: toUserMessage(error) };
+    return { kind: "error", message: toUserMessage(error), reference: errorReference(error) };
   }
 }

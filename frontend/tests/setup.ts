@@ -21,6 +21,11 @@ vi.mock("next/headers", async () => {
   return { cookies: fakeCookies, headers: fakeHeaders };
 });
 
+// Le journal du serveur (lib/api/log.ts) écrirait une ligne pour chaque panne simulée de
+// Django. Ici, c'est une fonction espion : tests/lib/api/django.test.ts vérifie ses appels,
+// et tests/lib/api/log.test.ts teste le vrai module avec vi.importActual.
+vi.mock("@/lib/api/log", () => ({ logDjangoFailure: vi.fn() }));
+
 // Une requête sans gestionnaire MSW fait échouer le test, au lieu de partir sur le réseau.
 // MSW 3 a renommé l'option onUnhandledRequest en onUnhandledFrame.
 beforeAll(() => {

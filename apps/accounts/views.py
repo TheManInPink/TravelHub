@@ -12,6 +12,7 @@ from .serializers import (
     RegisterResponseSerializer,
     RegisterSerializer,
     TokenPairSerializer,
+    TokenRefreshRotateSerializer,
     UserSerializer,
 )
 
@@ -125,7 +126,8 @@ class TokenObtainView(TokenObtainPairView):
     ],
 )
 class TokenRefreshRotateView(TokenRefreshView):
-    pass
+    # Compte supprimé : 401 au lieu de la 500 de SimpleJWT 5.5.1 (voir le sérialiseur).
+    serializer_class = TokenRefreshRotateSerializer
 
 
 class LogoutView(generics.GenericAPIView):

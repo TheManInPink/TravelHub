@@ -1,0 +1,22 @@
+# Contexte de frontend/Dockerfile. Les secrets et les fichiers produits sur notre poste
+# n'entrent jamais dans l'image.
+.env*
+node_modules/
+.next/
+.vercel/
+
+# Tests et rapports : l'image sert seulement à lancer l'application.
+tests/
+e2e/
+coverage/
+test-results/
+playwright-report/
+blob-report/
+schema.graphql
+
+# Fichiers propres à notre poste ou à Docker
+*.tsbuildinfo
+next-env.d.ts
+Dockerfile
+.dockerignore
+*.md

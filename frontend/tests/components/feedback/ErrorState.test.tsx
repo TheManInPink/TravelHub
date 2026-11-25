@@ -24,6 +24,21 @@ describe("ErrorState", () => {
     expect(screen.getByRole("heading", { name: "Une erreur est survenue" })).toBeInTheDocument();
   });
 
+  it("affiche la référence de l'erreur à part, hors de l'alerte", () => {
+    render(<ErrorState message="Le serveur a rencontré une erreur." reference="req-503" />);
+
+    expect(screen.getByText("req-503")).toBeInTheDocument();
+    expect(screen.getByText(/Référence de l'erreur/)).toHaveTextContent(
+      "Référence de l'erreur : req-503",
+    );
+    expect(screen.getByRole("alert")).not.toHaveTextContent("req-503");
+  });
+
+  it("n'affiche pas de référence sans identifiant", () => {
+    render(<ErrorState message="Erreur" />);
+    expect(screen.queryByText(/Référence de l'erreur/)).not.toBeInTheDocument();
+  });
+
   it("appelle onRetry au clic sur Réessayer", async () => {
     const user = userEvent.setup();
     const onRetry = vi.fn();

@@ -13,10 +13,23 @@
     (docker compose exec). Si c'est la base du service web, on arrête ce service pendant la
     restauration et on le redémarre après. Il réapplique alors les migrations manquantes.
 
+    Les paramètres sslmode et channel_binding de l'URL sont respectés (PGSSLMODE et
+    PGCHANNELBINDING pendant la commande), comme dans backup.ps1. Pour une base distante, par
+    exemple Neon, -File est obligatoire : le script ne prend jamais « la plus récente » au hasard
+    pour la production.
+
+    pg_restore ne parle pas directement à la base. Il écrit d'abord le SQL de l'archive dans un
+    fichier temporaire, puis psql rejoue ce SQL. Entre les deux, le script retire les lignes
+    « ALTER TABLE ONLY … ALTER COLUMN … SET (pg_attver=…) » que Neon ajoute pour chaque colonne.
+    pg_attver est une option interne de Neon : un PostgreSQL ordinaire la refuse avec
+    « unrecognized parameter "pg_attver" », et la restauration échouait dès la première table.
+
     Une base qui a déjà des tables n'est écrasée qu'avec -Force (pg_restore --clean).
-    Tout se fait dans une transaction, donc en cas d'erreur la base ne change pas.
+    Tout se fait dans une transaction (psql --single-transaction, arrêt à la première erreur),
+    donc en cas d'erreur la base ne change pas.
     Les propriétaires et les droits de l'archive sont ignorés (--no-owner --no-privileges).
-    On peut donc restaurer une sauvegarde locale dans Docker, et l'inverse aussi.
+    On peut donc restaurer une sauvegarde locale dans Docker, une sauvegarde de Neon en local,
+    et l'inverse aussi.
 
 .EXAMPLE
     .\scripts\restore.ps1 -Database travelhub_restore
@@ -26,6 +39,10 @@
 
 .EXAMPLE
     .\scripts\restore.ps1 -Docker -Force
+
+.EXAMPLE
+    # Sauvegarde de Neon relue dans une base locale neuve, pour vérifier qu'elle est complète
+    .\scripts\restore.ps1 -File .\backups\travelhub-neon_20261125-101500.dump -Database travelhub_neon
 #>
 param(
     [string]$File,
@@ -56,7 +73,14 @@ function Invoke-InDb([string[]]$Arguments) {
     Invoke-Native "docker" (@("compose", "exec", "-T", "db") + $Arguments)
 }
 
+# Paramètres de l'URL que nous savons passer aux outils de PostgreSQL, avec leur variable PG*.
+$urlParameters = @{
+    sslmode         = "PGSSLMODE"
+    channel_binding = "PGCHANNELBINDING"
+}
+
 # Connexion lue dans DATABASE_URL. Comme dans Django, la variable d'environnement passe avant .env.
+# Environment contient les variables PG* à définir pendant la commande, mot de passe compris.
 function Get-DatabaseUrl {
     $url = $env:DATABASE_URL
     if (-not $url) {
@@ -68,12 +92,46 @@ function Get-DatabaseUrl {
     }
     $uri = [Uri]$url.Trim()
     $user, $password = $uri.UserInfo.Split(':', 2)
+    $environment = @{ PGPASSWORD = if ($password) { [Uri]::UnescapeDataString($password) } else { "" } }
+    foreach ($pair in $uri.Query.TrimStart('?').Split('&', [StringSplitOptions]::RemoveEmptyEntries)) {
+        $name, $value = $pair.Split('=', 2)
+        $variable = $urlParameters[$name]
+        if ($variable -and $value) { $environment[$variable] = [Uri]::UnescapeDataString($value) }
+        else { Write-Warning "Paramètre « $name » de DATABASE_URL ignoré par le script." }
+    }
     [pscustomobject]@{
-        Host     = $uri.Host
-        Port     = if ($uri.Port -gt 0) { $uri.Port } else { 5432 }
-        User     = [Uri]::UnescapeDataString($user)
-        Password = if ($password) { [Uri]::UnescapeDataString($password) } else { "" }
-        Database = $uri.AbsolutePath.TrimStart('/')
+        Host        = $uri.Host
+        Port        = if ($uri.Port -gt 0) { $uri.Port } else { 5432 }
+        User        = [Uri]::UnescapeDataString($user)
+        Database    = $uri.AbsolutePath.TrimStart('/')
+        Environment = $environment
+    }
+}
+
+# Définit les variables, puis renvoie leurs anciennes valeurs pour Restore-Environment.
+function Set-Environment([hashtable]$Values) {
+    $previous = @{}
+    foreach ($name in $Values.Keys) {
+        $previous[$name] = [Environment]::GetEnvironmentVariable($name)
+        [Environment]::SetEnvironmentVariable($name, $Values[$name])
+    }
+    $previous
+}
+
+# Une valeur $null supprime la variable, si elle n'existait pas avant le script.
+function Restore-Environment([hashtable]$Previous) {
+    foreach ($name in $Previous.Keys) { [Environment]::SetEnvironmentVariable($name, $Previous[$name]) }
+}
+
+# La base est sur ce poste (PostgreSQL local), et pas chez un hébergeur comme Neon.
+function Test-LocalHost([string]$HostName) {
+    @("localhost", "127.0.0.1", "::1", "[::1]") -contains $HostName
+}
+
+if (-not $Docker -and -not $File) {
+    $target = Get-DatabaseUrl
+    if (-not (Test-LocalHost $target.Host)) {
+        throw "La base visée est sur $($target.Host). Pour une base distante, donnez la sauvegarde avec -File."
     }
 }
 
@@ -86,12 +144,42 @@ if (-not $File) {
 $File = (Resolve-Path $File).Path
 Write-Host "Sauvegarde : $File"
 
-# Options communes. --clean seulement s'il faut écraser une base qui n'est pas vide.
-$restoreOptions = @("--no-owner", "--no-privileges", "--exit-on-error", "--single-transaction")
+# Options de pg_restore pour écrire le SQL. --clean seulement s'il faut écraser une base qui
+# n'est pas vide : le SQL supprime alors d'abord les objets existants.
+$sqlOptions = @("--no-owner", "--no-privileges")
+# psql ignore ~/.psqlrc, n'affiche pas chaque commande, s'arrête à la première erreur et met
+# tout le fichier dans une seule transaction.
+$psqlOptions = @("-X", "-q", "-v", "ON_ERROR_STOP=1", "--single-transaction")
+# Sans les NOTICE des DROP … IF EXISTS de --clean.
+$quietOptions = "-c client_min_messages=warning"
+# Ligne écrite par pg_dump pour l'option interne pg_attver de chaque colonne sur Neon.
+$neonOptionPattern = '^ALTER TABLE ONLY .+ ALTER COLUMN .+ SET \(pg_attver=[0-9]+\);$'
 $countTables = "SELECT count(*) FROM pg_tables WHERE schemaname = 'public'"
 
+# Copie le SQL de Source dans Target sans les lignes pg_attver, et renvoie leur nombre. Le
+# fichier est lu ligne par ligne, en UTF-8 sans BOM, car un BOM ferait échouer psql dès la
+# première ligne. Les fins de ligne restent celles d'Unix.
+function Remove-NeonColumnOption([string]$Source, [string]$Target) {
+    $utf8 = New-Object System.Text.UTF8Encoding $false
+    $reader = New-Object System.IO.StreamReader($Source, $utf8)
+    $writer = New-Object System.IO.StreamWriter($Target, $false, $utf8)
+    $writer.NewLine = "`n"
+    $removed = 0
+    try {
+        while ($null -ne ($line = $reader.ReadLine())) {
+            if ($line -match $neonOptionPattern) { $removed++ }
+            else { $writer.WriteLine($line) }
+        }
+    }
+    finally {
+        $reader.Dispose()
+        $writer.Dispose()
+    }
+    $removed
+}
+
 Push-Location $projectRoot
-$previousPassword = $env:PGPASSWORD
+$previousEnvironment = @{}
 $restartWeb = $false
 try {
     if ($Docker) {
@@ -112,7 +200,7 @@ try {
         if ($tables -gt 0 -and -not $Force) {
             throw "La base '$Database' contient $tables tables. Relancez avec -Force pour l'écraser, ou choisissez une base vide avec -Database."
         }
-        if ($tables -gt 0) { $restoreOptions += @("--clean", "--if-exists") }
+        if ($tables -gt 0) { $sqlOptions += @("--clean", "--if-exists") }
 
         # Le service web garde des connexions ouvertes sur sa base, donc on l'arrête pendant la restauration.
         $running = Invoke-Native "docker" @("compose", "ps", "--status", "running", "--services")
@@ -122,14 +210,17 @@ try {
         }
 
         $inContainer = "/tmp/travelhub-restore.dump"
+        $sqlInContainer = "/tmp/travelhub-restore.sql"
         Invoke-Native "docker" @("compose", "cp", $File, "db:$inContainer")
         try {
-            Invoke-InDb (@("pg_restore", "-U", $pgUser, "-d", $Database) + $restoreOptions + @($inContainer))
+            Invoke-InDb (@("pg_restore", "-f", $sqlInContainer) + $sqlOptions + @($inContainer))
+            Invoke-InDb @("sed", "-i", "-E", "/$neonOptionPattern/d", $sqlInContainer)
+            Invoke-InDb (@("env", "PGOPTIONS=$quietOptions", "psql", "-U", $pgUser, "-d", $Database) + $psqlOptions + @("-f", $sqlInContainer)) | Out-Null
             $migrations = (Invoke-InDb ($psql + @("-d", $Database, "-c", "SELECT count(*) FROM django_migrations")) | Out-String).Trim()
         }
         finally {
-            try { Invoke-InDb @("rm", "-f", $inContainer) }
-            catch { Write-Warning "Fichier temporaire $inContainer non supprimé du conteneur db." }
+            try { Invoke-InDb @("rm", "-f", $inContainer, $sqlInContainer) }
+            catch { Write-Warning "Fichiers temporaires $inContainer et $sqlInContainer non supprimés du conteneur db." }
         }
     }
     else {
@@ -138,7 +229,10 @@ try {
         if (-not (Test-Path $pgRestore)) { throw "pg_restore introuvable dans $PgBin (paramètre -PgBin)." }
         $db = Get-DatabaseUrl
         if (-not $Database) { $Database = $db.Database }
-        $env:PGPASSWORD = $db.Password
+        $sslMode = if ($db.Environment.PGSSLMODE) { $db.Environment.PGSSLMODE } else { "par défaut" }
+        Write-Host "Base visée : '$Database' sur $($db.Host) (sslmode : $sslMode)"
+        $db.Environment["PGOPTIONS"] = $quietOptions
+        $previousEnvironment = Set-Environment $db.Environment
         $connection = @("-h", $db.Host, "-p", $db.Port, "-U", $db.User)
 
         $exists = (Invoke-Native $psql ($connection + @("-d", "postgres", "-tAc", "SELECT 1 FROM pg_database WHERE datname = '$Database'")) | Out-String).Trim()
@@ -153,14 +247,27 @@ try {
         if ($tables -gt 0 -and -not $Force) {
             throw "La base '$Database' contient $tables tables. Relancez avec -Force pour l'écraser, ou choisissez une base vide avec -Database."
         }
-        if ($tables -gt 0) { $restoreOptions += @("--clean", "--if-exists") }
+        if ($tables -gt 0) { $sqlOptions += @("--clean", "--if-exists") }
 
-        Invoke-Native $pgRestore ($connection + @("-d", $Database) + $restoreOptions + @($File))
+        # Le SQL contient les données de la base (comptes compris) : il est supprimé à la fin.
+        $temp = [IO.Path]::GetTempPath()
+        $rawSql = Join-Path $temp "travelhub-restore-$([guid]::NewGuid()).sql"
+        $sqlFile = Join-Path $temp "travelhub-restore-$([guid]::NewGuid()).sql"
+        try {
+            Invoke-Native $pgRestore (@("-f", $rawSql) + $sqlOptions + @($File))
+            $removed = Remove-NeonColumnOption $rawSql $sqlFile
+            if ($removed -gt 0) { Write-Host "Options pg_attver de Neon retirées : $removed." }
+            # Out-Null cache les résultats des SELECT setval() du SQL. Les erreurs restent affichées.
+            Invoke-Native $psql ($connection + @("-d", $Database) + $psqlOptions + @("-f", $sqlFile)) | Out-Null
+        }
+        finally {
+            Remove-Item $rawSql, $sqlFile -Force -ErrorAction SilentlyContinue
+        }
         $migrations = (Invoke-Native $psql ($connection + @("-d", $Database, "-tAc", "SELECT count(*) FROM django_migrations")) | Out-String).Trim()
     }
 }
 finally {
-    $env:PGPASSWORD = $previousPassword
+    Restore-Environment $previousEnvironment
     if ($restartWeb) {
         Invoke-Native "docker" @("compose", "start", "web")
         Write-Host "Service web redémarré."

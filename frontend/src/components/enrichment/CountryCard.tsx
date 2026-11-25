@@ -4,7 +4,7 @@ import { Notice } from "@/components/feedback/Notice";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { getDestinationCountry } from "@/lib/api/itinerary";
 import { continentLabel, countryLabel, currencyLabel, languageLabels } from "@/lib/country";
-import { isApiError, toUserMessage } from "@/lib/errors";
+import { isApiError, toUserMessageWithReference } from "@/lib/errors";
 import type { GqlCountryInfo } from "@/types/graphql";
 
 // Fiche pays d'une destination (Server Component asynchrone). La page l'affiche dans
@@ -90,7 +90,7 @@ export async function CountryCard({ destinationId }: { destinationId: string }) 
     if (!isApiError(error)) {
       throw error;
     }
-    return <CountryWarning message={toUserMessage(error)} />;
+    return <CountryWarning message={toUserMessageWithReference(error)} />;
   }
   if (!country) {
     return <CountryWarning message="Countries GraphQL n'a pas de fiche pour ce pays." />;

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { isApiError, toUserMessage } from "@/lib/errors";
+import { isApiError, toUserMessageWithReference } from "@/lib/errors";
 import type { ActionFailure } from "@/types/actions";
 
 // Résultats d'échec communs à toutes les Server Actions de formulaire (auth, voyages,
@@ -52,6 +52,7 @@ export function apiFailure<TField extends string>(
     }
   }
   // Le message vient du code (no_active_account, throttled, timeout…), jamais du texte
-  // anglais de SimpleJWT.
-  return { ok: false, message: toUserMessage(error), fieldErrors };
+  // anglais de SimpleJWT. Pour une panne du serveur, il finit par « Référence : … », le
+  // X-Request-ID à chercher dans les journaux de Render et de Vercel.
+  return { ok: false, message: toUserMessageWithReference(error), fieldErrors };
 }

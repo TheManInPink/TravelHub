@@ -5,12 +5,16 @@ import "server-only";
 import { notFound } from "next/navigation";
 import { getDestinationPage } from "@/lib/api/itinerary";
 import { parseId } from "@/lib/api/mappers";
-import { isApiError, toUserMessage } from "@/lib/errors";
+import { errorReference, isApiError, toUserMessage } from "@/lib/errors";
 import type { GqlDestinationPage } from "@/types/graphql";
 
-/** Résultat du chargement : la destination, ou une erreur à afficher. */
+/**
+ * Résultat du chargement : la destination, ou une erreur à afficher avec sa référence
+ * (X-Request-ID) quand c'est une panne du serveur.
+ */
 export type DestinationPageData =
-  { kind: "destination"; destination: GqlDestinationPage } | { kind: "error"; message: string };
+  | { kind: "destination"; destination: GqlDestinationPage }
+  | { kind: "error"; message: string; reference?: string };
 
 /**
  * Query GraphQL DestinationPage pour une page. Les erreurs attendues sont interceptées
@@ -45,7 +49,7 @@ export async function loadDestinationPage(
     if (error.code === "not_found") {
       notFound();
     }
-    return { kind: "error", message: toUserMessage(error) };
+    return { kind: "error", message: toUserMessage(error), reference: errorReference(error) };
   }
 
   if (destination.trip.id !== tripId) {

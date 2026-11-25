@@ -135,6 +135,40 @@ export function toUserMessage(error: unknown): string {
 }
 
 /**
+ * X-Request-ID à montrer avec le message, quand l'erreur vient du serveur ou du réseau :
+ * pas de réponse (délai dépassé, panne), erreur 5xx, réponse illisible ou service externe
+ * en panne. Django écrit cet identifiant dans chaque ligne de journal de la requête
+ * (request_id), et le serveur Next.js aussi (lib/api/log.ts). Pour une erreur de
+ * l'utilisateur (400, 401, 403, 404, 429), la référence ne servirait à rien.
+ */
+export function errorReference(error: unknown): string | undefined {
+  if (!isApiError(error) || !error.requestId) {
+    return undefined;
+  }
+  const { status, code } = error;
+  const serverSide =
+    status === 0 ||
+    status >= 500 ||
+    code === "internal_error" ||
+    code === "integration_error" ||
+    code.startsWith("external_service_") ||
+    code === UNEXPECTED_RESPONSE ||
+    code === INVALID_QUERY;
+  return serverSide ? error.requestId : undefined;
+}
+
+/**
+ * toUserMessage() suivi de la référence de l'erreur, s'il y en a une. Pour les messages
+ * d'une seule ligne (formulaires, toasts, encadrés), qui n'ont pas de place à part pour la
+ * référence comme ErrorState.
+ */
+export function toUserMessageWithReference(error: unknown): string {
+  const message = toUserMessage(error);
+  const reference = errorReference(error);
+  return reference ? `${message} Référence : ${reference}` : message;
+}
+
+/**
  * Identifiant (digest) que Next.js ajoute à une erreur levée au serveur. En production,
  * c'est la seule information qui arrive dans error.tsx : elle permet de retrouver
  * l'erreur dans les journaux de Vercel.

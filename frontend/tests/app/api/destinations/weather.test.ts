@@ -99,13 +99,17 @@ describe("GET /api/destinations/[destinationId]/weather", () => {
     djangoWeatherReplies(
       503,
       errorBody("external_service_unavailable", "Open-Meteo est indisponible (erreur 500)."),
+      { "X-Request-ID": "req-meteo" },
     );
 
     const response = await getWeather("3");
 
     expect(response.status).toBe(503);
     const body: unknown = await response.json();
-    expect(body).toMatchObject({ error: { code: "external_service_unavailable" } });
+    // La référence est le X-Request-ID de Django, à chercher dans ses journaux.
+    expect(body).toMatchObject({
+      error: { code: "external_service_unavailable", reference: "req-meteo" },
+    });
     expect(JSON.stringify(body)).toContain("Le service externe (météo ou pays) ne répond pas");
   });
 

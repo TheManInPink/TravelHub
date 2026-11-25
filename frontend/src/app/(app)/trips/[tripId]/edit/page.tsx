@@ -44,7 +44,12 @@ export default async function EditTripPage({ params }: PageProps<"/trips/[tripId
     return (
       <>
         <Breadcrumbs items={[{ label: "Mes voyages", href: "/trips" }, { label: "Modifier" }]} />
-        <ErrorState titleAs="h1" title="Le voyage n'a pas pu se charger" message={data.message} />
+        <ErrorState
+          titleAs="h1"
+          title="Le voyage n'a pas pu se charger"
+          message={data.message}
+          reference={data.reference}
+        />
       </>
     );
   }

@@ -1,9 +1,10 @@
 // @vitest-environment node
 // Code serveur : nous le testons dans Node, sans jsdom. Le fetch de Node refuse le
 // AbortSignal de jsdom.
-import { HttpResponse, http } from "msw";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { HttpResponse, delay, http } from "msw";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { djangoFetch } from "@/lib/api/django";
+import { logDjangoFailure } from "@/lib/api/log";
 import { ApiError, toUserMessage } from "@/lib/errors";
 import type { User } from "@/types/api";
 import { rejection } from "../../helpers";
@@ -222,5 +223,79 @@ describe("DJANGO_API_URL", () => {
     await expect(djangoFetch("/api/auth/me/")).rejects.toThrow(
       `DJANGO_API_URL doit être une adresse complète, par exemple https://travelhub-uqar-api.onrender.com (valeur reçue : ${value}).`,
     );
+  });
+});
+
+describe("journal des pannes de Django", () => {
+  // logDjangoFailure est une fonction espion (tests/setup.ts). vi.restoreAllMocks() ne
+  // vide pas la liste de ses appels : nous la vidons avant chaque test.
+  beforeEach(() => {
+    vi.mocked(logDjangoFailure).mockClear();
+  });
+
+  it("écrit une ligne pour une erreur 503, avec le X-Request-ID renvoyé par Django", async () => {
+    server.use(
+      http.post(`${DJANGO_URL}/api/trips/`, () =>
+        HttpResponse.json(errorBody("internal_error", "Erreur."), {
+          status: 503,
+          headers: { "X-Request-ID": "req-503" },
+        }),
+      ),
+    );
+
+    const error = await rejection(djangoFetch("/api/trips/?page=2", { method: "post" }));
+
+    expect(logDjangoFailure).toHaveBeenCalledExactlyOnceWith(error, {
+      method: "POST",
+      path: "/api/trips/?page=2",
+    });
+    expect(error).toMatchObject({ requestId: "req-503" });
+  });
+
+  it("écrit une ligne pour une panne réseau, avec l'identifiant envoyé à Django", async () => {
+    server.use(http.get(`${DJANGO_URL}/api/trips/`, () => HttpResponse.error()));
+
+    const error = await rejection(djangoFetch("/api/trips/"));
+
+    expect(logDjangoFailure).toHaveBeenCalledOnce();
+    expect(error).toMatchObject({ status: 0, requestId: expect.stringMatching(UUID) });
+  });
+
+  it("laisse passer une requête annulée par l'appelant, sans l'écrire comme une panne", async () => {
+    // Next.js annule request.signal avec une erreur ResponseAborted quand le navigateur
+    // quitte la page. Elle ne s'appelle pas AbortError.
+    class ResponseAborted extends Error {
+      override readonly name = "ResponseAborted";
+    }
+    const controller = new AbortController();
+    server.use(
+      http.get(`${DJANGO_URL}/api/trips/`, async () => {
+        controller.abort(new ResponseAborted("Le navigateur est parti."));
+        await delay("infinite");
+        return HttpResponse.json({});
+      }),
+    );
+
+    const error = await rejection(djangoFetch("/api/trips/", { signal: controller.signal }));
+
+    expect(error).toBeInstanceOf(ResponseAborted);
+    expect(error).not.toBeInstanceOf(ApiError);
+    expect(logDjangoFailure).not.toHaveBeenCalled();
+  });
+
+  it("n'écrit rien pour une erreur attendue (404, 429)", async () => {
+    server.use(
+      http.get(`${DJANGO_URL}/api/trips/:id/`, () =>
+        HttpResponse.json(errorBody("not_found", "Non trouvé."), { status: 404 }),
+      ),
+      http.get(`${DJANGO_URL}/api/trips/`, () =>
+        HttpResponse.json(errorBody("throttled", "Ralenti."), { status: 429 }),
+      ),
+    );
+
+    await rejection(djangoFetch("/api/trips/9/"));
+    await rejection(djangoFetch("/api/trips/"));
+
+    expect(logDjangoFailure).not.toHaveBeenCalled();
   });
 });

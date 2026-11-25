@@ -10,7 +10,7 @@ import { TripPagination } from "@/components/trips/TripPagination";
 import { Button } from "@/components/ui/button";
 import { listTrips } from "@/lib/api/trips";
 import { verifySession } from "@/lib/auth/session";
-import { isApiError, toUserMessage } from "@/lib/errors";
+import { errorReference, isApiError, toUserMessage, type ApiError } from "@/lib/errors";
 import {
   hasActiveFilters,
   parseTripListQuery,
@@ -45,7 +45,7 @@ export default async function TripsPage({ searchParams }: PageProps<"/trips">) {
   const { page, ...filters } = query;
 
   let result: Paginated<Trip> | null = null;
-  let loadError: string | null = null;
+  let loadError: ApiError | null = null;
   let pageMissing = false;
   try {
     result = await listTrips(query);
@@ -59,7 +59,7 @@ export default async function TripsPage({ searchParams }: PageProps<"/trips">) {
     if (error.status === 404 && page > 1) {
       pageMissing = true;
     } else {
-      loadError = toUserMessage(error);
+      loadError = error;
     }
   }
 
@@ -105,7 +105,8 @@ export default async function TripsPage({ searchParams }: PageProps<"/trips">) {
     content = (
       <ErrorState
         title="La liste des voyages n'a pas pu se charger"
-        message={loadError ?? "Réessayez dans un instant."}
+        message={loadError ? toUserMessage(loadError) : "Réessayez dans un instant."}
+        reference={errorReference(loadError)}
       />
     );
   } else if (result.count === 0) {

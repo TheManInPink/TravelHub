@@ -44,16 +44,19 @@ describe("loadDestinationPage", () => {
     expect(error).toHaveProperty("digest", NOT_FOUND_DIGEST);
   });
 
-  it("donne un message en français pour une panne d'un service", async () => {
+  it("donne un message en français et la référence pour une panne d'un service", async () => {
     server.use(
       djangoGraphql.query("DestinationPage", () =>
-        HttpResponse.json(gqlErrorBody("destination", "internal_error", "Erreur interne.")),
+        HttpResponse.json(gqlErrorBody("destination", "internal_error", "Erreur interne."), {
+          headers: { "X-Request-ID": "req-gql" },
+        }),
       ),
     );
 
     await expect(loadDestinationPage("1", "3")).resolves.toEqual({
       kind: "error",
       message: "Le serveur a rencontré une erreur. Réessayez plus tard.",
+      reference: "req-gql",
     });
   });
 });
