@@ -89,7 +89,7 @@ describe("WeatherPanel", () => {
     expect(await screen.findByRole("heading", { name: "Séjour terminé" })).toBeInTheDocument();
   });
 
-  it("relance l'appel avec Réessayer après une 503", async () => {
+  it("affiche l'erreur d'une 503, puis les prévisions après Réessayer", async () => {
     const user = userEvent.setup();
     let calls = 0;
     server.use(

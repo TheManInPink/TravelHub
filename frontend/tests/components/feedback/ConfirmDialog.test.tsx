@@ -18,7 +18,7 @@ function renderDialog(onConfirm: () => void | Promise<void>) {
 }
 
 describe("ConfirmDialog", () => {
-  it("appelle onConfirm après la confirmation, puis se ferme", async () => {
+  it("s'ouvre au clic sur Supprimer, appelle onConfirm une seule fois, puis se ferme", async () => {
     const user = userEvent.setup();
     const onConfirm = vi.fn();
     renderDialog(onConfirm);
