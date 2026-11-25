@@ -97,7 +97,13 @@ describe("WeatherPanel", () => {
         calls += 1;
         if (calls === 1) {
           return HttpResponse.json(
-            errorReply("external_service_unavailable", "Le service externe ne répond pas."),
+            {
+              error: {
+                ...errorReply("external_service_unavailable", "Le service externe ne répond pas.")
+                  .error,
+                reference: "req-meteo",
+              },
+            },
             { status: 503 },
           );
         }
@@ -107,6 +113,7 @@ describe("WeatherPanel", () => {
     render(<WeatherPanel path={PATH} stay={stay} />);
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Le service externe ne répond pas.");
+    expect(screen.getByText("req-meteo")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Réessayer" }));
 
     expect(await screen.findByText("Partiellement nuageux")).toBeInTheDocument();

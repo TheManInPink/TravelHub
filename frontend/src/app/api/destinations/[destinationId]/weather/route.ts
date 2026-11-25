@@ -1,7 +1,13 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getDestinationWeather } from "@/lib/api/weather";
 import { getOptionalUser } from "@/lib/auth/session";
-import { TIMEOUT_ERROR, isApiError, toUserMessage, type ApiError } from "@/lib/errors";
+import {
+  TIMEOUT_ERROR,
+  errorReference,
+  isApiError,
+  toUserMessage,
+  type ApiError,
+} from "@/lib/errors";
 import type { BffErrorBody, DestinationWeather } from "@/types/api";
 
 // GET /api/destinations/{id}/weather : météo d'une destination, pour le navigateur.
@@ -20,11 +26,10 @@ const CLIENT_CLOSED_REQUEST = 499;
 
 function errorResponse(
   status: number,
-  code: string,
-  message: string,
+  error: BffErrorBody["error"],
   retryAfter: number | null = null,
 ): NextResponse<BffErrorBody> {
-  const response = NextResponse.json<BffErrorBody>({ error: { code, message } }, { status });
+  const response = NextResponse.json<BffErrorBody>({ error }, { status });
   // Une erreur ne doit pas rester en cache : le bouton Réessayer doit refaire l'appel.
   response.headers.set("Cache-Control", "no-store");
   if (retryAfter !== null) {
@@ -52,11 +57,10 @@ export async function GET(
   try {
     const user = await getOptionalUser();
     if (!user) {
-      return errorResponse(
-        401,
-        "not_authenticated",
-        "Votre session a expiré. Rechargez la page pour vous reconnecter.",
-      );
+      return errorResponse(401, {
+        code: "not_authenticated",
+        message: "Votre session a expiré. Rechargez la page pour vous reconnecter.",
+      });
     }
     // request.signal est annulé si le navigateur abandonne la requête (page quittée).
     const weather = await getDestinationWeather(destinationId, { signal: request.signal });
@@ -68,7 +72,15 @@ export async function GET(
     return response;
   } catch (error) {
     if (isApiError(error)) {
-      return errorResponse(errorStatus(error), error.code, toUserMessage(error), error.retryAfter);
+      // La référence (X-Request-ID) n'existe que pour une panne : WeatherPanel l'affiche
+      // sous le message, pour retrouver la requête dans les journaux.
+      const body = { code: error.code, message: toUserMessage(error) };
+      const reference = errorReference(error);
+      return errorResponse(
+        errorStatus(error),
+        reference ? { ...body, reference } : body,
+        error.retryAfter,
+      );
     }
     // Le navigateur est parti : personne ne lira la réponse.
     if (request.signal.aborted) {

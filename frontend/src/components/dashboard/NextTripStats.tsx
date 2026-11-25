@@ -1,5 +1,5 @@
 import { getTripStats } from "@/lib/api/trips";
-import { isApiError, toUserMessage } from "@/lib/errors";
+import { isApiError, toUserMessageWithReference } from "@/lib/errors";
 import type { Trip, TripStats } from "@/types/api";
 import { StatsCards } from "./StatsCards";
 
@@ -27,7 +27,7 @@ export async function NextTripStats({ tripCount, upcomingCount, nextTrip }: Next
       if (!isApiError(error)) {
         throw error;
       }
-      statsError = toUserMessage(error);
+      statsError = toUserMessageWithReference(error);
     }
   }
 

@@ -22,6 +22,8 @@ export interface WeatherFailure {
   code: string;
   /** Message en français, prêt à afficher. */
   message: string;
+  /** X-Request-ID de l'appel à Django, pour une panne du serveur. */
+  reference?: string;
 }
 
 /** Champs de la destination dont dépend la météo : la ville à géocoder et les dates. */
@@ -113,12 +115,9 @@ export async function fetchWeather(
     return isWeather(body) ? { ok: true, weather: body } : failure(502, UNEXPECTED_RESPONSE);
   }
   if (isErrorBody(body)) {
-    return {
-      ok: false,
-      status: response.status,
-      code: body.error.code,
-      message: body.error.message,
-    };
+    const { code, message, reference } = body.error;
+    const result: WeatherFailure = { ok: false, status: response.status, code, message };
+    return typeof reference === "string" && reference ? { ...result, reference } : result;
   }
   return failure(response.status, codeFromStatus(response.status));
 }

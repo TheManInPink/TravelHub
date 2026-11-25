@@ -51,6 +51,27 @@ describe("fetchWeather", () => {
     });
   });
 
+  it("garde la référence de l'erreur envoyée par le Route Handler", async () => {
+    server.use(
+      http.get(ROUTE, () =>
+        HttpResponse.json(
+          { error: { code: "internal_error", message: "Erreur du serveur.", reference: "req-1" } },
+          { status: 503 },
+        ),
+      ),
+    );
+
+    await expect(
+      fetchWeather("/api/destinations/3/weather", new AbortController().signal),
+    ).resolves.toEqual({
+      ok: false,
+      status: 503,
+      code: "internal_error",
+      message: "Erreur du serveur.",
+      reference: "req-1",
+    });
+  });
+
   it("refuse une réponse 200 qui n'a pas la forme de la météo", async () => {
     server.use(http.get(ROUTE, () => HttpResponse.json({ ok: true })));
 

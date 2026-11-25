@@ -304,5 +304,7 @@ export interface BffErrorBody {
   error: {
     code: string;
     message: string;
+    /** X-Request-ID de l'appel à Django, seulement pour une panne du serveur (errorReference). */
+    reference?: string;
   };
 }

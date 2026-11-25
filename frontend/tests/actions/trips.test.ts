@@ -140,6 +140,25 @@ describe("createTripAction", () => {
     });
   });
 
+  it("ajoute la référence de la requête au message d'une panne de Django (503)", async () => {
+    server.use(
+      http.post(`${DJANGO_URL}/api/trips/`, () =>
+        HttpResponse.json(errorBody("internal_error", "Erreur interne."), {
+          status: 503,
+          headers: { "X-Request-ID": "req-503" },
+        }),
+      ),
+    );
+
+    const result = await createTripAction(values);
+
+    expect(result).toEqual({
+      ok: false,
+      message: "Le serveur a rencontré une erreur. Réessayez plus tard. Référence : req-503",
+      fieldErrors: {},
+    });
+  });
+
   it("renvoie vers la connexion sans session, sans appeler POST /api/trips/", async () => {
     cookieJar.clear();
     requestHeaders.set("x-travelhub-path", "/trips/new");

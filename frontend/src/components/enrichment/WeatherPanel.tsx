@@ -250,6 +250,7 @@ function WeatherProblem({ failure, stay, editHref, onRetry }: WeatherProblemProp
         titleAs="h3"
         title="La météo n'a pas pu se charger"
         message={failure.message}
+        reference={failure.reference}
         onRetry={onRetry}
       />
     );
