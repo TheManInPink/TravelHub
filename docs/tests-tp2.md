@@ -10,14 +10,17 @@ Depuis `frontend/` :
 npm test               # Vitest, tous les tests
 npm run test:coverage  # les mêmes tests, avec la couverture (dossier coverage/, ignoré par Git)
 npm run lint           # ESLint, qui échoue dès le premier avertissement
+npm run format:check   # format Prettier (npm run format corrige)
 npm run typecheck      # next typegen, puis TypeScript 7
+npm run build          # puis, avec Django démarré :
+npm run test:e2e       # parcours Playwright de bout en bout (section 9)
 ```
 
-Le job « Front-end » de la CI (`.github/workflows/ci.yml`) lance le lint, le typecheck, les tests et le build à chaque pull request.
+Le job « Front-end » de la CI (`.github/workflows/ci.yml`) lance le lint, le format, le typecheck, les tests Vitest et le build à chaque pull request. Le job « Parcours E2E (Playwright) » lance le parcours de bout en bout contre un vrai Django.
 
-Résultat : 70 fichiers de test et 514 tests, tous verts.
+Résultat : 70 fichiers de test Vitest et 514 tests, tous verts, plus le parcours Playwright.
 
-Les tests n'appellent jamais le vrai Django ni le vrai Supabase. MSW intercepte `fetch` et joue l'API REST, l'API GraphQL (`/graphql/`) et Supabase Storage. Dans les tests de composants, les Server Actions sont remplacées par des fonctions simulées (`vi.mock`), et `next/navigation` par un faux routeur. `tests/setup.ts` simule aussi `cookies()` et `headers()` de `next/headers`.
+Les tests Vitest n'appellent jamais le vrai Django ni le vrai Supabase. MSW intercepte `fetch` et joue l'API REST, l'API GraphQL (`/graphql/`) et Supabase Storage. Dans les tests de composants, les Server Actions sont remplacées par des fonctions simulées (`vi.mock`), et `next/navigation` par un faux routeur. `tests/setup.ts` simule aussi `cookies()` et `headers()` de `next/headers`.
 
 ## 2. Les cinq tests exigés
 
@@ -66,6 +69,7 @@ Les références EF viennent du cahier des charges (`docs/plan-tp2.md`, section 
 | EF-14 Validation et erreurs | `lib/validation/`, `lib/errors.test.ts`, tests des formulaires | Mêmes règles que Django, avant l'envoi et dans la Server Action. Message sous le bon champ. Message français pour 400, 401, 403, 404, 429, 5xx et panne réseau |
 | EF-15 Supabase | `actions/upload.test.ts`, `lib/supabase/`, `lib/validation/image.test.ts`, `components/upload/`, `next.config.test.ts` | Rôle vérifié avant l'envoi, type et taille contrôlés deux fois, premiers octets du fichier, ancienne image supprimée, clé secrète lue seulement côté serveur |
 | EF-16 Tests et qualité | Toute la suite, `quality/`, `a11y/` | `npm test` vert, lint et typecheck sans avertissement |
+| Parcours complet (EF-03, EF-05, EF-06, EF-13) | `e2e/parcours.spec.ts` (Playwright, hors de `tests/`) | Dans un vrai navigateur, contre le vrai Django : inscription, déconnexion, page protégée, connexion, création d'un voyage, ajout d'une destination, suppression |
 | Accessibilité (section 4) | `a11y/labels.test.tsx`, `ConfirmDialog.test.tsx`, `MobileNav.test.tsx`, `TripFilters.test.tsx`, tests des formulaires (`aria-describedby`, `aria-invalid`) | Libellés, noms des boutons, focus gardé dans les dialogues, menu utilisable au clavier |
 
 ## 5. Fichiers "use client"
@@ -108,6 +112,7 @@ Les 10 fichiers de `components/ui/` marqués `"use client"` (alert-dialog, dialo
 | TypeScript | 0 erreur | `npm run typecheck`, en mode `strict` |
 | `any` | Aucun, dans `src/` comme dans `tests/` | Règle `@typescript-eslint/no-explicit-any` en erreur |
 | `console.log` | Aucun | Règle `no-console`, qui permet seulement `console.warn` et `console.error` |
+| Format | Tous les fichiers au format Prettier | `npm run format:check` dans la CI. `.prettierrc.json` fixe des lignes de 100 caractères. Les composants générés par shadcn restent hors de Prettier |
 | Contournements | Aucun `eslint-disable`, aucun `@ts-ignore` | Un seul `@ts-expect-error`, dans `tests/lib/validation/activity.test.ts`, pour envoyer au schéma une catégorie forgée |
 
 Six appels à `console.warn` ou `console.error` restent, et ils sont voulus. Cinq sont dans les Server Actions (`actions/auth.ts`, `actions/upload.ts`) et écrivent dans les journaux de Vercel, par exemple quand Supabase refuse un envoi. Le sixième est dans `RouteErrorFallback.tsx` et montre l'erreur complète dans la console du navigateur.
@@ -168,6 +173,38 @@ Nous avons vérifié chaque page sur le build de production (`next start`), bran
 
 Les pages et les layouts de `app/` sont des Server Components `async`, que Vitest ne sait pas rendre. Nous testons à leur place les composants d'affichage et les fonctions de chargement qu'ils appellent. Sans ces 154 lignes, la couverture des lignes monte à 95,4 %.
 
-## 9. Ce que nous n'avons pas fait
+## 9. Parcours de bout en bout (Playwright)
 
-Lighthouse et les tests de bout en bout avec Playwright sont facultatifs dans le plan. Nous ne les avons pas faits à cette étape. Les tests Vitest ne peuvent pas rendre une page `async` complète (Server Component qui appelle Django). Nous testons donc les composants d'affichage avec des données en props, les fonctions de `lib/api/` avec MSW et les Server Actions comme des fonctions. Le parcours complet dans un vrai navigateur reste vérifié à la main et par le script décrit à la section 7.
+Vitest ne sait pas rendre une page `async` complète, c'est-à-dire un Server Component qui appelle Django. Le test Playwright `e2e/parcours.spec.ts` comble ce manque. Il ouvre un vrai navigateur sur le build de production de Next.js (`next start`, port 3100), branché sur un vrai Django et un vrai PostgreSQL. Il suit ces étapes, chacune dans un `test.step` :
+
+1. Inscription d'un nouveau compte, qui arrive sur le tableau de bord (« Bonjour Camille »).
+2. Déconnexion par le menu du compte.
+3. Ouverture de `/trips/new` sans session. Le proxy renvoie vers `/login?next=%2Ftrips%2Fnew`, et la connexion ramène sur `/trips/new`.
+4. Création d'un voyage (REST). La page du voyage s'ouvre avec le toast « Voyage créé. » et le budget « 1 500,50 $ ».
+5. Ajout d'une destination (mutation GraphQL). La page de la destination s'ouvre avec le toast « Destination ajoutée. ».
+6. Retour au voyage par le fil d'Ariane. La destination est dans l'itinéraire.
+7. Suppression du voyage avec le dialogue de confirmation. La liste ne le montre plus.
+
+Le test crée son propre compte `e2e-…`. Il n'a donc besoin d'aucun mot de passe ni de `seed_demo`, et il peut tourner plusieurs fois sur la même base. Il supprime le voyage qu'il a créé, mais le compte reste dans la base.
+
+En local, il passe en 21 secondes environ, deux fois de suite, avec Edge (`PLAYWRIGHT_CHANNEL=msedge`). Dans la CI, le job « Parcours E2E (Playwright) » démarre PostgreSQL et Django, installe le Chromium de Playwright, fait le build de Next.js, puis lance le parcours. Le parcours y passe en 7 secondes, et tout le job prend environ une minute et demie. En cas d'échec, il publie le rapport Playwright, avec la trace, et le journal de Django.
+
+## 10. Lighthouse
+
+Nous avons mesuré `/login` et `/trips` avec Lighthouse 13.6 dans Edge sans interface, sur le build de production branché sur le Django local. Pour `/trips`, Lighthouse envoyait les cookies de session d'`alice`. Le mode mobile est le profil par défaut de Lighthouse, qui simule une connexion 4G lente et un processeur quatre fois plus lent. Le mode bureau utilise `--preset=desktop`.
+
+| Page | Mode | Performance | Accessibilité | Bonnes pratiques | SEO | LCP | TBT | CLS |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `/login` | mobile | 91 | 100 | 100 | 100 | 0,9 s | 380 ms | 0 |
+| `/login` | bureau | 100 | 100 | 100 | 100 | 0,2 s | 20 ms | 0 |
+| `/trips` | mobile | 79 | 100 | 100 | 100 | 3,8 s | 390 ms | 0 |
+| `/trips` | bureau | 99 | 100 | 100 | 100 | 0,9 s | 40 ms | 0 |
+
+L'accessibilité, les bonnes pratiques et le SEO sont à 100 partout, et aucune mise en page ne bouge pendant le chargement (CLS de 0).
+
+**LCP de `/trips` sur mobile.** Le plus grand élément est la description sous le titre « Mes voyages ». La page attend Django (session, puis liste des voyages), et Next.js l'envoie dans un second morceau, après le squelette de `loading.tsx`. Nous avons essayé d'afficher le titre tout de suite et de garder seulement la liste sous `Suspense`. Le HTML montrait quand même le squelette de `loading.tsx` en premier, car Next.js envoie toujours le contenu de la page après lui. Le LCP n'a pas bougé (3,7 s au lieu de 3,8 s), donc nous avons gardé la version d'origine. Le vrai levier serait moins de JavaScript sur la page : Lighthouse signale du code inutilisé et 390 ms de blocage avec le processeur ralenti. Sur ordinateur, la même page obtient 99.
+
+**Deux remarques que nous gardons.**
+
+- Le cache « aller-retour » (bfcache) n'est pas utilisé. Les pages connectées répondent avec `Cache-Control: no-store`, car elles contiennent des données privées.
+- L'audit `label-content-name-mismatch`, qui ne compte pas dans le score, signale le bouton du compte sur mobile. On y voit les initiales « AT », alors que le nom accessible est « Alice Tremblay, menu du compte ». Les initiales sont décoratives (`aria-hidden`), et le nom accessible contient le nom complet de l'utilisateur.
