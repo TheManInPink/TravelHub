@@ -6,11 +6,26 @@
 // - Erreur de syntaxe ou de validation du document : HTTP 400, sans code ni data.
 import "server-only";
 
-import { djangoRequest, isRecord, parseRetryAfter, readJson } from "@/lib/api/django";
+import {
+  djangoRequest,
+  isRecord,
+  parseRetryAfter,
+  readJson,
+  reportFailure,
+} from "@/lib/api/django";
 import { ApiError, INVALID_QUERY, codeFromStatus } from "@/lib/errors";
 import type { GqlError } from "@/types/graphql";
 
 const GRAPHQL_PATH = "/graphql/";
+
+/**
+ * « query DestinationPage($id: ID!) { … } » donne DestinationPage, pour le journal. Le
+ * document peut commencer par ses fragments : nous cherchons donc le mot query ou mutation
+ * n'importe où.
+ */
+export function operationName(query: string): string | undefined {
+  return /\b(?:query|mutation)\s+([A-Za-z_][A-Za-z0-9_]*)/.exec(query)?.[1];
+}
 
 export interface GqlFetchOptions {
   /** Pour annuler la requête, par exemple quand le navigateur ferme la connexion. */
@@ -39,6 +54,19 @@ export async function gqlFetch<TData, TVars extends object = Record<string, neve
   query: string,
   variables?: TVars,
   options: GqlFetchOptions = {},
+): Promise<TData> {
+  try {
+    return await postGraphql<TData, TVars>(query, variables, options);
+  } catch (error) {
+    reportFailure(error, { method: "POST", path: GRAPHQL_PATH, operation: operationName(query) });
+    throw error;
+  }
+}
+
+async function postGraphql<TData, TVars extends object>(
+  query: string,
+  variables: TVars | undefined,
+  options: GqlFetchOptions,
 ): Promise<TData> {
   const { response, requestId } = await djangoRequest(GRAPHQL_PATH, {
     method: "POST",

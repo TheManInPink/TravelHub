@@ -8,7 +8,7 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { loadDashboard, type DashboardData } from "@/lib/api/dashboard";
 import { verifySession } from "@/lib/auth/session";
 import { todayIsoDate } from "@/lib/dates";
-import { isApiError, toUserMessage } from "@/lib/errors";
+import { errorReference, isApiError, toUserMessage, type ApiError } from "@/lib/errors";
 
 export const metadata: Metadata = {
   title: "Tableau de bord",
@@ -31,7 +31,7 @@ export default async function DashboardPage() {
   const user = await verifySession();
 
   let data: DashboardData | null = null;
-  let loadError: string | null = null;
+  let loadError: ApiError | null = null;
   try {
     data = await loadDashboard(todayIsoDate());
   } catch (error) {
@@ -40,7 +40,7 @@ export default async function DashboardPage() {
     if (!isApiError(error)) {
       throw error;
     }
-    loadError = toUserMessage(error);
+    loadError = error;
   }
 
   if (data === null) {
@@ -49,7 +49,8 @@ export default async function DashboardPage() {
         <PageHeader title={greeting(user)} />
         <ErrorState
           title="Le tableau de bord n'a pas pu se charger"
-          message={loadError ?? "Réessayez dans un instant."}
+          message={loadError ? toUserMessage(loadError) : "Réessayez dans un instant."}
+          reference={errorReference(loadError)}
         />
       </>
     );

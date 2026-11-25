@@ -4,8 +4,10 @@ import {
   type ApiErrorInit,
   codeFromStatus,
   errorDigest,
+  errorReference,
   isApiError,
   toUserMessage,
+  toUserMessageWithReference,
 } from "@/lib/errors";
 
 function apiError(code: string, extra: Partial<ApiErrorInit> = {}) {
@@ -142,5 +144,58 @@ describe("errorDigest", () => {
     expect(errorDigest({ digest: "" })).toBeUndefined();
     expect(errorDigest("texte")).toBeUndefined();
     expect(errorDigest(null)).toBeUndefined();
+  });
+});
+
+describe("errorReference", () => {
+  const requestId = "0b6c2f4e-8d1a-4c3b-9e7f-5a2d1c0b9e8f";
+
+  it("donne le X-Request-ID d'une panne du serveur, du réseau ou d'un service externe", () => {
+    for (const [code, status] of [
+      ["timeout", 0],
+      ["network_error", 0],
+      ["internal_error", 500],
+      ["internal_error", 200], // erreur d'un resolver GraphQL
+      ["external_service_unavailable", 200],
+      ["integration_error", 502],
+      ["unexpected_response", 200],
+      ["invalid_query", 400],
+    ] as const) {
+      expect(errorReference(apiError(code, { status, requestId }))).toBe(requestId);
+    }
+  });
+
+  it("ne donne rien pour une erreur de l'utilisateur", () => {
+    for (const [code, status] of [
+      ["validation_error", 400],
+      ["token_not_valid", 401],
+      ["permission_denied", 403],
+      ["not_found", 404],
+      ["throttled", 429],
+    ] as const) {
+      expect(errorReference(apiError(code, { status, requestId }))).toBeUndefined();
+    }
+  });
+
+  it("ne donne rien sans identifiant, ou pour une erreur qui n'est pas une ApiError", () => {
+    expect(errorReference(apiError("internal_error", { status: 500 }))).toBeUndefined();
+    expect(errorReference(new Error("x"))).toBeUndefined();
+    expect(errorReference(null)).toBeUndefined();
+  });
+});
+
+describe("toUserMessageWithReference", () => {
+  it("ajoute la référence après le message d'une panne", () => {
+    const error = apiError("internal_error", { status: 503, requestId: "req-1" });
+    expect(toUserMessageWithReference(error)).toBe(
+      "Le serveur a rencontré une erreur. Réessayez plus tard. Référence : req-1",
+    );
+  });
+
+  it("garde le message seul pour une erreur de l'utilisateur", () => {
+    const error = apiError("not_found", { status: 404, requestId: "req-2" });
+    expect(toUserMessageWithReference(error)).toBe(
+      "Cet élément est introuvable. Il a peut-être été supprimé.",
+    );
   });
 });

@@ -47,10 +47,16 @@ describe("loadTripPage", () => {
       message: "Trop de requêtes. Réessayez dans 2 minutes.",
     });
 
-    respondWith(503, "internal_error");
+    respondWith(503, "internal_error", { "X-Request-ID": "req-503" });
     await expect(loadTripPage("1")).resolves.toEqual({
       kind: "error",
       message: "Le serveur a rencontré une erreur. Réessayez plus tard.",
+      reference: "req-503",
     });
+  });
+
+  it("ne donne pas de référence pour un 429, qui n'est pas une panne", async () => {
+    respondWith(429, "throttled", { "X-Request-ID": "req-429" });
+    await expect(loadTripPage("1")).resolves.not.toHaveProperty("reference", "req-429");
   });
 });

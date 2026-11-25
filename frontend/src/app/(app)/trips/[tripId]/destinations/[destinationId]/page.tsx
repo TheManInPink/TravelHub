@@ -55,6 +55,7 @@ export default async function DestinationDetailPage({
           titleAs="h1"
           title="La destination n'a pas pu se charger"
           message={data.message}
+          reference={data.reference}
         />
       </>
     );

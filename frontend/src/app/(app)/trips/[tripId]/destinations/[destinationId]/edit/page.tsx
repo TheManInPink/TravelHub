@@ -57,6 +57,7 @@ export default async function EditDestinationPage({
           titleAs="h1"
           title="La destination n'a pas pu se charger"
           message={data.message}
+          reference={data.reference}
         />
       </>
     );

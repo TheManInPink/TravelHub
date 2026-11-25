@@ -4,6 +4,7 @@
 import "server-only";
 
 import { cookies } from "next/headers";
+import { logDjangoFailure, type DjangoCall } from "@/lib/api/log";
 import { ACCESS_COOKIE } from "@/lib/auth/cookieNames";
 import {
   ApiError,
@@ -12,6 +13,8 @@ import {
   TIMEOUT_MESSAGE,
   UNEXPECTED_RESPONSE,
   codeFromStatus,
+  errorReference,
+  isApiError,
 } from "@/lib/errors";
 import type { ApiErrorBody } from "@/types/api";
 
@@ -140,6 +143,12 @@ export async function djangoRequest(
     });
     return { response, requestId: response.headers.get(REQUEST_ID_HEADER) ?? requestId };
   } catch (error) {
+    // L'appelant a annulé la requête, par exemple Next.js quand le navigateur quitte la
+    // page (erreur ResponseAborted, qui ne s'appelle pas AbortError). Ce n'est pas une
+    // panne de Django : nous ne la changeons pas en network_error.
+    if (signal?.aborted) {
+      throw error;
+    }
     throw transportError(error, requestId);
   }
 }
@@ -190,11 +199,31 @@ function restError(response: Response, data: unknown, requestId: string): ApiErr
 }
 
 /**
+ * Journalise une panne du serveur ou du réseau (celles qui ont une référence, voir
+ * errorReference). Les erreurs attendues (400, 401, 403, 404, 429) ne sont pas écrites :
+ * elles rempliraient le journal sans rien apprendre.
+ */
+export function reportFailure(error: unknown, call: DjangoCall): void {
+  if (isApiError(error) && errorReference(error)) {
+    logDjangoFailure(error, call);
+  }
+}
+
+/**
  * Appelle une route REST de Django et renvoie le JSON de la réponse.
  * Lève une ApiError pour un statut d'erreur, une panne réseau ou un délai dépassé.
  * Renvoie undefined pour un 204 (suppression) : appelez alors djangoFetch<void>.
  */
 export async function djangoFetch<T>(path: string, init: DjangoRequestInit = {}): Promise<T> {
+  try {
+    return await fetchRest<T>(path, init);
+  } catch (error) {
+    reportFailure(error, { method: (init.method ?? "GET").toUpperCase(), path });
+    throw error;
+  }
+}
+
+async function fetchRest<T>(path: string, init: DjangoRequestInit): Promise<T> {
   const { response, requestId } = await djangoRequest(path, init);
   if (response.status === 204) {
     // TypeScript ne peut pas savoir que T vaut void ici, d'où la conversion.

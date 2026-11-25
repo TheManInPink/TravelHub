@@ -20,6 +20,12 @@ interface ErrorStateProps {
    * donc les données de Django.
    */
   onRetry?: () => void;
+  /**
+   * X-Request-ID de la requête qui a échoué (errorReference). L'utilisateur peut le
+   * copier et nous le donner : une recherche de cette valeur dans les journaux de Render
+   * ou de Vercel retrouve la requête.
+   */
+  reference?: string;
   /** Liens en plus, par exemple « Retour au tableau de bord ». */
   children?: ReactNode;
   titleAs?: "h1" | "h2" | "h3";
@@ -29,6 +35,7 @@ export function ErrorState({
   title = "Une erreur est survenue",
   message,
   onRetry,
+  reference,
   children,
   titleAs: Title = "h2",
 }: ErrorStateProps) {
@@ -55,6 +62,13 @@ export function ErrorState({
         <Title className="text-lg font-semibold text-balance">{title}</Title>
         <p className="text-sm text-pretty text-muted-foreground">{message}</p>
       </div>
+      {/* Hors de l'alerte : un lecteur d'écran ne lit pas l'identifiant à chaque erreur. */}
+      {reference ? (
+        <p className="max-w-md text-xs text-muted-foreground">
+          Référence de l'erreur :{" "}
+          <code className="font-mono break-all select-all">{reference}</code>
+        </p>
+      ) : null}
       <div className="flex flex-wrap justify-center gap-2">
         <Button type="button" onClick={handleRetry} disabled={isPending}>
           <RotateCwIcon aria-hidden="true" className={isPending ? "animate-spin" : undefined} />
