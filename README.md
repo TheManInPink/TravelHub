@@ -104,6 +104,16 @@ Le fichier `.env.local` reste hors de Git. Seules les variables qui commencent p
 
 D'autres commandes se lancent aussi depuis `frontend/`. `npm run lint` lance ESLint, qui échoue dès le premier avertissement, et `npm run typecheck` génère les types des routes avant de lancer `tsc` de TypeScript 7. `npm run format` met le code au format Prettier (`.prettierrc.json`, lignes de 100 caractères), et `npm run format:check` vérifie seulement le format, comme la CI. Les composants générés par shadcn (`src/components/ui/`) restent hors de Prettier. `npm run build` fait le build de production, comme sur Vercel. Les tests sont dans `frontend/tests/`, `npm run test:watch` les relance à chaque modification et `npm run test:coverage` mesure la couverture (rapport dans `frontend/coverage/`). Le résumé des tests pour le rapport est dans `docs/tests-tp2.md`.
 
+Le test de bout en bout `frontend/e2e/parcours.spec.ts` utilise Playwright. Il ouvre un vrai navigateur sur le build de production et parcourt l'application contre le vrai Django : inscription, déconnexion, page protégée, connexion, création d'un voyage, ajout d'une destination, puis suppression du voyage. Il crée son propre compte `e2e-…`, donc il n'a besoin d'aucun mot de passe. Django doit tourner à l'adresse de `DJANGO_API_URL` (`.env.local`).
+
+```powershell
+npm run build                       # Playwright démarre lui-même next start sur le port 3100
+$env:PLAYWRIGHT_CHANNEL = "msedge"  # Edge déjà installé, ou bien : npx playwright install chromium
+npm run test:e2e
+```
+
+Chaque passage laisse un compte `e2e-…` dans la base locale. Nous les supprimons de temps en temps avec `python manage.py shell -c "from django.contrib.auth import get_user_model; get_user_model().objects.filter(username__startswith='e2e-').delete()"`.
+
 TypeScript 7.0 n'a pas encore d'API JavaScript, et `typescript-eslint` en a besoin. Nous suivons donc la méthode de l'équipe TypeScript, avec deux paquets. Le paquet `typescript7` est TypeScript 7.0, que `npm run typecheck` utilise. Le nom `typescript` est un alias vers `@typescript/typescript6`, qui fournit l'API de TypeScript 6 à `typescript-eslint` et la commande `tsc6`. `next build` la trouve tout seul pour sa propre vérification des types. Nous pourrons revenir à un seul paquet quand TypeScript 7.1 aura son API.
 
 Le lint utilise ESLint 10. Les plugins `react`, `import` et `jsx-a11y` de `eslint-config-next` n'acceptent pas encore ESLint 10. Nous avons donc écrit `eslint.config.mjs` nous-mêmes. Il reprend les règles de `eslint-config-next` avec `@next/eslint-plugin-next`, `eslint-plugin-react-hooks` et `typescript-eslint`, et avec trois remplaçants qui acceptent ESLint 10 : `@eslint-react/eslint-plugin`, `eslint-plugin-import-x` et `eslint-plugin-jsx-a11y-x`. Les `overrides` de `package.json` imposent `minimatch` 11 à deux paquets, ce qui corrige une faille signalée par `npm audit`.
@@ -112,13 +122,15 @@ Depuis la racine du dépôt, `npm test` et `npm run build` lancent les mêmes co
 
 ## Intégration continue
 
-Le fichier `.github/workflows/ci.yml` tourne à chaque push sur `master` et à chaque pull request. Il contient trois tâches.
+Le fichier `.github/workflows/ci.yml` tourne à chaque push sur `master` et à chaque pull request. Il contient quatre tâches.
 
 La tâche **Lint et tests** démarre un service PostgreSQL 18 et utilise le cache pip. Elle lance `ruff check`, `ruff format --check` et `pytest --cov-fail-under=80`. Le résumé de couverture s'affiche sur la page de l'exécution, et `coverage.xml` et `htmlcov/` sont publiés dans l'artefact `coverage`.
 
 La tâche **Image Docker** construit l'image avec le cache de GitHub Actions. Elle lance ensuite `docker compose up --wait web`, qui attend que `/health/` réponde, puis vérifie `/health/`, `/api/docs/` et `/api/schema/`.
 
 La tâche **Front-end** installe Node.js 26 avec le cache npm, puis lance `npm ci` dans `frontend/`. Elle enchaîne ensuite le lint, le format Prettier, la vérification des types, les tests Vitest et le build. Pour le build, chaque variable de `frontend/.env.example` reçoit une valeur factice.
+
+La tâche **Parcours E2E (Playwright)** démarre un service PostgreSQL 18, migre la base et lance Django avec `runserver`. Elle installe ensuite Chromium pour Playwright, fait le build de production de Next.js branché sur ce Django, puis lance `npm run test:e2e`. En cas d'échec, le rapport Playwright (avec la trace) et le journal de Django sont publiés dans l'artefact `e2e`.
 
 Dependabot (`.github/dependabot.yml`) propose chaque semaine les mises à jour de pip, de npm (dossier `frontend/`) et de GitHub Actions. Pour npm, il ne propose pas de nouvelle version majeure de `@types/node`, qui suit Node.js 26, ni de l'alias `typescript`, qui doit rester en version 6 pour `typescript-eslint`.
 
@@ -571,7 +583,7 @@ logs/              journaux JSON rotatifs (ignoré par Git)
 backups/           archives pg_dump (ignoré par Git)
 .github/           CI (workflows/ci.yml) et Dependabot
 postman/           collection Postman v2.1 et environnement local
-frontend/          front-end Next.js du TP2 (src/, tests/, .env.example)
+frontend/          front-end Next.js du TP2 (src/, tests/ pour Vitest, e2e/ pour Playwright, .env.example)
 package.json       raccourcis npm test et npm run build vers frontend/
 ```
 

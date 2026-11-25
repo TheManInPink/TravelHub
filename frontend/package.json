@@ -10,12 +10,13 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint . --max-warnings 0",
-    "format": "prettier --write \"src/**/*.{ts,tsx}\" \"tests/**/*.{ts,tsx}\" \"*.{ts,mts,mjs}\"",
-    "format:check": "prettier --check \"src/**/*.{ts,tsx}\" \"tests/**/*.{ts,tsx}\" \"*.{ts,mts,mjs}\"",
+    "format": "prettier --write \"src/**/*.{ts,tsx}\" \"tests/**/*.{ts,tsx}\" \"e2e/**/*.ts\" \"*.{ts,mts,mjs}\"",
+    "format:check": "prettier --check \"src/**/*.{ts,tsx}\" \"tests/**/*.{ts,tsx}\" \"e2e/**/*.ts\" \"*.{ts,mts,mjs}\"",
     "typecheck": "next typegen && node node_modules/typescript7/lib/tsc.js --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@hookform/resolvers": "^7.0.8",
@@ -38,6 +39,7 @@
   "devDependencies": {
     "@eslint-react/eslint-plugin": "^5.30.6",
     "@next/eslint-plugin-next": "16.4.6",
+    "@playwright/test": "^1.65.1",
     "@tailwindcss/turbopack": "4.3.5",
     "@testing-library/dom": "^10.4.2",
     "@testing-library/jest-dom": "^8.0.0",

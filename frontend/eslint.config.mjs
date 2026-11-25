@@ -37,6 +37,10 @@ export default defineConfig([
     "next-env.d.ts",
     // Rapport HTML de « vitest run --coverage », généré.
     "coverage/**",
+    // Rapports et traces de Playwright, générés.
+    "playwright-report/**",
+    "test-results/**",
+    "blob-report/**",
   ]),
   {
     name: "travelhub/globals",

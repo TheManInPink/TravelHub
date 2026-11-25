@@ -12,6 +12,10 @@
 
 # testing
 /coverage
+# Playwright : rapports et traces des tests de bout en bout
+/playwright-report/
+/test-results/
+/blob-report/
 
 # next.js
 /.next/
