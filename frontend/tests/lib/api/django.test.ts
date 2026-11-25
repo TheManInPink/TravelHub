@@ -4,7 +4,7 @@
 import { HttpResponse, http } from "msw";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { djangoFetch } from "@/lib/api/django";
-import { ApiError } from "@/lib/errors";
+import { ApiError, toUserMessage } from "@/lib/errors";
 import type { User } from "@/types/api";
 import { rejection } from "../../helpers";
 import { cookieJar } from "../../mocks/cookies";
@@ -118,6 +118,23 @@ describe("djangoFetch", () => {
       details: { end_date: ["La date de fin doit être postérieure ou égale à la date de début."] },
       requestId: "req-400",
     });
+  });
+
+  it("transforme une 404 de Django en ApiError not_found, avec un message français", async () => {
+    server.use(
+      http.get(`${DJANGO_URL}/api/trips/999/`, () =>
+        HttpResponse.json(errorBody("not_found", "No Trip matches the given query."), {
+          status: 404,
+        }),
+      ),
+    );
+
+    const error = await rejection(djangoFetch("/api/trips/999/"));
+
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error).toMatchObject({ status: 404, code: "not_found" });
+    // Le message de Django peut être en anglais : l'interface choisit le sien d'après le code.
+    expect(toUserMessage(error)).toBe("Cet élément est introuvable. Il a peut-être été supprimé.");
   });
 
   it("renvoie undefined pour un 204", async () => {

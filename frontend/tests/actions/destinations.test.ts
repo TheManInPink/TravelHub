@@ -148,6 +148,20 @@ describe("createDestinationAction", () => {
     expect(redirect).not.toHaveBeenCalled();
   });
 
+  it("refuse un code pays de trois lettres sans envoyer la mutation", async () => {
+    // Le champ du formulaire s'arrête à deux lettres, mais un appel forgé peut en envoyer trois.
+    forbidMutation("CreateDestination");
+
+    const result = await createDestinationAction(1, { ...osaka, country_code: "JPN" });
+
+    expect(result).toEqual({
+      ok: false,
+      message: "Vérifiez les champs indiqués.",
+      fieldErrors: { country_code: ["Entrez le code du pays en deux lettres, par exemple JP."] },
+    });
+    expect(redirect).not.toHaveBeenCalled();
+  });
+
   it("ramène les details en camelCase de GraphQL sous les champs du formulaire", async () => {
     server.use(
       djangoGraphql.mutation("CreateDestination", () =>

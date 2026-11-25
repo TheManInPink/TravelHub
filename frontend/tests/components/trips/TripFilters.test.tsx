@@ -13,6 +13,9 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ replace }) }));
 beforeEach(() => {
   replace.mockReset();
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  // Le menu de Radix fait défiler l'option active jusqu'à elle. jsdom n'a pas cette
+  // fonction, car il ne calcule aucune mise en page.
+  Element.prototype.scrollIntoView = vi.fn();
 });
 
 afterEach(() => {
@@ -23,6 +26,12 @@ function typeSearch(value: string) {
   fireEvent.change(screen.getByLabelText("Rechercher"), { target: { value } });
 }
 
+/** Choisit une option d'un menu au clavier : Flèche bas l'ouvre, Entrée choisit. */
+function chooseOption(menu: string, option: string) {
+  fireEvent.keyDown(screen.getByRole("combobox", { name: menu }), { key: "ArrowDown" });
+  fireEvent.keyDown(screen.getByRole("option", { name: option }), { key: "Enter" });
+}
+
 function wait(ms: number) {
   act(() => {
     vi.advanceTimersByTime(ms);
@@ -30,6 +39,36 @@ function wait(ms: number) {
 }
 
 describe("TripFilters", () => {
+  it("met le statut choisi dans l'URL, garde la recherche et le tri, et revient à la page 1", () => {
+    render(<TripFilters search="paris" ordering="title" />);
+
+    chooseOption("Statut", "Planifié");
+
+    // Une seule navigation, sans ?page= : la liste filtrée repart de la première page.
+    expect(replace).toHaveBeenCalledTimes(1);
+    expect(replace).toHaveBeenCalledWith("/trips?status=planned&search=paris&ordering=title", {
+      scroll: false,
+    });
+    // Le menu s'est refermé après le choix.
+    expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+  });
+
+  it("retire le statut de l'URL avec « Tous les statuts »", () => {
+    render(<TripFilters status="planned" />);
+
+    chooseOption("Statut", "Tous les statuts");
+
+    expect(replace).toHaveBeenCalledWith("/trips", { scroll: false });
+  });
+
+  it("change le tri dans l'URL", () => {
+    render(<TripFilters status="draft" />);
+
+    chooseOption("Trier par", "Titre, de A à Z");
+
+    expect(replace).toHaveBeenCalledWith("/trips?status=draft&ordering=title", { scroll: false });
+  });
+
   it("attend 300 ms après la dernière lettre avant d'écrire la recherche dans l'URL", () => {
     render(<TripFilters status="planned" />);
 

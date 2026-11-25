@@ -98,6 +98,18 @@ export default defineConfig([
     },
   },
 
+  // Qualité : aucun any, et aucun console.log oublié. console.warn et console.error restent
+  // permis : au serveur, ils écrivent dans les journaux de Vercel. no-explicit-any vient
+  // déjà de tseslint.configs.recommended, nous la gardons visible ici.
+  {
+    name: "travelhub/qualite",
+    files: sourceFiles,
+    rules: {
+      "@typescript-eslint/no-explicit-any": "error",
+      "no-console": ["error", { allow: ["warn", "error"] }],
+    },
+  },
+
   // Seuls les modules de src/lib/api/ appellent Django, et seul src/lib/supabase/ lit la
   // clé secrète de Supabase. Ailleurs, lire ces variables est une erreur.
   // Pour une même règle, le dernier bloc qui vise un fichier remplace les autres. Chaque

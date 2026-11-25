@@ -58,6 +58,15 @@ describe("DestinationForm", () => {
     expect(createDestinationAction).not.toHaveBeenCalled();
   });
 
+  it("s'arrête à deux lettres dans le code du pays", async () => {
+    const user = renderForm();
+
+    await user.type(screen.getByLabelText("Code du pays"), "jpn");
+
+    // maxLength bloque la troisième lettre. La Server Action refuse aussi « JPN ».
+    expect(screen.getByLabelText("Code du pays")).toHaveValue("jp");
+  });
+
   it("garde le séjour dans les dates du voyage", async () => {
     const user = renderForm();
 

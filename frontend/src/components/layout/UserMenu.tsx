@@ -23,10 +23,11 @@ export function UserMenu({ user }: { user: MenuUser }) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        {/* Sur mobile, le nom est caché : aria-label garde un nom accessible au bouton. */}
+        {/* Le nom ne s'affiche qu'à partir de 1024 px : à 768 px, la navigation prend
+            déjà la largeur de l'en-tête. aria-label garde un nom accessible au bouton. */}
         <Button
           variant="ghost"
-          className="h-9 gap-2 px-1.5 sm:px-2"
+          className="h-9 gap-2 px-1.5 lg:px-2"
           aria-label={`${name}, menu du compte`}
         >
           <span
@@ -35,7 +36,7 @@ export function UserMenu({ user }: { user: MenuUser }) {
           >
             {userInitials(user)}
           </span>
-          <span className="hidden max-w-40 truncate sm:inline">{name}</span>
+          <span className="hidden max-w-40 truncate lg:inline">{name}</span>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">

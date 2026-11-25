@@ -12,6 +12,7 @@ import {
   DESTINATION_PAGE_QUERY,
   UPDATE_ACTIVITY_MUTATION,
   UPDATE_DESTINATION_MUTATION,
+  createActivity,
   createDestination,
   deleteActivity,
   getDestinationCountry,
@@ -19,7 +20,7 @@ import {
   updateActivity,
 } from "@/lib/api/itinerary";
 import { ApiError } from "@/lib/errors";
-import type { DestinationCreateInput } from "@/types/graphql";
+import type { ActivityCreateInput, DestinationCreateInput } from "@/types/graphql";
 import { rejection } from "../../helpers";
 import { kyotoPage } from "../../msw/fixtures";
 import { djangoGraphql } from "../../msw/handlers";
@@ -107,6 +108,36 @@ describe("mutations de l'itinéraire", () => {
 
     expect(variables).toEqual({ input });
     expect(destination.id).toBe("8");
+  });
+
+  it("createActivity envoie les variables de la mutation et renvoie l'activité créée", async () => {
+    let variables: unknown;
+    server.use(
+      djangoGraphql.mutation("CreateActivity", ({ variables: received }) => {
+        variables = received;
+        return HttpResponse.json({
+          data: {
+            createActivity: {
+              activity: { ...kyotoPage.activities[0], id: "12", name: "Marché Nishiki" },
+            },
+          },
+        });
+      }),
+    );
+    const input: ActivityCreateInput = {
+      destination: kyotoPage.id,
+      name: "Marché Nishiki",
+      category: "FOOD",
+      date: "2027-04-10",
+      startTime: "10:30",
+      cost: "25.00",
+    };
+
+    const activity = await createActivity(input);
+
+    // Une seule variable $input, avec l'identifiant de la destination en chaîne.
+    expect(variables).toEqual({ input });
+    expect(activity).toMatchObject({ id: "12", name: "Marché Nishiki" });
   });
 
   it("updateActivity envoie l'identifiant en chaîne et la catégorie en majuscules", async () => {
