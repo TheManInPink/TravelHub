@@ -205,4 +205,3 @@ export const validTokens: TokenPair = { access: "access-valide", refresh: "refre
 
 /** Paire renvoyée par la connexion, l'inscription ou le rafraîchissement. */
 export const newTokens: TokenPair = { access: "access-neuf", refresh: "refresh-neuf" };
-

@@ -44,8 +44,8 @@ export default function HomePage() {
           Planifiez vos voyages, étape par étape
         </h1>
         <p className="max-w-2xl text-lg text-pretty text-muted-foreground">
-          TravelHub réunit vos destinations, vos activités et votre budget au même endroit.
-          Vous voyez d&apos;un coup d&apos;œil ce qui vous attend, jour après jour.
+          TravelHub réunit vos destinations, vos activités et votre budget au même endroit. Vous
+          voyez d&apos;un coup d&apos;œil ce qui vous attend, jour après jour.
         </p>
         <div className="flex flex-col gap-3 sm:flex-row">
           <Button asChild size="lg">

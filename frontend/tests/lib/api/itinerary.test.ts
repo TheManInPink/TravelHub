@@ -27,7 +27,9 @@ import { djangoGraphql } from "../../msw/handlers";
 import { server } from "../../msw/server";
 
 // Schéma produit par Django (python manage.py graphql_schema --out frontend/schema.graphql).
-const schema = buildSchema(readFileSync(new URL("../../../schema.graphql", import.meta.url), "utf8"));
+const schema = buildSchema(
+  readFileSync(new URL("../../../schema.graphql", import.meta.url), "utf8"),
+);
 
 const DOCUMENTS = {
   DestinationPage: DESTINATION_PAGE_QUERY,

@@ -56,7 +56,17 @@ describe("identifiants", () => {
   it("accepte seulement un entier positif", () => {
     expect(parseId("12")).toBe(12);
     expect(parseId(12)).toBe(12);
-    for (const value of ["0", "-1", "1.5", "1e3", "abc", "", " 3", "../auth/me", "99999999999999999"]) {
+    for (const value of [
+      "0",
+      "-1",
+      "1.5",
+      "1e3",
+      "abc",
+      "",
+      " 3",
+      "../auth/me",
+      "99999999999999999",
+    ]) {
       expect(parseId(value)).toBeNull();
     }
   });

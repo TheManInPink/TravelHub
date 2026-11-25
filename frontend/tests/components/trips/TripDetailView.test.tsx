@@ -125,9 +125,7 @@ describe("TripDetailView", () => {
     unmount();
 
     render(<TripDetailView trip={tripAs("viewer")} />);
-    expect(
-      screen.queryByRole("link", { name: "Ajouter une destination" }),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Ajouter une destination" })).not.toBeInTheDocument();
   });
 
   it("propose d'ajouter la première destination quand l'itinéraire est vide", () => {

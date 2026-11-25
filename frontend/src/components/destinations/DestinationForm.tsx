@@ -120,8 +120,8 @@ export function DestinationForm({ tripId, trip, destination, cancelHref }: Desti
         <FieldSet>
           <FieldLegend variant="label">Coordonnées (facultatif)</FieldLegend>
           <FieldDescription>
-            Sans coordonnées, TravelHub cherche la ville pour afficher la météo. Remplissez
-            les deux champs ou aucun.
+            Sans coordonnées, TravelHub cherche la ville pour afficher la météo. Remplissez les deux
+            champs ou aucun.
           </FieldDescription>
           <div className="grid gap-6 sm:grid-cols-2">
             <TextField

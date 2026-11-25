@@ -26,8 +26,10 @@ type ManagedProps =
   | "aria-invalid"
   | "aria-describedby";
 
-interface TextFieldProps<TValues extends FieldValues, TTransformed>
-  extends Omit<ComponentProps<typeof Input>, ManagedProps> {
+interface TextFieldProps<TValues extends FieldValues, TTransformed> extends Omit<
+  ComponentProps<typeof Input>,
+  ManagedProps
+> {
   control: Control<TValues, unknown, TTransformed>;
   /** Nom d'un champ texte du formulaire. */
   name: FieldPathByValue<TValues, string>;

@@ -1,9 +1,6 @@
 // @vitest-environment node
 import { HttpResponse, http } from "msw";
-import {
-  getRedirectUrl,
-  unstable_doesMiddlewareMatch,
-} from "next/experimental/testing/server";
+import { getRedirectUrl, unstable_doesMiddlewareMatch } from "next/experimental/testing/server";
 import { NextRequest } from "next/server";
 import { describe, expect, it } from "vitest";
 import { config, proxy } from "@/proxy";

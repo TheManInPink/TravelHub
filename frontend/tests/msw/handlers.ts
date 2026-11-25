@@ -269,7 +269,9 @@ export const handlers: AnyHandler[] = [
       return gqlInvalidToken();
     }
     if (variables.id !== existing.id) {
-      return HttpResponse.json(gqlErrorBody("updateActivity", "not_found", "Activité introuvable."));
+      return HttpResponse.json(
+        gqlErrorBody("updateActivity", "not_found", "Activité introuvable."),
+      );
     }
     const activity = { ...existing, ...inputFields(variables) };
     return HttpResponse.json({ data: { updateActivity: { activity } } });
@@ -281,7 +283,9 @@ export const handlers: AnyHandler[] = [
       return gqlInvalidToken();
     }
     if (variables.id !== existing.id) {
-      return HttpResponse.json(gqlErrorBody("deleteActivity", "not_found", "Activité introuvable."));
+      return HttpResponse.json(
+        gqlErrorBody("deleteActivity", "not_found", "Activité introuvable."),
+      );
     }
     return HttpResponse.json({ data: { deleteActivity: { ok: true, id: existing.id } } });
   }),

@@ -44,7 +44,11 @@ export function ActivityDialog({ destinationId, stay, activity }: ActivityDialog
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         {activity ? (
-          <Button variant="ghost" size="icon" aria-label={`Modifier l'activité « ${activity.name} »`}>
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label={`Modifier l'activité « ${activity.name} »`}
+          >
             <PencilIcon aria-hidden="true" />
           </Button>
         ) : (

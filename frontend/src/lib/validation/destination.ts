@@ -55,45 +55,49 @@ function coordinate(label: "latitude" | "longitude", limit: number, example: str
  * l'arrivée ne peut pas précéder le début, et le départ ne peut pas suivre la fin.
  */
 export function destinationSchema(trip: DateRange) {
-  return z
-    .object({
-      city: place("Entrez la ville.", "La ville"),
-      country: place("Entrez le pays.", "Le pays"),
-      // Django met le code en majuscules (« jp » devient « JP ») : nous aussi.
-      country_code: z
-        .string()
-        .trim()
-        .toUpperCase()
-        .regex(/^[A-Z]{2}$/, "Entrez le code du pays en deux lettres, par exemple JP."),
-      arrival_date: isoDate("Choisissez la date d'arrivée.").refine(
-        (date) => date >= trip.start,
-        { error: `L'arrivée ne peut pas précéder le début du voyage (${formatDate(trip.start)}).` },
-      ),
-      departure_date: isoDate("Choisissez la date de départ.").refine(
-        (date) => date <= trip.end,
-        { error: `Le départ ne peut pas suivre la fin du voyage (${formatDate(trip.end)}).` },
-      ),
-      latitude: coordinate("latitude", 90, "35,0116"),
-      longitude: coordinate("longitude", 180, "135,7681"),
-    })
-    .refine((values) => values.departure_date >= values.arrival_date, {
-      path: ["departure_date"],
-      error: DEPARTURE_BEFORE_ARRIVAL,
-      // Deux dates "AAAA-MM-JJ" se comparent comme des chaînes.
-      when: withoutIssues("arrival_date", "departure_date"),
-    })
-    // Les coordonnées vont ensemble, comme l'exige la contrainte de Django. L'erreur va
-    // sous le champ resté vide.
-    .refine((values) => values.latitude === null || values.longitude !== null, {
-      path: ["longitude"],
-      error: "Entrez aussi la longitude, ou laissez les deux coordonnées vides.",
-      when: withoutIssues("latitude", "longitude"),
-    })
-    .refine((values) => values.longitude === null || values.latitude !== null, {
-      path: ["latitude"],
-      error: "Entrez aussi la latitude, ou laissez les deux coordonnées vides.",
-      when: withoutIssues("latitude", "longitude"),
-    });
+  return (
+    z
+      .object({
+        city: place("Entrez la ville.", "La ville"),
+        country: place("Entrez le pays.", "Le pays"),
+        // Django met le code en majuscules (« jp » devient « JP ») : nous aussi.
+        country_code: z
+          .string()
+          .trim()
+          .toUpperCase()
+          .regex(/^[A-Z]{2}$/, "Entrez le code du pays en deux lettres, par exemple JP."),
+        arrival_date: isoDate("Choisissez la date d'arrivée.").refine(
+          (date) => date >= trip.start,
+          {
+            error: `L'arrivée ne peut pas précéder le début du voyage (${formatDate(trip.start)}).`,
+          },
+        ),
+        departure_date: isoDate("Choisissez la date de départ.").refine(
+          (date) => date <= trip.end,
+          { error: `Le départ ne peut pas suivre la fin du voyage (${formatDate(trip.end)}).` },
+        ),
+        latitude: coordinate("latitude", 90, "35,0116"),
+        longitude: coordinate("longitude", 180, "135,7681"),
+      })
+      .refine((values) => values.departure_date >= values.arrival_date, {
+        path: ["departure_date"],
+        error: DEPARTURE_BEFORE_ARRIVAL,
+        // Deux dates "AAAA-MM-JJ" se comparent comme des chaînes.
+        when: withoutIssues("arrival_date", "departure_date"),
+      })
+      // Les coordonnées vont ensemble, comme l'exige la contrainte de Django. L'erreur va
+      // sous le champ resté vide.
+      .refine((values) => values.latitude === null || values.longitude !== null, {
+        path: ["longitude"],
+        error: "Entrez aussi la longitude, ou laissez les deux coordonnées vides.",
+        when: withoutIssues("latitude", "longitude"),
+      })
+      .refine((values) => values.longitude === null || values.latitude !== null, {
+        path: ["latitude"],
+        error: "Entrez aussi la latitude, ou laissez les deux coordonnées vides.",
+        when: withoutIssues("latitude", "longitude"),
+      })
+  );
 }
 
 type DestinationSchema = ReturnType<typeof destinationSchema>;

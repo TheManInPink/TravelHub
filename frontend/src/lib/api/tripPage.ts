@@ -9,9 +9,7 @@ import type { TripDetail } from "@/types/api";
 
 /** Résultat du chargement : le voyage, un accès refusé, ou une erreur à afficher. */
 export type TripPageData =
-  | { kind: "trip"; trip: TripDetail }
-  | { kind: "forbidden" }
-  | { kind: "error"; message: string };
+  { kind: "trip"; trip: TripDetail } | { kind: "forbidden" } | { kind: "error"; message: string };
 
 /**
  * GET /api/trips/{id}/ pour une page. Les erreurs attendues sont interceptées ici, car

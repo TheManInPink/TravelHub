@@ -116,9 +116,14 @@ describe("createActivityAction", () => {
     server.use(
       djangoGraphql.mutation("CreateActivity", () =>
         HttpResponse.json(
-          gqlErrorBody("createActivity", "validation_error", "Les données envoyées sont invalides.", {
-            date: [message],
-          }),
+          gqlErrorBody(
+            "createActivity",
+            "validation_error",
+            "Les données envoyées sont invalides.",
+            {
+              date: [message],
+            },
+          ),
         ),
       ),
     );

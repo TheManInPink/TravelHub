@@ -139,6 +139,10 @@ jobs:
       - name: ESLint
         run: npm run lint
 
+      # Prettier vérifie seulement le format. Le code mal formaté se corrige avec npm run format.
+      - name: Format (Prettier)
+        run: npm run format:check
+
       - name: Types (next typegen et tsc)
         run: npm run typecheck
 
@@ -155,3 +159,87 @@ jobs:
           SUPABASE_SECRET_KEY: cle-factice-pour-la-ci
           SUPABASE_BUCKET: travelhub-images
           NEXT_PUBLIC_SITE_URL: http://localhost:3000
+
+  # Parcours de bout en bout : le build de production de Next.js, branché sur un vrai
+  # Django et un vrai PostgreSQL, piloté par Playwright dans Chromium.
+  e2e:
+    name: Parcours E2E (Playwright)
+    runs-on: ubuntu-26.04
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: travelhub
+          POSTGRES_PASSWORD: travelhub
+          POSTGRES_DB: travelhub
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U travelhub -d travelhub"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # Django (paramètres de développement, comme en local).
+      SECRET_KEY: ci-cle-secrete-jetable-pour-le-parcours-e2e-0123456789
+      DATABASE_URL: postgres://travelhub:travelhub@localhost:5432/travelhub
+      ALLOWED_HOSTS: localhost,127.0.0.1
+      LOG_FILE: ""
+      # Next.js : mêmes valeurs factices que le job Front-end, sauf l'adresse de Django.
+      NEXT_TELEMETRY_DISABLED: "1"
+      DJANGO_API_URL: http://127.0.0.1:8000
+      SUPABASE_URL: https://exemple.supabase.co
+      SUPABASE_SECRET_KEY: cle-factice-pour-la-ci
+      SUPABASE_BUCKET: travelhub-images
+      NEXT_PUBLIC_SITE_URL: http://localhost:3100
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+          cache: pip
+          cache-dependency-path: requirements*.txt
+
+      - name: Installer Django
+        run: pip install -r requirements.txt
+
+      - name: Migrer la base et démarrer Django
+        run: |
+          python manage.py migrate --noinput
+          nohup python manage.py runserver 127.0.0.1:8000 --noreload > django.log 2>&1 &
+          curl --fail --silent --retry 30 --retry-delay 1 --retry-connrefused http://127.0.0.1:8000/health/
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Installer les dépendances du front-end
+        working-directory: frontend
+        run: npm ci
+
+      - name: Installer Chromium pour Playwright
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Build de production
+        working-directory: frontend
+        run: npm run build
+
+      # playwright.config.ts démarre lui-même next start sur le port 3100.
+      - name: Parcours Playwright
+        working-directory: frontend
+        run: npm run test:e2e
+
+      - name: Rapport Playwright et journal de Django
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e
+          path: |
+            frontend/playwright-report/
+            frontend/test-results/
+            django.log
+          retention-days: 14

@@ -10,11 +10,7 @@ import { FormMessage } from "@/components/forms/FormMessage";
 import { TextField } from "@/components/forms/TextField";
 import { Button } from "@/components/ui/button";
 import { FieldGroup } from "@/components/ui/field";
-import {
-  registerSchema,
-  type RegisterInput,
-  type RegisterValues,
-} from "@/lib/validation/auth";
+import { registerSchema, type RegisterInput, type RegisterValues } from "@/lib/validation/auth";
 
 // Formulaire d'inscription. Même principe que LoginForm. Django vérifie en plus que le
 // nom et le courriel sont libres, et que le mot de passe n'est ni trop courant ni trop

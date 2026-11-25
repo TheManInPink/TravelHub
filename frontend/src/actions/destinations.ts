@@ -85,10 +85,7 @@ function coordinatesOf(values: DestinationValues) {
 }
 
 /** Variables de createDestination, avec les noms de champs de GraphQL. */
-function toCreateInput(
-  trip: TripDetail,
-  values: DestinationValues,
-): DestinationCreateInput {
+function toCreateInput(trip: TripDetail, values: DestinationValues): DestinationCreateInput {
   // Django demande la position dans l'itinéraire. La nouvelle destination va à la fin,
   // après la plus grande position du voyage (1 pour la première destination).
   const order = Math.max(0, ...trip.destinations.map((destination) => destination.order)) + 1;

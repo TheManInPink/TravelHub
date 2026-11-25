@@ -46,11 +46,7 @@ export function formatDate(value: string, dateStyle: DateStyle = "long"): string
 }
 
 /** Deux dates "AAAA-MM-JJ" deviennent une période, par exemple « 12–18 mars 2026 ». */
-export function formatDateRange(
-  start: string,
-  end: string,
-  dateStyle: DateStyle = "long",
-): string {
+export function formatDateRange(start: string, end: string, dateStyle: DateStyle = "long"): string {
   const startDate = parseDateOnly(start);
   const endDate = parseDateOnly(end);
   if (!startDate || !endDate || endDate < startDate) {

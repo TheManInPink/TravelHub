@@ -187,10 +187,9 @@ describe("updateTripAction", () => {
       "Des destinations de ce voyage sortent des nouvelles dates : modifiez-les avant de changer les dates du voyage.";
     server.use(
       http.patch(`${DJANGO_URL}/api/trips/:id/`, () =>
-        HttpResponse.json(
-          errorBody("validation_error", message, { non_field_errors: [message] }),
-          { status: 400 },
-        ),
+        HttpResponse.json(errorBody("validation_error", message, { non_field_errors: [message] }), {
+          status: 400,
+        }),
       ),
     );
 

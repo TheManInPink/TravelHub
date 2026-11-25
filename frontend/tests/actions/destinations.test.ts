@@ -12,12 +12,7 @@ import type { DestinationInput } from "@/lib/validation/destination";
 import { redirectTarget } from "../helpers";
 import { cookieJar } from "../mocks/cookies";
 import { japanTripDetail, kyotoPage, validTokens } from "../msw/fixtures";
-import {
-  CREATED_DESTINATION_ID,
-  DJANGO_URL,
-  djangoGraphql,
-  gqlErrorBody,
-} from "../msw/handlers";
+import { CREATED_DESTINATION_ID, DJANGO_URL, djangoGraphql, gqlErrorBody } from "../msw/handlers";
 import { server } from "../msw/server";
 
 const { revalidatePath } = vi.hoisted(() => ({ revalidatePath: vi.fn() }));
@@ -90,7 +85,9 @@ describe("createDestinationAction", () => {
 
     const target = await redirectTarget(createDestinationAction(1, osaka));
 
-    expect(target).toBe(`/trips/1/destinations/${CREATED_DESTINATION_ID}?toast=destination-created`);
+    expect(target).toBe(
+      `/trips/1/destinations/${CREATED_DESTINATION_ID}?toast=destination-created`,
+    );
     // Noms de GraphQL en camelCase, code pays en majuscules, ville sans espaces. Sans
     // coordonnées, les deux champs ne sont pas envoyés.
     await expect(variables).resolves.toEqual({
@@ -166,10 +163,17 @@ describe("createDestinationAction", () => {
     server.use(
       djangoGraphql.mutation("CreateDestination", () =>
         HttpResponse.json(
-          gqlErrorBody("createDestination", "validation_error", "Les données envoyées sont invalides.", {
-            countryCode: ["Le code pays doit contenir exactement deux lettres (ISO 3166-1 alpha-2)."],
-            departureDate: ["Le départ ne peut pas suivre la fin du voyage (2027-04-14)."],
-          }),
+          gqlErrorBody(
+            "createDestination",
+            "validation_error",
+            "Les données envoyées sont invalides.",
+            {
+              countryCode: [
+                "Le code pays doit contenir exactement deux lettres (ISO 3166-1 alpha-2).",
+              ],
+              departureDate: ["Le départ ne peut pas suivre la fin du voyage (2027-04-14)."],
+            },
+          ),
         ),
       ),
     );

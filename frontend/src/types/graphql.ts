@@ -13,14 +13,7 @@ export type GqlId = string;
 export type GqlTripStatus = "DRAFT" | "PLANNED" | "ONGOING" | "COMPLETED" | "CANCELLED";
 export type GqlParticipantRole = "OWNER" | "EDITOR" | "VIEWER";
 export type GqlActivityCategory =
-  | "SIGHTSEEING"
-  | "CULTURE"
-  | "FOOD"
-  | "NATURE"
-  | "SPORT"
-  | "TRANSPORT"
-  | "ACCOMMODATION"
-  | "OTHER";
+  "SIGHTSEEING" | "CULTURE" | "FOOD" | "NATURE" | "SPORT" | "TRANSPORT" | "ACCOMMODATION" | "OTHER";
 
 // Champs demandés sur chaque type (fragments DestinationFields et ActivityFields)
 
