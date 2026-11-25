@@ -9,7 +9,8 @@ import {
   updateActivityAction,
 } from "@/actions/activities";
 import type { ActivityInput } from "@/lib/validation/activity";
-import { cookieJar } from "../mocks/cookies";
+import { redirectTarget } from "../helpers";
+import { cookieJar, requestHeaders } from "../mocks/cookies";
 import { kyotoPage, validTokens } from "../msw/fixtures";
 import { CREATED_ACTIVITY_ID, djangoGraphql, gqlErrorBody } from "../msw/handlers";
 import { server } from "../msw/server";
@@ -129,6 +130,29 @@ describe("createActivityAction", () => {
       message: "Les données envoyées sont invalides.",
       fieldErrors: { date: [message] },
     });
+  });
+
+  it("déconnecte l'utilisateur quand le jeton expire pendant la mutation", async () => {
+    requestHeaders.set("x-travelhub-path", "/trips/1/destinations/3");
+    server.use(
+      djangoGraphql.mutation("CreateActivity", () =>
+        HttpResponse.json(
+          {
+            errors: [
+              { message: "Le jeton n'est pas valide.", extensions: { code: "token_not_valid" } },
+            ],
+          },
+          { status: 401 },
+        ),
+      ),
+    );
+
+    const target = await redirectTarget(createActivityAction(kyotoPage.id, lunch));
+
+    // Les cookies sont supprimés, puis la connexion ramène sur la destination.
+    expect(target).toBe("/login?expired=1&next=%2Ftrips%2F1%2Fdestinations%2F3");
+    expect(cookieJar.size).toBe(0);
+    expect(revalidatePath).not.toHaveBeenCalled();
   });
 
   it("répond « introuvable » quand la destination n'existe plus", async () => {

@@ -40,6 +40,22 @@ describe("TripForm", () => {
     expect(createTripAction).not.toHaveBeenCalled();
   });
 
+  it("refuse un budget négatif sous le champ Budget, sans appeler l'action", async () => {
+    render(<TripForm />);
+
+    const user = await fillTrip("Gaspésie 2027", "2027-07-01", "2027-07-10");
+    await user.type(screen.getByLabelText("Budget"), "-10");
+    await user.click(screen.getByRole("button", { name: "Créer le voyage" }));
+
+    const message = "Le budget ne peut pas être négatif.";
+    expect(await screen.findByText(message)).toBeInTheDocument();
+    expect(screen.getByLabelText("Budget")).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByLabelText("Budget")).toHaveAccessibleDescription(
+      expect.stringContaining(message),
+    );
+    expect(createTripAction).not.toHaveBeenCalled();
+  });
+
   it("affiche les champs obligatoires sans appeler l'action", async () => {
     const user = userEvent.setup();
     render(<TripForm />);
