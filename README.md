@@ -273,13 +273,16 @@ Nous avons repassé la configuration le 25 novembre 2026. Les valeurs restent da
 .\scripts\check-production.ps1     # sans mot de passe, ne modifie rien
 ```
 
-La CLI Vercel affiche les noms des variables et leurs environnements, sans les valeurs. Elle s'installe avec npm, et la connexion se fait une seule fois dans le navigateur. Nous n'utilisons ni `vercel link` ni `vercel env pull`, qui peuvent écrire dans `frontend/.env.local` (le même piège que `neon init`).
+La CLI Vercel affiche les noms des variables et leurs environnements, sans les valeurs. Elle s'installe avec npm, et la connexion se fait une seule fois dans le navigateur. Notre compte a deux équipes Vercel, donc il faut donner `--scope`. Nous n'utilisons ni `vercel link` ni `vercel env pull`, qui peuvent écrire dans `frontend/.env.local` (le même piège que `neon init`). Nous n'utilisons pas non plus `--json`, qui affiche les valeurs.
 
 ```powershell
 npm install -g vercel
 vercel login                                          # ouvre le navigateur une seule fois
-vercel env ls production --project travelhub-uqar     # puis preview à la place de production
+vercel env ls --environment production --project travelhub-uqar --scope themaninpinks-projects
+vercel env ls --environment preview --project travelhub-uqar --scope themaninpinks-projects
 ```
+
+Le 25 novembre 2026, la Production avait bien les cinq variables, mais la Preview n'avait que `DJANGO_API_URL` et `NEXT_PUBLIC_SITE_URL`. Dans une preview, les couvertures gardaient donc l'image par défaut, et l'envoi d'images répondait qu'il n'était pas configuré. Nous avons ajouté les trois variables `SUPABASE_*` à la Preview, avec `vercel env add <nom> --environment preview --sensitive`. La valeur passe par l'entrée standard, donc elle n'apparaît ni à l'écran ni dans l'historique. Les previews écrivent donc dans le même bucket que la production.
 
 Le script `check-production.ps1` réveille d'abord l'API, puis il vérifie `/health/`, le 404 en JSON, HSTS, le CORS, le refus du mot de passe du README, la page `/login` de Vercel avec ses en-têtes et la redirection de `/dashboard` sans cookie. Il affiche une ligne `OK` ou `ÉCHEC` par vérification. Le 25 novembre, les huit vérifications sont passées, et Render s'est réveillé en 41 s.
 
