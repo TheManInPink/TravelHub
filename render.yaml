@@ -58,6 +58,12 @@ projects:
                 sync: false
               - key: CORS_ALLOWED_ORIGINS
                 sync: false
+              # Seul hôte accepté pour cover_image_url (étape 11), par exemple
+              # abcdefgh.supabase.co. Render ne demande les valeurs sync: false qu'à la
+              # création du Blueprint : sur le service existant, nous l'avons ajoutée à la
+              # main (Environment > Add Environment Variable).
+              - key: SUPABASE_STORAGE_HOST
+                sync: false
               # Le proxy de Render est le seul devant Gunicorn. Toutes les connexions
               # anonymes arrivent du serveur Vercel, d'où une limite plus haute que les
               # 100/hour par défaut.
