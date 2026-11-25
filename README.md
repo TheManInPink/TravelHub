@@ -4,7 +4,7 @@ TravelHub est le back-end Django du TP1. Il sert à planifier et gérer des voya
 
 Le front-end du TP2 est une application Next.js qui se trouve dans le dossier `frontend/`. Elle est décrite dans la section [Lancer le front-end](#lancer-le-front-end).
 
-Sommaire : [installation locale](#installation-powershell) · [Docker](#docker) · [front-end](#lancer-le-front-end) · [variables d'environnement](#variables-denvironnement) · [comptes de démonstration](#comptes-de-démonstration) · [exploitation (journaux, santé)](#exploitation) · [sauvegarde et restauration](#sauvegarde-et-restauration) · [API REST](#api-rest) · [API GraphQL](#api-graphql) · [sécurité](#sécurité-owasp-api-security-top-10-2023) · [tests](#tests-et-qualité)
+Sommaire : [installation locale](#installation-powershell) · [Docker](#docker) · [front-end](#lancer-le-front-end) · [déploiement](#déploiement) · [production (avant la démo, journaux, sauvegardes, retour arrière)](#production) · [variables d'environnement](#variables-denvironnement) · [comptes de démonstration](#comptes-de-démonstration) · [exploitation (journaux, santé)](#exploitation) · [sauvegarde et restauration](#sauvegarde-et-restauration) · [API REST](#api-rest) · [API GraphQL](#api-graphql) · [sécurité](#sécurité-owasp-api-security-top-10-2023) · [tests](#tests-et-qualité)
 
 ## Prérequis
 
@@ -67,10 +67,11 @@ Le script fait une copie de `pg_hba.conf` et autorise pour un moment les connexi
 
 ## Docker
 
-Il faut Docker Desktop avec Compose 2.23 ou plus récent. Compose lit aussi le fichier `.env`, donc remplissez-y `ALLOWED_HOSTS`, `POSTGRES_PASSWORD` et `PGADMIN_DEFAULT_PASSWORD` (voir `.env.example`).
+Il faut Docker Desktop avec Compose 2.24 ou plus récent. Compose lit aussi le fichier `.env`, donc remplissez-y `ALLOWED_HOSTS`, `POSTGRES_PASSWORD` et `PGADMIN_DEFAULT_PASSWORD` (voir `.env.example`).
 
 ```powershell
 docker compose up --build        # web (Gunicorn), db (PostgreSQL 18), pgadmin
+docker compose --profile frontend up --build   # toute la pile, avec le front-end Next.js
 docker compose exec web python manage.py createsuperuser
 docker compose exec web python manage.py seed_demo --password "MotDePasseDemo-2026"
 docker compose ps                # web doit être « healthy » (contrôle /health/)
@@ -83,10 +84,22 @@ docker compose down              # arrête tout, --volumes efface aussi la base 
 | `web` | http://localhost:8000/api/docs/ | Image du `Dockerfile` avec `config.settings.prod`. Applique les migrations à chaque démarrage. Journaux rotatifs dans le volume `web-logs` |
 | `db` | `db:5432`, réseau interne seulement | `postgres:18`, données dans le volume `postgres-data`, contrôle avec `pg_isready` |
 | `pgadmin` | http://localhost:5050 | Connexion avec `PGADMIN_DEFAULT_EMAIL` et `PGADMIN_DEFAULT_PASSWORD`. Le serveur « TravelHub (Docker) » est déjà déclaré |
+| `frontend` | http://localhost:3000 | Facultatif, profil `frontend`. Image de `frontend/Dockerfile`. Le serveur Next.js appelle Django à l'adresse `http://web:8000` |
 
 Le `Dockerfile` installe les dépendances dans une première étape (`python:3.14-slim`) et copie ensuite l'environnement virtuel dans l'image finale. Il lance `collectstatic` (les fichiers sont servis par WhiteNoise). Au démarrage du conteneur, son `CMD` applique les migrations puis lance Gunicorn (`gunicorn.conf.py`, avec `WEB_CONCURRENCY` processus). Docker Compose et Render utilisent ce même `CMD`. Gunicorn tourne avec un utilisateur non root qui peut seulement écrire dans `/app/logs`. Le `HEALTHCHECK` appelle `/health/` toutes les 30 s.
 
-Dans `docker-compose.yml`, le service `web` remplace `DATABASE_URL` pour viser l'hôte `db`. Il désactive aussi la redirection HTTPS et HSTS, parce qu'en local on passe par HTTP. En vraie production, derrière un proxy HTTPS, on garde les valeurs par défaut.
+Dans `docker-compose.yml`, le service `web` remplace `DATABASE_URL` pour viser l'hôte `db`. Il désactive aussi la redirection HTTPS et HSTS, parce qu'en local on passe par HTTP. En vraie production, derrière un proxy HTTPS, on garde les valeurs par défaut. Il ajoute enfin l'hôte `web` à `ALLOWED_HOSTS`, pour les appels du service `frontend`.
+
+Le service `frontend` est dans un profil. Sans `--profile frontend`, Compose démarre seulement `web`, `db` et `pgadmin`, comme avant, et le port 3000 reste libre pour `npm run dev`. En ligne, le front-end tourne sur Vercel, qui n'utilise pas ce service. Le `frontend/Dockerfile` a trois étapes. La première lance `npm ci`. La deuxième fait le build avec `NEXT_OUTPUT=standalone`, que `next.config.ts` change en `output: "standalone"`. La dernière (`node:26-slim`) garde seulement `server.js`, les fichiers de `node_modules` qu'il utilise et `.next/static`. Elle tourne avec l'utilisateur `node`. Sans cette variable, le build reste le build habituel, celui de Vercel, de `npm run start` et de Playwright.
+
+Les clés de Supabase viennent de `frontend/.env.local` au démarrage du conteneur, et n'entrent jamais dans l'image (`frontend/.dockerignore` exclut `.env*`). `SUPABASE_URL` est un cas à part, car `next/image` la lit au build. Pour voir les images de couverture, nous la mettons dans le `.env` de la racine (elle n'est pas secrète), et Compose la donne au build et au démarrage. Sans elle, les voyages gardent l'image par défaut et l'envoi d'images répond qu'il n'est pas configuré. Le premier build prend plusieurs minutes, surtout pour `npm ci`. Les suivants réutilisent le cache de npm.
+
+```powershell
+docker compose --profile frontend up --build -d
+docker compose exec web python manage.py seed_demo --password "MotDePasseDemo-2026"
+docker compose ps                # frontend et web doivent être « healthy »
+docker compose --profile frontend down
+```
 
 ## Lancer le front-end
 
@@ -235,6 +248,97 @@ On se connecte ensuite avec `alice` sur https://travelhub-uqar.vercel.app/login.
 
 Le CORS ne joue que si un navigateur appelle Django directement. Dans TravelHub, le navigateur appelle seulement Next.js, et les appels vers Django partent du serveur Next.js. Un serveur n'applique pas le CORS, donc ces appels marchent quelle que soit la valeur de `CORS_ALLOWED_ORIGINS`. Nous la réglons quand même sur le domaine Vercel, comme le demande l'énoncé. Elle protégerait l'API si une page l'appelait un jour depuis le navigateur.
 
+Le script `scripts/check-production.ps1` refait ces vérifications d'un coup (voir [Production](#production)).
+
+## Production
+
+Cette section sert après le déploiement. Elle décrit la configuration à vérifier, la procédure avant la démo et avant la correction, les journaux, les sauvegardes de Neon et le retour arrière.
+
+### Configuration vérifiée
+
+Nous avons repassé la configuration le 25 novembre 2026. Les valeurs restent dans les tableaux de bord, jamais dans le dépôt.
+
+| Élément | Valeur attendue | Comment le vérifier |
+| --- | --- | --- |
+| Variables Vercel | Les cinq variables de [Front-end sur Vercel](#front-end-sur-vercel), cochées pour **Production** et pour **Preview** | *Settings > Environment Variables*, filtre par environnement. Sans `DJANGO_API_URL` en Preview, la page d'une PR plante. Redéployer après un changement |
+| `CORS_ALLOWED_ORIGINS` (Render) | `https://travelhub-uqar.vercel.app`, l'URL de production exacte | Le script ci-dessous. L'origine de Vercel reçoit `access-control-allow-origin`, une autre origine non |
+| `ALLOWED_HOSTS` (Render) | `travelhub-uqar-api.onrender.com,localhost` | `/health/` répond 200. Un hôte absent donnerait 400 |
+| `DEBUG` (Render) | Absente | `config.settings.prod` force `DEBUG = False`. Une route inconnue répond 404 en JSON, sans la page de débogage |
+| `SECRET_KEY` (Render) | Unique, générée une seule fois pour Render, 50 caractères ou plus | Elle n'est ni dans `.env`, ni dans la CI, ni dans le dépôt. La changer déconnecte tout le monde, car elle signe les JWT |
+| `DEMO_PASSWORD` | Différent de `MotDePasseDemo-2026`, celui de ce README | Le script tente une connexion d'`alice` avec le mot de passe du README. Django doit répondre 401. Nous donnons le vrai mot de passe au correcteur hors du dépôt |
+
+```powershell
+.\scripts\check-production.ps1     # sans mot de passe, ne modifie rien
+```
+
+Le script réveille d'abord l'API, puis il vérifie `/health/`, le 404 en JSON, HSTS, le CORS, le refus du mot de passe du README, la page `/login` de Vercel avec ses en-têtes et la redirection de `/dashboard` sans cookie. Il affiche une ligne `OK` ou `ÉCHEC` par vérification. Le 25 novembre, les huit vérifications sont passées, et Render s'est réveillé en 41 s.
+
+### Avant la démo et avant la correction
+
+Les services gratuits s'endorment. Render arrête l'API après 15 minutes sans requête, et la réveille en une minute environ. Neon suspend la base après 5 minutes. Supabase met en pause un projet gratuit après 7 jours sans activité, et les images ne s'affichent plus. La veille, puis juste avant de commencer, nous faisons donc ceci.
+
+1. Lancer `.\scripts\check-production.ps1`, ou ouvrir https://travelhub-uqar-api.onrender.com/health/ et attendre la réponse `{"status": "ok", …}`.
+2. Ouvrir le projet `travelhub` dans le tableau de bord de Supabase. S'il est en pause, cliquer sur *Restore project* et attendre quelques minutes.
+3. Se connecter une fois avec `alice` sur https://travelhub-uqar.vercel.app, puis ouvrir « Automne à Paris » et une de ses destinations. La couverture, la météo et la fiche pays doivent s'afficher.
+
+Si plus de 15 minutes passent avant la démo, Render se rendort, et on refait l'étape 1.
+
+### Données de démonstration en production
+
+Les dates de `seed_demo` dépendent du jour où on le lance. Nous le relançons donc la veille de la démo, pour avoir un voyage en cours avec sa météo. `--reset` supprime aussi les voyages ajoutés pendant les répétitions. Nous faisons d'abord une sauvegarde.
+
+```powershell
+# Fenêtre PowerShell réservée à la production, fermée à la fin
+$env:DATABASE_URL = neon connection-string production --database-name travelhub --role-name travelhub_owner --ssl require
+.\scripts\backup.ps1                                   # backups\travelhub-neon_AAAAMMJJ-HHMMSS.dump
+$env:DEMO_PASSWORD = Read-Host "Mot de passe des comptes de démo en production"
+.\.venv\Scripts\python.exe manage.py seed_demo --reset
+Remove-Item Env:DATABASE_URL, Env:DEMO_PASSWORD
+```
+
+Ensuite, dans chaque navigateur utilisé pendant les répétitions, nous nous déconnectons, puis nous supprimons les cookies de `travelhub-uqar.vercel.app` (`th_access` et `th_refresh`). `--reset` recrée les comptes avec de nouveaux identifiants. Avec un ancien `th_refresh`, le rafraîchissement du jeton fait répondre 500 à Django, car SimpleJWT 5.5.1 cherche le compte supprimé avec `objects.get()` sans attraper `DoesNotExist`. Le front-end renvoie alors vers `/login?expired=1`, mais l'erreur et sa trace arrivent dans le journal de Render.
+
+Enfin, nous nous connectons avec `alice` et nous renvoyons l'image de couverture de démonstration sur « Automne à Paris » (bouton sur la couverture). Les anciennes images restent dans le bucket, sous `trips/<ancien id>/`. On peut les supprimer dans *Storage* sur Supabase.
+
+### Journaux et monitoring
+
+| Où | Ce qu'on y trouve | Durée |
+| --- | --- | --- |
+| Render, service `travelhub-uqar-api`, onglet *Logs* | Les lignes JSON de Django : une ligne `travelhub.request` par requête, les appels à Open-Meteo et à Countries GraphQL, les erreurs 500 avec leur trace. Recherche par texte, par exemple un `request_id`, et filtre par niveau | 7 jours |
+| Render, onglet *Events* | Déploiements, redémarrages, échecs du contrôle `/health/` | |
+| Vercel, projet `travelhub-uqar`, onglet *Logs* | Les requêtes reçues par Next.js, et nos lignes `{"event": "django_failure", "request_id": …}` | 1 heure sur le plan Hobby |
+| Vercel, onglet *Deployments* | Le journal de build de chaque déploiement | |
+
+Une erreur du serveur affiche une référence. Sur une page, c'est la ligne « Référence de l'erreur » sous le message. Dans un formulaire ou une fiche, le message finit par « Référence : … ». Cette référence est le `X-Request-ID` que `djangoFetch` envoie à Django. Django la garde, l'écrit dans chaque ligne de la requête (`request_id`) et la renvoie. Le serveur Next.js écrit la même valeur dans sa ligne `django_failure` (`src/lib/api/log.ts`). Pour comprendre une erreur, on colle donc la référence dans la recherche des journaux de Render, puis dans ceux de Vercel. Les erreurs de l'utilisateur (400, 401, 403, 404, 429) n'ont pas de référence, et le serveur Next.js ne les journalise pas.
+
+Vercel Web Analytics reste désactivé. Pour l'activer, on clique sur *Enable* dans l'onglet *Analytics* du projet, puis on installe `@vercel/analytics` et on ajoute `<Analytics />` (importé de `@vercel/analytics/next`) dans `src/app/layout.tsx`. Le plan Hobby compte 50 000 événements par mois. Nous ne l'avons pas fait, car l'énoncé ne le demande pas et cela ajoute une dépendance et un script.
+
+Nous n'avons pas de sonde permanente sur `/health/`. Cette route interroge la base (`SELECT 1`). Une sonde toutes les quelques minutes empêcherait Neon de s'endormir. La base tournerait alors en continu à 0,25 CU, soit 6 heures de calcul par jour, et les 100 heures gratuites du mois seraient épuisées en 16 jours environ. Nous réveillons donc l'API à la main avant la démo.
+
+### Sauvegardes de Neon
+
+Sur le plan Free, Neon garde 6 heures d'historique au plus. Sa restauration instantanée ne remonte donc pas plus loin, et ce n'est pas une vraie sauvegarde. La vraie sauvegarde est une archive `pg_dump` sur notre poste. Nous en faisons une avant la démo, avant la remise et avant chaque `seed_demo --reset`.
+
+```powershell
+$env:DATABASE_URL = neon connection-string production --database-name travelhub --role-name travelhub_owner --ssl require
+.\scripts\backup.ps1               # backups\travelhub-neon_AAAAMMJJ-HHMMSS.dump
+Remove-Item Env:DATABASE_URL
+# Vérification : l'archive relue dans une base locale neuve
+.\scripts\restore.ps1 -File .\backups\travelhub-neon_20261125-001810.dump -Database travelhub_neon
+```
+
+L'URL de Neon finit par `?sslmode=require&channel_binding=require`. Les scripts passent ces paramètres à `pg_dump` et `psql` (`PGSSLMODE` et `PGCHANNELBINDING`), donc la connexion est toujours chiffrée. Les sauvegardes de Neon forment leur propre série (`travelhub-neon_…`), et une sauvegarde locale ne les supprime jamais. La première a été faite le 25 novembre 2026 (66 Ko). Relue dans une base locale, elle contenait 34 migrations, 4 comptes, 4 voyages, 5 destinations et 22 activités.
+
+Le dossier `backups/` est ignoré par Git. Une archive contient les courriels et les mots de passe chiffrés des comptes. Nous la copions sur un support personnel, jamais dans un endroit public.
+
+### Retour arrière
+
+**Front-end (Vercel).** Dans *Deployments*, on ouvre le menu du déploiement de production précédent et on choisit *Instant Rollback*. Le plan Hobby permet de revenir seulement au déploiement juste avant. Après un retour arrière, Vercel n'envoie plus les nouveaux commits de `master` en production. Une fois le problème corrigé, on clique sur *Manage* dans la case du déploiement de production, puis on promeut le bon déploiement (*Promote*).
+
+**API (Render).** Dans *Deploys*, on choisit un déploiement réussi, puis *Rollback* et *Rollback to this deploy*. Le plan gratuit permet de revenir aux deux derniers déploiements seulement. Un retour arrière fait depuis le tableau de bord coupe le déploiement automatique. Il faut le rallumer dans *Settings* après la correction. Pour un commit plus ancien, on annule le commit fautif avec `git revert` dans une PR. Quand la CI est verte sur `master`, Render redéploie tout seul (`autoDeployTrigger: checksPass`). Un retour arrière ne défait pas les migrations déjà appliquées. Les migrations du TP2 ajoutent seulement des colonnes, donc une ancienne image marche encore avec la base.
+
+**Base (Neon).** Dans les 6 heures, on peut utiliser la restauration instantanée de Neon (*Backup & Restore* dans la console). Au-delà, on restaure une archive avec `.\scripts\restore.ps1 -File .\backups\travelhub-neon_<horodatage>.dump -Force`, avec `DATABASE_URL` qui vise Neon. Pour une base distante, le script exige `-File`. Il ne prend jamais « la dernière sauvegarde » au hasard.
+
 ## Variables d'environnement
 
 Les variables sont lues dans l'environnement, sinon dans `.env` (le modèle est `.env.example`). Si une variable existe déjà dans l'environnement, elle passe avant celle de `.env`.
@@ -314,7 +418,7 @@ L'application écrit une ligne JSON par événement (`apps/core/logs.py`). Les l
 | `django.request` | Requêtes en 4xx (WARNING) et erreurs 500 avec leur trace (ERROR). Le client reçoit seulement `internal_error` |
 | `gunicorn.error` | Démarrage de Gunicorn et de ses processus (Docker) |
 
-Chaque réponse a un en-tête `X-Request-ID` (`apps/core/middleware.py`). Le même identifiant se retrouve dans toutes les lignes de la requête, même celles écrites par les fils de la vue d'ensemble. Si le client ou un proxy envoie déjà un `X-Request-ID`, on le garde s'il est sûr (lettres, chiffres, `. _ -`, 64 caractères au plus). Sinon, on le remplace. Le front-end peut le lire (`CORS_EXPOSE_HEADERS`, avec `Retry-After`) et l'afficher avec un message d'erreur.
+Chaque réponse a un en-tête `X-Request-ID` (`apps/core/middleware.py`). Le même identifiant se retrouve dans toutes les lignes de la requête, même celles écrites par les fils de la vue d'ensemble. Si le client ou un proxy envoie déjà un `X-Request-ID`, on le garde s'il est sûr (lettres, chiffres, `. _ -`, 64 caractères au plus). Sinon, on le remplace. Le front-end peut le lire (`CORS_EXPOSE_HEADERS`, avec `Retry-After`). Le serveur Next.js envoie son propre `X-Request-ID` à chaque appel, et il l'affiche comme « référence » avec les erreurs du serveur (voir [Journaux et monitoring](#journaux-et-monitoring)).
 
 Aucun secret n'est journalisé. On n'écrit jamais les corps de requête, les en-têtes, la chaîne de requête ou les paramètres des appels externes. Par sécurité, le formateur masque aussi (`[masqué]`) les champs dont le nom fait penser à un secret (`password`, `token`, `access`, `refresh`, `authorization`, `cookie`…). Il masque aussi les JWT et les en-têtes `Bearer` trouvés dans un message ou une trace (voir `apps/core/tests/test_logging.py`).
 
@@ -344,13 +448,15 @@ La base est vérifiée avec `SELECT 1` et le cache avec une écriture suivie d'u
 
 ## Sauvegarde et restauration
 
-On utilise `scripts/backup.ps1` et `scripts/restore.ps1` (PowerShell 5.1 ou 7). Les archives sont au format personnalisé de `pg_dump` (`-Fc`) et vont dans `backups/`, qui est ignoré par Git. Elles s'appellent `<base>_AAAAMMJJ-HHMMSS.dump` en local et `<base>-docker_AAAAMMJJ-HHMMSS.dump` avec Docker. Le mot de passe n'apparaît jamais sur la ligne de commande. Il passe par `PGPASSWORD` pendant la commande, et dans le conteneur on n'en a pas besoin (connexion locale par socket).
+On utilise `scripts/backup.ps1` et `scripts/restore.ps1` (PowerShell 5.1 ou 7). Les archives sont au format personnalisé de `pg_dump` (`-Fc`) et vont dans `backups/`, qui est ignoré par Git. Elles s'appellent `<base>_AAAAMMJJ-HHMMSS.dump` en local, `<base>-docker_AAAAMMJJ-HHMMSS.dump` avec Docker et `<base>-neon_AAAAMMJJ-HHMMSS.dump` pour Neon (option `-Label` pour un autre nom). Le mot de passe n'apparaît jamais sur la ligne de commande. Il passe par `PGPASSWORD` pendant la commande, et dans le conteneur on n'en a pas besoin (connexion locale par socket). Les paramètres `sslmode` et `channel_binding` de `DATABASE_URL` passent aussi par `PGSSLMODE` et `PGCHANNELBINDING`, ce qui garde la connexion à Neon chiffrée.
 
 ```powershell
-.\scripts\backup.ps1                                 # base de DATABASE_URL (PostgreSQL local)
+.\scripts\backup.ps1                                 # base de DATABASE_URL (PostgreSQL local, ou Neon)
 .\scripts\backup.ps1 -Docker                         # base du service db de docker compose
 .\scripts\backup.ps1 -Keep 14 -OutputDir D:\sauvegardes
 ```
+
+La sauvegarde de la base de production est décrite dans [Sauvegardes de Neon](#sauvegardes-de-neon).
 
 Chaque archive est relue avec `pg_restore --list` avant d'être gardée, et une archive incomplète est supprimée. On garde les 7 sauvegardes les plus récentes de chaque série (option `-Keep`) et les plus vieilles sont supprimées.
 
@@ -363,7 +469,9 @@ Chaque archive est relue avec `pg_restore --list` avant d'être gardée, et une 
 
 Sans `-File`, le script prend la sauvegarde la plus récente de `backups/`. Sans `-Database`, il restaure dans la base de `DATABASE_URL` (ou `POSTGRES_DB` avec `-Docker`). Si la base n'existe pas, elle est créée, car le rôle de l'application a le droit `CREATEDB`.
 
-Une base qui a déjà des tables n'est écrasée qu'avec `-Force` (`pg_restore --clean --if-exists`). La restauration se fait dans une seule transaction (`--single-transaction --exit-on-error`). Si l'archive est corrompue ou qu'une erreur arrive, la base ne change pas. Les options `--no-owner --no-privileges` permettent de restaurer une sauvegarde locale dans Docker, et l'inverse.
+Une base qui a déjà des tables n'est écrasée qu'avec `-Force` (`pg_restore --clean --if-exists`). `pg_restore` écrit d'abord le SQL de l'archive dans un fichier temporaire, puis `psql` le rejoue dans une seule transaction (`--single-transaction` et `ON_ERROR_STOP`). Si l'archive est corrompue ou qu'une erreur arrive, la base ne change pas. Les options `--no-owner --no-privileges` permettent de restaurer une sauvegarde locale dans Docker, et l'inverse. Pour une base distante comme Neon, `-File` est obligatoire.
+
+Ce détour par le SQL vient de Neon. Son `pg_dump` écrit une ligne `ALTER TABLE ONLY … ALTER COLUMN … SET (pg_attver=…)` pour chaque colonne, et un PostgreSQL ordinaire refuse cette option interne (`unrecognized parameter "pg_attver"`). Notre première restauration d'une sauvegarde de Neon a échoué ainsi dès la table `accounts_user`, alors que la documentation de Neon dit l'archive compatible. Le script retire ces lignes du SQL (92 dans notre base) avant de le rejouer.
 
 Avec `-Docker`, si la base visée est celle de `web`, le service est arrêté pendant la restauration puis redémarré. Il applique alors les migrations plus récentes que la sauvegarde. En local, pensez à arrêter `runserver` avant d'écraser la base qu'il utilise.
 
