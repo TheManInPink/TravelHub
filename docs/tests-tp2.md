@@ -189,6 +189,8 @@ Le test crée son propre compte `e2e-…`. Il n'a donc besoin d'aucun mot de pas
 
 En local, il passe en 21 secondes environ, deux fois de suite, avec Edge (`PLAYWRIGHT_CHANNEL=msedge`). Dans la CI, le job « Parcours E2E (Playwright) » démarre PostgreSQL et Django, installe le Chromium de Playwright, fait le build de Next.js, puis lance le parcours. Le parcours y passe en 7 secondes, et tout le job prend environ une minute et demie. En cas d'échec, il publie le rapport Playwright, avec la trace, et le journal de Django.
 
+Un second test, `e2e/production.spec.ts`, parcourt la version en ligne (Vercel, Render, Neon, Supabase). Il ne tourne que si `E2E_BASE_URL` est défini, jamais dans la CI. Il ajoute ce que le premier ne couvre pas : l'image de couverture envoyée à Supabase, l'ajout d'une activité, la fiche pays, la météo et la déconnexion finale. Il vérifie aussi que le navigateur n'appelle jamais Render ni Supabase directement. Le 25 novembre 2026, il a réussi en 26 secondes sur https://travelhub-uqar.vercel.app (voir « Parcours complet sur les URL publiques » dans le README).
+
 ## 10. Lighthouse
 
 Nous avons mesuré `/login` et `/trips` avec Lighthouse 13.6 dans Edge sans interface, sur le build de production branché sur le Django local. Pour `/trips`, Lighthouse envoyait les cookies de session d'`alice`. Le mode mobile est le profil par défaut de Lighthouse, qui simule une connexion 4G lente et un processeur quatre fois plus lent. Le mode bureau utilise `--preset=desktop`.

@@ -7,8 +7,14 @@ import { defineConfig, devices } from "@playwright/test";
 const PORT = 3100;
 const isCI = Boolean(process.env.CI);
 
+// Avec E2E_BASE_URL (par exemple https://travelhub-uqar.vercel.app), Playwright lance
+// seulement e2e/production.spec.ts sur ce site, sans démarrer de serveur. Sans elle (CI,
+// poste), il lance e2e/parcours.spec.ts sur le build local.
+const remoteUrl = process.env.E2E_BASE_URL?.replace(/\/+$/, "");
+
 export default defineConfig({
   testDir: "./e2e",
+  testMatch: remoteUrl ? "production.spec.ts" : "parcours.spec.ts",
   // Un seul parcours, qui écrit dans la base : pas de tests en parallèle.
   workers: 1,
   forbidOnly: isCI,
@@ -19,7 +25,7 @@ export default defineConfig({
   expect: { timeout: 10_000 },
   use: {
     // localhost est un contexte sûr : Chromium accepte les cookies Secure en HTTP.
-    baseURL: `http://localhost:${PORT}`,
+    baseURL: remoteUrl ?? `http://localhost:${PORT}`,
     locale: "fr-CA",
     timezoneId: "America/Toronto",
     trace: "retain-on-failure",
@@ -36,10 +42,12 @@ export default defineConfig({
       },
     },
   ],
-  webServer: {
-    command: `npm run start -- -p ${PORT}`,
-    url: `http://localhost:${PORT}/login`,
-    reuseExistingServer: !isCI,
-    timeout: 120_000,
-  },
+  webServer: remoteUrl
+    ? undefined
+    : {
+        command: `npm run start -- -p ${PORT}`,
+        url: `http://localhost:${PORT}/login`,
+        reuseExistingServer: !isCI,
+        timeout: 120_000,
+      },
 });
