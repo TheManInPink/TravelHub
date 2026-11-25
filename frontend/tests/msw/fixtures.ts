@@ -2,6 +2,7 @@
 // et types/graphql.ts : si un type change, TypeScript signale aussi les données de test.
 
 import type {
+  DestinationWeather,
   Paginated,
   TokenPair,
   Trip,
@@ -134,6 +135,57 @@ export const kyotoPage: GqlDestinationPage = {
       date: "2027-04-09",
       startTime: "09:30:00",
       cost: "45.00",
+    },
+  ],
+};
+
+/**
+ * Réponse de GET /api/destinations/3/weather/ : Kyoto, avec trois jours du séjour dans
+ * les 16 jours de prévision d'Open-Meteo.
+ */
+export const kyotoWeather: DestinationWeather = {
+  destination: 3,
+  city: "Kyoto",
+  country_code: "JP",
+  latitude: "35.011600",
+  longitude: "135.768100",
+  timezone: "Asia/Tokyo",
+  units: { temperature: "°C", wind_speed: "km/h", precipitation: "mm" },
+  current: {
+    time: "2027-04-08T09:15",
+    temperature: 17.4,
+    wind_speed: 6.1,
+    precipitation: 0,
+    weather_code: 2,
+    description: "Partiellement nuageux",
+  },
+  daily: [
+    {
+      date: "2027-04-08",
+      temperature_max: 21.3,
+      temperature_min: 12.8,
+      precipitation_sum: 0,
+      wind_speed_max: 11.2,
+      weather_code: 1,
+      description: "Plutôt dégagé",
+    },
+    {
+      date: "2027-04-09",
+      temperature_max: 18.6,
+      temperature_min: 11.4,
+      precipitation_sum: 4.2,
+      wind_speed_max: 19.8,
+      weather_code: 61,
+      description: "Pluie faible",
+    },
+    {
+      date: "2027-04-10",
+      temperature_max: null,
+      temperature_min: null,
+      precipitation_sum: null,
+      wind_speed_max: null,
+      weather_code: null,
+      description: "",
     },
   ],
 };

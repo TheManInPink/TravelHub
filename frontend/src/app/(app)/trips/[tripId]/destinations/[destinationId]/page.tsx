@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { DestinationView } from "@/components/destinations/DestinationView";
+import { DestinationEnrichment } from "@/components/enrichment/DestinationEnrichment";
 import { ErrorState } from "@/components/feedback/ErrorState";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 import { loadDestinationPage } from "@/lib/api/destinationPage";
@@ -13,6 +14,9 @@ import { tripHref } from "@/lib/itineraryPaths";
 // envoyée par le serveur Next.js : le navigateur n'appelle jamais /graphql/.
 // Après l'ajout, la modification ou la suppression d'une activité, la Server Action
 // appelle revalidatePath, et Next.js renvoie cette page à jour sans rechargement.
+//
+// Le rendu est hybride. Les activités arrivent avec la page (SSR), la fiche pays suit
+// en streaming sous Suspense, et la météo est chargée ensuite par le navigateur (CSR).
 
 export async function generateMetadata({
   params,
@@ -55,5 +59,10 @@ export default async function DestinationDetailPage({
       </>
     );
   }
-  return <DestinationView destination={data.destination} />;
+  return (
+    <DestinationView
+      destination={data.destination}
+      aside={<DestinationEnrichment destination={data.destination} />}
+    />
+  );
 }

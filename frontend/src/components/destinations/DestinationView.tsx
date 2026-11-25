@@ -13,6 +13,7 @@ import { sumAmounts } from "@/lib/decimal";
 import { formatAmount, formatDate, formatDateRange } from "@/lib/format";
 import { editDestinationHref, tripHref } from "@/lib/itineraryPaths";
 import { canEditTrip } from "@/lib/tripAccess";
+import { cn } from "@/lib/utils";
 import type { GqlDestinationPage } from "@/types/graphql";
 import { DeleteDestinationButton } from "./DeleteDestinationButton";
 
@@ -21,8 +22,8 @@ import { DeleteDestinationButton } from "./DeleteDestinationButton";
 // peut le tester avec des props.
 //
 // Les boutons dépendent de trip.myRole : le propriétaire et les éditeurs modifient la
-// destination et ses activités, un lecteur ne voit que la liste. Les dialogues et les
-// boutons de suppression sont les seuls Client Components de la page.
+// destination et ses activités, un lecteur ne voit que la liste. Les dialogues, les
+// boutons de suppression et la météo sont les seuls Client Components de la page.
 
 /** Boutons de la destination, ou undefined pour un lecteur. */
 function destinationActions(destination: GqlDestinationPage, canEdit: boolean): ReactNode {
@@ -42,7 +43,17 @@ function destinationActions(destination: GqlDestinationPage, canEdit: boolean): 
   );
 }
 
-export function DestinationView({ destination }: { destination: GqlDestinationPage }) {
+interface DestinationViewProps {
+  destination: GqlDestinationPage;
+  /**
+   * Colonne latérale : la fiche pays et la météo (DestinationEnrichment). La page la
+   * passe en prop, car la fiche pays est un Server Component asynchrone, que Vitest ne
+   * peut pas afficher à l'intérieur de ce composant.
+   */
+  aside?: ReactNode;
+}
+
+export function DestinationView({ destination, aside }: DestinationViewProps) {
   const { trip, activities } = destination;
   const canEdit = canEditTrip(participantRoleFromGql(trip.myRole));
   const stay = { start: destination.arrivalDate, end: destination.departureDate };
@@ -75,34 +86,47 @@ export function DestinationView({ destination }: { destination: GqlDestinationPa
         </Figure>
       </dl>
 
-      <section aria-labelledby="activites" className="flex flex-col gap-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 id="activites" className="text-lg font-semibold">
-            Activités
-          </h2>
-          {activities.length > 0 ? addActivity : null}
-        </div>
-        {activities.length > 0 ? (
-          <ActivityList
-            destinationId={destination.id}
-            stay={stay}
-            activities={activities}
-            canEdit={canEdit}
-          />
-        ) : (
-          <EmptyState
-            icon={CalendarPlusIcon}
-            titleAs="h3"
-            title="Aucune activité prévue"
-            description={
-              canEdit
-                ? "Ajoutez une visite, un repas ou un transport pendant le séjour."
-                : "Le propriétaire ou un éditeur du voyage peut en ajouter."
-            }
-            action={addActivity}
-          />
-        )}
-      </section>
+      {/* Sur grand écran, les activités à gauche et la colonne latérale à droite. Sur
+          mobile, la colonne latérale passe sous les activités (ordre du HTML). */}
+      <div className={cn("flex flex-col gap-6", aside && "lg:grid lg:grid-cols-3 lg:items-start")}>
+        <section
+          aria-labelledby="activites"
+          className={cn("flex min-w-0 flex-col gap-3", aside && "lg:col-span-2")}
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 id="activites" className="text-lg font-semibold">
+              Activités
+            </h2>
+            {activities.length > 0 ? addActivity : null}
+          </div>
+          {activities.length > 0 ? (
+            <ActivityList
+              destinationId={destination.id}
+              stay={stay}
+              activities={activities}
+              canEdit={canEdit}
+            />
+          ) : (
+            <EmptyState
+              icon={CalendarPlusIcon}
+              titleAs="h3"
+              title="Aucune activité prévue"
+              description={
+                canEdit
+                  ? "Ajoutez une visite, un repas ou un transport pendant le séjour."
+                  : "Le propriétaire ou un éditeur du voyage peut en ajouter."
+              }
+              action={addActivity}
+            />
+          )}
+        </section>
+
+        {aside ? (
+          <aside aria-label="Pays et météo" className="flex min-w-0 flex-col gap-6">
+            {aside}
+          </aside>
+        ) : null}
+      </div>
     </>
   );
 }

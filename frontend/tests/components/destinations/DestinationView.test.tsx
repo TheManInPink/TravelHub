@@ -117,6 +117,24 @@ describe("DestinationView", () => {
     expect(screen.getAllByRole("button", { name: "Ajouter une activité" })).toHaveLength(1);
   });
 
+  it("place la colonne latérale (pays et météo) après les activités", () => {
+    render(<DestinationView destination={kyotoAs("OWNER")} aside={<p>Fiche pays</p>} />);
+
+    const aside = screen.getByRole("complementary", { name: "Pays et météo" });
+    expect(aside).toHaveTextContent("Fiche pays");
+    // Sur mobile, la colonne passe sous le contenu : elle vient après dans le HTML.
+    const activities = screen.getByRole("heading", { level: 2, name: "Activités" });
+    expect(activities.compareDocumentPosition(aside) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+  });
+
+  it("n'affiche pas de colonne latérale vide", () => {
+    render(<DestinationView destination={kyotoAs("OWNER")} />);
+
+    expect(screen.queryByRole("complementary")).not.toBeInTheDocument();
+  });
+
   it("explique à un lecteur qui peut ajouter des activités", () => {
     render(<DestinationView destination={kyotoAs("VIEWER", [])} />);
 

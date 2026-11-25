@@ -300,3 +300,16 @@ export interface ApiErrorBody {
     details: ApiErrorDetails;
   };
 }
+
+// Réponses des Route Handlers de Next.js (le BFF), lues par le navigateur
+
+/**
+ * Erreur d'un Route Handler, par exemple la météo. Le code vient de Django (ou du
+ * front-end, comme network_error) et le message est déjà prêt pour l'utilisateur.
+ */
+export interface BffErrorBody {
+  error: {
+    code: string;
+    message: string;
+  };
+}
