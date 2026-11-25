@@ -139,6 +139,10 @@ jobs:
       - name: ESLint
         run: npm run lint
 
+      # Prettier vérifie seulement le format. Le code mal formaté se corrige avec npm run format.
+      - name: Format (Prettier)
+        run: npm run format:check
+
       - name: Types (next typegen et tsc)
         run: npm run typecheck
 

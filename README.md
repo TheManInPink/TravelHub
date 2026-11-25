@@ -102,7 +102,7 @@ npm test                            # tests Vitest
 
 Le fichier `.env.local` reste hors de Git. Seules les variables qui commencent par `NEXT_PUBLIC_` arrivent dans le navigateur. La clé secrète de Supabase n'a donc jamais ce préfixe.
 
-D'autres commandes se lancent aussi depuis `frontend/`. `npm run lint` lance ESLint et `npm run typecheck` génère les types des routes avant de lancer `tsc` de TypeScript 7. `npm run build` fait le build de production, comme sur Vercel. Les tests sont dans `frontend/tests/` et `npm run test:watch` les relance à chaque modification.
+D'autres commandes se lancent aussi depuis `frontend/`. `npm run lint` lance ESLint, qui échoue dès le premier avertissement, et `npm run typecheck` génère les types des routes avant de lancer `tsc` de TypeScript 7. `npm run format` met le code au format Prettier (`.prettierrc.json`, lignes de 100 caractères), et `npm run format:check` vérifie seulement le format, comme la CI. Les composants générés par shadcn (`src/components/ui/`) restent hors de Prettier. `npm run build` fait le build de production, comme sur Vercel. Les tests sont dans `frontend/tests/`, `npm run test:watch` les relance à chaque modification et `npm run test:coverage` mesure la couverture (rapport dans `frontend/coverage/`). Le résumé des tests pour le rapport est dans `docs/tests-tp2.md`.
 
 TypeScript 7.0 n'a pas encore d'API JavaScript, et `typescript-eslint` en a besoin. Nous suivons donc la méthode de l'équipe TypeScript, avec deux paquets. Le paquet `typescript7` est TypeScript 7.0, que `npm run typecheck` utilise. Le nom `typescript` est un alias vers `@typescript/typescript6`, qui fournit l'API de TypeScript 6 à `typescript-eslint` et la commande `tsc6`. `next build` la trouve tout seul pour sa propre vérification des types. Nous pourrons revenir à un seul paquet quand TypeScript 7.1 aura son API.
 
@@ -118,7 +118,7 @@ La tâche **Lint et tests** démarre un service PostgreSQL 18 et utilise le cach
 
 La tâche **Image Docker** construit l'image avec le cache de GitHub Actions. Elle lance ensuite `docker compose up --wait web`, qui attend que `/health/` réponde, puis vérifie `/health/`, `/api/docs/` et `/api/schema/`.
 
-La tâche **Front-end** installe Node.js 26 avec le cache npm, puis lance `npm ci` dans `frontend/`. Elle enchaîne ensuite le lint, la vérification des types, les tests Vitest et le build. Pour le build, chaque variable de `frontend/.env.example` reçoit une valeur factice.
+La tâche **Front-end** installe Node.js 26 avec le cache npm, puis lance `npm ci` dans `frontend/`. Elle enchaîne ensuite le lint, le format Prettier, la vérification des types, les tests Vitest et le build. Pour le build, chaque variable de `frontend/.env.example` reçoit une valeur factice.
 
 Dependabot (`.github/dependabot.yml`) propose chaque semaine les mises à jour de pip, de npm (dossier `frontend/`) et de GitHub Actions. Pour npm, il ne propose pas de nouvelle version majeure de `@types/node`, qui suit Node.js 26, ni de l'alias `typescript`, qui doit rester en version 6 pour `typescript-eslint`.
 
