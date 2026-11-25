@@ -97,7 +97,10 @@ describe("register", () => {
       http.post(`${DJANGO_URL}/api/auth/register/`, async ({ request }) => {
         body = await request.json();
         return HttpResponse.json(
-          { user: { id: 9, ...newAccount, date_joined: "2026-11-23T00:00:00Z" }, tokens: newTokens },
+          {
+            user: { id: 9, ...newAccount, date_joined: "2026-11-23T00:00:00Z" },
+            tokens: newTokens,
+          },
           { status: 201 },
         );
       }),

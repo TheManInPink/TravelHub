@@ -18,14 +18,7 @@ export type DecimalString = string;
 export type TripStatus = "draft" | "planned" | "ongoing" | "completed" | "cancelled";
 export type ParticipantRole = "owner" | "editor" | "viewer";
 export type ActivityCategory =
-  | "sightseeing"
-  | "culture"
-  | "food"
-  | "nature"
-  | "sport"
-  | "transport"
-  | "accommodation"
-  | "other";
+  "sightseeing" | "culture" | "food" | "nature" | "sport" | "transport" | "accommodation" | "other";
 
 // Comptes (apps/accounts/serializers.py)
 

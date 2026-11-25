@@ -87,9 +87,7 @@ const MESSAGES: Readonly<Record<string, string | undefined>> = {
 };
 
 function formatDuration(value: number, unit: "second" | "minute" | "hour"): string {
-  return new Intl.NumberFormat("fr-CA", { style: "unit", unit, unitDisplay: "long" }).format(
-    value,
-  );
+  return new Intl.NumberFormat("fr-CA", { style: "unit", unit, unitDisplay: "long" }).format(value);
 }
 
 /** 90 donne « 2 minutes » et 5 donne « 5 secondes ». Nous arrondissons vers le haut. */

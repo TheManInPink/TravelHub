@@ -68,8 +68,9 @@ describe("destinationSchema", () => {
       departure_date: ["Le départ ne peut pas suivre la fin du voyage (14 avril 2027)."],
     });
     // Le premier et le dernier jour du voyage sont permis.
-    expect(fieldErrors({ ...valid, arrival_date: "2027-04-01", departure_date: "2027-04-14" }))
-      .toEqual({});
+    expect(
+      fieldErrors({ ...valid, arrival_date: "2027-04-01", departure_date: "2027-04-14" }),
+    ).toEqual({});
   });
 
   it("met l'erreur sur le départ quand il précède l'arrivée, même si un autre champ est faux", () => {

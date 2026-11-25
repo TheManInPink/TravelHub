@@ -82,8 +82,9 @@ describe("registerSchema", () => {
   });
 
   it("signale une confirmation différente sous le champ de confirmation", () => {
-    expect(errorsFor({ ...valid, password_confirm: "Autre-mot-de-passe" }, "password_confirm"))
-      .toEqual(["Les deux mots de passe ne correspondent pas."]);
+    expect(
+      errorsFor({ ...valid, password_confirm: "Autre-mot-de-passe" }, "password_confirm"),
+    ).toEqual(["Les deux mots de passe ne correspondent pas."]);
   });
 
   it("accepte un prénom et un nom vides, mais pas au-delà de 150 caractères", () => {

@@ -26,9 +26,7 @@ describe("EmptyState", () => {
   });
 
   it("n'affiche aucun lien sans action, et accepte un autre niveau de titre", () => {
-    render(
-      <EmptyState icon={PlaneIcon} title="Page introuvable" description="…" titleAs="h1" />,
-    );
+    render(<EmptyState icon={PlaneIcon} title="Page introuvable" description="…" titleAs="h1" />);
 
     expect(screen.getByRole("heading", { level: 1, name: "Page introuvable" })).toBeInTheDocument();
     expect(screen.queryByRole("link")).not.toBeInTheDocument();

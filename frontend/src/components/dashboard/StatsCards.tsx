@@ -75,10 +75,7 @@ function RemainingCard({ remaining }: { remaining: string | null }) {
   return <StatCard label="Budget restant" value={formatAmount(remaining)} />;
 }
 
-function NextTripAmounts({
-  stats,
-  statsError,
-}: Pick<StatsCardsProps, "stats" | "statsError">) {
+function NextTripAmounts({ stats, statsError }: Pick<StatsCardsProps, "stats" | "statsError">) {
   if (statsError || !stats) {
     return (
       <p role="alert" className="text-sm text-muted-foreground">

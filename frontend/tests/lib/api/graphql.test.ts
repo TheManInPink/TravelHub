@@ -96,7 +96,11 @@ describe("gqlFetch", () => {
     server.use(
       http.post(GRAPHQL_URL, () =>
         HttpResponse.json(
-          { errors: [{ message: "Requête ralentie.", extensions: { code: "throttled", details: {} } }] },
+          {
+            errors: [
+              { message: "Requête ralentie.", extensions: { code: "throttled", details: {} } },
+            ],
+          },
           { status: 429, headers: { "Retry-After": "30" } },
         ),
       ),
@@ -127,7 +131,9 @@ describe("gqlFetch", () => {
   });
 
   it("lève une ApiError si la réponse n'a ni data ni errors", async () => {
-    server.use(http.post(GRAPHQL_URL, () => HttpResponse.html("<h1>Bad Gateway</h1>", { status: 502 })));
+    server.use(
+      http.post(GRAPHQL_URL, () => HttpResponse.html("<h1>Bad Gateway</h1>", { status: 502 })),
+    );
     const error = await rejection(gqlFetch(QUERY, { id: "3" }));
     expect(error).toMatchObject({ status: 502, code: "internal_error" });
   });

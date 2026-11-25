@@ -128,7 +128,10 @@ export function DashboardView({ user, data, stats }: DashboardViewProps) {
         ) : (
           <p className="text-sm text-muted-foreground">
             Aucun voyage à venir.{" "}
-            <Link href="/trips/new" className="font-medium text-foreground underline-offset-4 hover:underline">
+            <Link
+              href="/trips/new"
+              className="font-medium text-foreground underline-offset-4 hover:underline"
+            >
               Planifier un voyage
             </Link>
           </p>

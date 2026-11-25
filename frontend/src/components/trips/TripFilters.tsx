@@ -120,7 +120,8 @@ export function TripFilters({ status, search = "", ordering }: TripFiltersProps)
     navigate({ status: undefined, search: "", ordering: undefined });
   }
 
-  const canReset = hasActiveFilters(current) || text.trim() !== "" || current.ordering !== undefined;
+  const canReset =
+    hasActiveFilters(current) || text.trim() !== "" || current.ordering !== undefined;
 
   return (
     <form

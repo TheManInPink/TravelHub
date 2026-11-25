@@ -48,9 +48,7 @@ describe("StatsCards", () => {
     expect(valueOf("Budget restant")).toMatch(/^[-−]325,00/);
     // getByText remplace les espaces insécables par des espaces simples. textContent
     // garde le texte exact, avec les espaces de fr-CA.
-    expect(screen.getByText(/^Dépassement de/).textContent).toBe(
-      `Dépassement de 325,00${NBSP}$`,
-    );
+    expect(screen.getByText(/^Dépassement de/).textContent).toBe(`Dépassement de 325,00${NBSP}$`);
   });
 
   it("indique un voyage sans budget", () => {

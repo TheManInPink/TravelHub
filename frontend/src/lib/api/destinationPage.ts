@@ -10,8 +10,7 @@ import type { GqlDestinationPage } from "@/types/graphql";
 
 /** Résultat du chargement : la destination, ou une erreur à afficher. */
 export type DestinationPageData =
-  | { kind: "destination"; destination: GqlDestinationPage }
-  | { kind: "error"; message: string };
+  { kind: "destination"; destination: GqlDestinationPage } | { kind: "error"; message: string };
 
 /**
  * Query GraphQL DestinationPage pour une page. Les erreurs attendues sont interceptées
