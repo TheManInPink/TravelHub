@@ -9,8 +9,8 @@ import { verifySession } from "@/lib/auth/session";
 
 // Détail d'un voyage, rendu au serveur à chaque visite (SSR). params est une Promise
 // depuis Next.js 15. La page charge le voyage (GET /api/trips/{id}/, avec ses
-// destinations et leurs activités), puis TripDetailView l'affiche. Seul le bouton
-// Supprimer est un Client Component.
+// destinations et leurs activités), puis TripDetailView l'affiche. Seuls le bouton
+// Supprimer et l'envoi de l'image de couverture sont des Client Components.
 
 export async function generateMetadata({
   params,
