@@ -18,6 +18,11 @@ const SECURITY_HEADERS = [
 ];
 
 const nextConfig: NextConfig = {
+  // Image Docker (frontend/Dockerfile) : NEXT_OUTPUT=standalone pendant le build crée
+  // .next/standalone, un server.js avec seulement les fichiers utiles de node_modules.
+  // Sans cette variable (Vercel, npm run start, Playwright), le build reste le build
+  // habituel. Vercel a sa propre sortie, et next start ne sert pas un build standalone.
+  output: process.env.NEXT_OUTPUT === "standalone" ? "standalone" : undefined,
   // En développement, le terminal de `npm run dev` affiche chaque appel du serveur à
   // Django avec son adresse complète, par exemple les POST vers /graphql/. Cela montre
   // que GraphQL passe par le serveur Next.js et jamais par le navigateur.

@@ -40,6 +40,19 @@ describe("next.config.ts", () => {
     },
   );
 
+  it("garde le build habituel sans NEXT_OUTPUT (Vercel, npm run start)", async () => {
+    const config = await loadConfig(PROJECT_URL);
+
+    expect(config.output).toBeUndefined();
+  });
+
+  it("crée la sortie standalone pour l'image Docker avec NEXT_OUTPUT=standalone", async () => {
+    vi.stubEnv("NEXT_OUTPUT", "standalone");
+    const config = await loadConfig(PROJECT_URL);
+
+    expect(config.output).toBe("standalone");
+  });
+
   it("accepte des Server Actions de 5 Mo, pour une image de 4 Mo", async () => {
     const config = await loadConfig(PROJECT_URL);
 

@@ -1,5 +1,6 @@
 # TravelHub en conteneurs : docker compose up --build
 #   API : http://localhost:8000/api/docs/   pgAdmin : http://localhost:5050
+#   Front-end : http://localhost:3000, avec docker compose --profile frontend up --build
 # Les variables sont lues dans .env, le même fichier qu'en développement local.
 
 services:
@@ -14,6 +15,9 @@ services:
       # En local on passe par HTTP, il n'y a pas de proxy HTTPS devant Gunicorn.
       SECURE_SSL_REDIRECT: "False"
       SECURE_HSTS_SECONDS: "0"
+      # Le service frontend appelle Django à l'adresse http://web:8000, donc avec l'hôte
+      # « web ». Il s'ajoute aux hôtes de .env.
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1},web
     # Pas de command : le CMD du Dockerfile applique les migrations à chaque démarrage,
     # puis lance Gunicorn, comme sur Render.
     ports:
@@ -23,6 +27,37 @@ services:
       - web-logs:/app/logs
     depends_on:
       db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Front-end Next.js en sortie standalone. En ligne, il tourne sur Vercel. Ici, il sert à
+  # lancer toute la pile sur notre poste : docker compose --profile frontend up --build.
+  # Sans le profil, docker compose up démarre seulement web, db et pgadmin, comme avant, et
+  # le port 3000 reste libre pour npm run dev.
+  frontend:
+    profiles: ["frontend"]
+    build:
+      context: ./frontend
+      args:
+        NEXT_PUBLIC_SITE_URL: http://localhost:${FRONTEND_PORT:-3000}
+        # Facultative et publique : l'adresse du projet Supabase, lue au build pour
+        # next/image. Elle vient du .env de la racine (ou du terminal).
+        SUPABASE_URL: ${SUPABASE_URL:-}
+    image: travelhub-frontend:latest
+    # SUPABASE_SECRET_KEY et SUPABASE_BUCKET, s'il existe un frontend/.env.local.
+    env_file:
+      - path: ./frontend/.env.local
+        required: false
+    # environment passe avant env_file : le DJANGO_API_URL de .env.local (Django lancé
+    # sur notre poste) est remplacé par le service web. SUPABASE_URL a la même valeur
+    # qu'au build, sinon next/image refuserait les images de couverture.
+    environment:
+      DJANGO_API_URL: http://web:8000
+      SUPABASE_URL: ${SUPABASE_URL:-}
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    depends_on:
+      web:
         condition: service_healthy
     restart: unless-stopped
 
