@@ -4,9 +4,15 @@ import { afterAll, afterEach, beforeAll, vi } from "vitest";
 import { resetRequestMocks } from "./mocks/cookies";
 import { DJANGO_URL } from "./msw/handlers";
 import { server } from "./msw/server";
+import { SUPABASE_TEST_BUCKET, SUPABASE_TEST_KEY, SUPABASE_TEST_URL } from "./msw/supabase";
 
 // Adresse de l'API Django simulée par MSW. djangoFetch la relit à chaque appel.
 process.env.DJANGO_API_URL = DJANGO_URL;
+
+// Supabase Storage simulé par MSW. getSupabase() relit ces variables à chaque envoi.
+process.env.SUPABASE_URL = SUPABASE_TEST_URL;
+process.env.SUPABASE_SECRET_KEY = SUPABASE_TEST_KEY;
+process.env.SUPABASE_BUCKET = SUPABASE_TEST_BUCKET;
 
 // cookies() et headers() de next/headers ne marchent que pendant une requête Next.js.
 // Dans tous les tests, ils lisent les faux magasins de tests/mocks/cookies.ts.
