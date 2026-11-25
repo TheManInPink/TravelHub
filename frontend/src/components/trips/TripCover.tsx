@@ -1,14 +1,19 @@
 import Image from "next/image";
 import { PlaneIcon } from "lucide-react";
+import { isPublicSupabaseImage } from "@/lib/supabase/images";
 import { cn } from "@/lib/utils";
 
-// Image de couverture d'un voyage (Server Component). Sans image, un fond neutre avec
-// une icône garde la même place, pour que toutes les cartes aient la même hauteur.
+// Image de couverture d'un voyage (Server Component). L'image vient du bucket public de
+// Supabase Storage (cover_image_url, vérifiée par Django). next/image la redimensionne
+// et la convertit en WebP selon sizes, grâce à images.remotePatterns de next.config.ts.
 //
-// L'image vient de Supabase Storage (cover_image_url, vérifiée par Django). L'étape 11
-// déclare l'hôte de Supabase dans images.remotePatterns de next.config.ts. D'ici là,
-// unoptimized fait charger l'image telle quelle, sans passer par l'optimiseur de
-// Next.js, qui refuserait un hôte non déclaré.
+// Sans image, l'image par défaut (un dégradé avec un avion) garde la même place, pour
+// que toutes les cartes aient la même hauteur. Nous la montrons aussi pour une adresse
+// d'un autre hôte : next/image la refuserait (erreur en développement, image cassée en
+// production). Cela arrive seulement si Django n'a pas SUPABASE_STORAGE_HOST.
+//
+// isPublicSupabaseImage lit SUPABASE_URL, qui n'existe que sur le serveur : ce composant
+// doit rester un Server Component.
 
 interface TripCoverProps {
   /** cover_image_url du voyage : une adresse https, ou une chaîne vide sans image. */
@@ -25,16 +30,8 @@ interface TripCoverProps {
 export function TripCover({ url, alt, sizes, preload = false, className }: TripCoverProps) {
   return (
     <div className={cn("relative overflow-hidden bg-muted", className)}>
-      {url ? (
-        <Image
-          src={url}
-          alt={alt}
-          fill
-          sizes={sizes}
-          preload={preload}
-          unoptimized
-          className="object-cover"
-        />
+      {url && isPublicSupabaseImage(url) ? (
+        <Image src={url} alt={alt} fill sizes={sizes} preload={preload} className="object-cover" />
       ) : (
         <div
           aria-hidden="true"

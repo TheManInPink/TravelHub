@@ -124,13 +124,14 @@ Dependabot (`.github/dependabot.yml`) propose chaque semaine les mises à jour d
 
 ## Déploiement
 
-La version en ligne utilise trois services gratuits. Le navigateur parle seulement à Next.js, sur Vercel. Le serveur Next.js appelle l'API Django sur Render, et Django lit la base PostgreSQL de Neon. Les trois services sont dans l'est des États-Unis, près de Washington, pour que les appels entre eux restent courts.
+La version en ligne utilise quatre services gratuits. Le navigateur parle seulement à Next.js, sur Vercel. Le serveur Next.js appelle l'API Django sur Render, et Django lit la base PostgreSQL de Neon. Supabase Storage garde seulement les images de couverture. Les quatre services sont dans l'est des États-Unis, près de Washington, pour que les appels entre eux restent courts.
 
 | Service | Adresse | Contenu |
 | --- | --- | --- |
 | Vercel | https://travelhub-uqar.vercel.app | Front-end Next.js (dossier `frontend/`), fonctions dans la région `iad1` |
 | Render | https://travelhub-uqar-api.onrender.com | API Django dans l'image du `Dockerfile`, région `virginia`. Swagger est sur `/api/docs/` |
 | Neon | projet `travelhub`, branche `production` | PostgreSQL 18, région `aws-us-east-1`, base `travelhub`, rôle `travelhub_owner` |
+| Supabase | projet `travelhub`, `https://<ref>.supabase.co` | Bucket public `travelhub-images`, région East US (North Virginia) |
 
 ### API sur Render
 
@@ -149,8 +150,9 @@ Le plan gratuit n'a ni commande de pré-déploiement ni shell. Le `CMD` du `Dock
 | `DATABASE_URL` | URL directe de Neon, sans `-pooler`, avec `sslmode=require` | tableau de bord |
 | `ALLOWED_HOSTS` | `travelhub-uqar-api.onrender.com,localhost` | tableau de bord |
 | `CORS_ALLOWED_ORIGINS` | `https://travelhub-uqar.vercel.app`, sans `/` à la fin | tableau de bord |
+| `SUPABASE_STORAGE_HOST` | `<ref>.supabase.co`, l'hôte seul, sans `https://` ni `/` | tableau de bord |
 
-Les quatre dernières variables ont `sync: false` dans `render.yaml`. Render les a demandées à la création du Blueprint, et leur valeur existe seulement dans le tableau de bord. Nous générons `SECRET_KEY` nous-mêmes, car `generateValue` de Render donne 44 caractères et Django en demande au moins 50. Une origine CORS avec un `/` final ou sans `https://` fait échouer les contrôles de Django (erreurs `corsheaders.E014` et `E013`), et donc tout le déploiement.
+Les cinq dernières variables ont `sync: false` dans `render.yaml`, et leur valeur existe seulement dans le tableau de bord. Render a demandé les quatre premières à la création du Blueprint. Il ne pose pas la question pour une variable ajoutée plus tard : nous avons donc saisi `SUPABASE_STORAGE_HOST` à la main, dans *Environment*. Nous générons `SECRET_KEY` nous-mêmes, car `generateValue` de Render donne 44 caractères et Django en demande au moins 50. Une origine CORS avec un `/` final ou sans `https://` fait échouer les contrôles de Django (erreurs `corsheaders.E014` et `E013`), et donc tout le déploiement.
 
 ### Base sur Neon
 
@@ -181,8 +183,19 @@ Le projet Vercel `travelhub-uqar` est relié au dépôt GitHub, avec `frontend` 
 | --- | --- |
 | `DJANGO_API_URL` | `https://travelhub-uqar-api.onrender.com`, sans `/` à la fin. Seul le serveur Next.js la lit |
 | `NEXT_PUBLIC_SITE_URL` | `https://travelhub-uqar.vercel.app`. Elle sert de base aux liens des métadonnées (`metadataBase`) |
+| `SUPABASE_URL` | `https://<ref>.supabase.co`. Elle sert aussi à `images.remotePatterns` de `next.config.ts` |
+| `SUPABASE_SECRET_KEY` | La clé `sb_secret_…` du projet, marquée *Sensitive*. Seul le serveur Next.js la lit |
+| `SUPABASE_BUCKET` | `travelhub-images` |
 
-Une variable changée sur Vercel ne s'applique qu'au déploiement suivant. Il faut donc redéployer (*Deployments*, puis *Redeploy*). Les variables `NEXT_PUBLIC_` sont même écrites dans le JavaScript au moment du build. Les variables `SUPABASE_` de `frontend/.env.example` ne servent pas encore.
+Une variable changée sur Vercel ne s'applique qu'au déploiement suivant. Il faut donc redéployer (*Deployments*, puis *Redeploy*). Les variables `NEXT_PUBLIC_` sont même écrites dans le JavaScript au moment du build. `SUPABASE_URL` est aussi lue au build, pour la liste des images que `next/image` peut optimiser.
+
+### Images sur Supabase Storage
+
+Le projet Supabase `travelhub` garde seulement les images. La connexion des utilisateurs reste dans Django. Le bucket `travelhub-images` est public, avec une limite de 4 Mo et les types `image/jpeg`, `image/png` et `image/webp`. Public veut dire que tout le monde peut lire une image si on connaît son adresse. Les adresses contiennent un identifiant aléatoire, et Django ne les donne qu'aux participants du voyage.
+
+Nous n'avons ajouté aucune politique RLS d'écriture. Le navigateur n'écrit jamais dans Supabase. Il envoie le fichier à la Server Action `uploadTripCover` de Next.js. Celle-ci vérifie la session et le rôle (propriétaire ou éditeur), puis le type, la taille et les premiers octets du fichier. Elle l'envoie ensuite à Supabase avec la clé secrète, qui contourne RLS. Sans politique, la clé publiable et les visiteurs ne peuvent donc rien écrire. L'action enregistre enfin l'adresse publique dans Django avec `PATCH /api/trips/{id}/`, puis supprime l'ancienne image.
+
+Chaque image a un nom neuf, `trips/<id>/<uuid>.<ext>`. Le navigateur et le CDN de Supabase ne montrent donc jamais une ancienne version. Si Django refuse l'adresse, l'action supprime le fichier qu'elle vient d'envoyer. Côté Django, `SUPABASE_STORAGE_HOST` refuse toute adresse d'un autre hôte.
 
 ### Vérifier le déploiement
 
@@ -199,9 +212,12 @@ curl.exe -s -i -X OPTIONS https://travelhub-uqar-api.onrender.com/api/auth/token
 # Aucun secret dans le dépôt
 git grep -nE "sb_secret_[A-Za-z0-9]"
 git grep -n "SECRET_KEY="
+
+# Aucune clé Supabase dans le JavaScript envoyé au navigateur (après npm run build, dans frontend/)
+Get-ChildItem .next\static -Recurse -File | Select-String -Pattern "sb_secret" -List
 ```
 
-La première recherche ne trouve rien. La seconde trouve seulement des lignes sans vraie valeur, par exemple les modèles `.env.example` vides et les clés factices de la CI et du build Docker.
+La première et la dernière recherche ne trouvent rien. La seconde trouve seulement des lignes sans vraie valeur, par exemple les modèles `.env.example` vides et les clés factices de la CI et du build Docker.
 
 On se connecte ensuite avec `alice` sur https://travelhub-uqar.vercel.app/login. Dans les outils du navigateur, les cookies `th_access` et `th_refresh` sont `HttpOnly`, `Secure` et `SameSite=Lax`. L'onglet Réseau ne montre aucune requête vers `onrender.com`.
 

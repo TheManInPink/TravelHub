@@ -6,6 +6,7 @@ import { Figure } from "@/components/layout/Figure";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { CoverImageDialog } from "@/components/upload/CoverImageDialog";
 import { formatAmount, formatDateRange, userDisplayName } from "@/lib/format";
 import { canDeleteTrip, canEditTrip, participantRoleLabel } from "@/lib/tripAccess";
 import type { TripDetail } from "@/types/api";
@@ -17,10 +18,10 @@ import { TripStatusBadge } from "./TripStatusBadge";
 // Affichage du détail d'un voyage (Server Component). La page trips/[tripId]/page.tsx
 // charge le voyage, puis ce composant l'affiche : Vitest peut le tester avec des props.
 //
-// Les boutons dépendent de my_role, le rôle renvoyé par Django : Modifier pour le
-// propriétaire et les éditeurs, Supprimer pour le propriétaire seulement. Le bouton
-// Supprimer est un Client Component (dialogue de confirmation) : c'est le seul îlot
-// interactif de la page.
+// Les boutons dépendent de my_role, le rôle renvoyé par Django : Modifier et l'image de
+// couverture pour le propriétaire et les éditeurs, Supprimer pour le propriétaire
+// seulement. Ces deux dialogues (confirmation, envoi de l'image) sont les seuls îlots
+// interactifs (Client Components) de la page.
 
 /** Boutons du voyage selon le rôle, ou undefined pour un lecteur (aucun bouton). */
 function tripActions(trip: TripDetail): ReactNode {
@@ -45,19 +46,29 @@ function tripActions(trip: TripDetail): ReactNode {
 }
 
 export function TripDetailView({ trip }: { trip: TripDetail }) {
+  const canEdit = canEditTrip(trip.my_role);
   return (
     <>
       <Breadcrumbs items={[{ label: "Mes voyages", href: "/trips" }, { label: trip.title }]} />
 
-      {/* Sans image, pas de bandeau vide : l'étape 11 ajoutera l'envoi d'une image. */}
-      {trip.cover_image_url ? (
-        <TripCover
-          url={trip.cover_image_url}
-          alt={`Couverture du voyage ${trip.title}`}
-          sizes="(min-width: 1152px) 72rem, 100vw"
-          preload
-          className="h-40 rounded-xl sm:h-56"
-        />
+      {/* Le propriétaire et les éditeurs voient toujours la couverture (l'image par défaut
+          s'il n'y en a pas), avec le bouton d'envoi par-dessus. Un lecteur ne voit pas de
+          bandeau vide. */}
+      {trip.cover_image_url || canEdit ? (
+        <div className="relative">
+          <TripCover
+            url={trip.cover_image_url}
+            alt={`Couverture du voyage ${trip.title}`}
+            sizes="(min-width: 1152px) 72rem, 100vw"
+            preload
+            className="h-40 rounded-xl sm:h-56"
+          />
+          {canEdit ? (
+            <div className="absolute right-3 bottom-3">
+              <CoverImageDialog tripId={trip.id} hasCover={trip.cover_image_url !== ""} />
+            </div>
+          ) : null}
+        </div>
       ) : null}
 
       <div className="flex flex-col gap-3">
@@ -85,11 +96,7 @@ export function TripDetailView({ trip }: { trip: TripDetail }) {
         <Figure label="Activités">{trip.activity_count}</Figure>
       </dl>
 
-      <TripItinerary
-        tripId={trip.id}
-        destinations={trip.destinations}
-        canEdit={canEditTrip(trip.my_role)}
-      />
+      <TripItinerary tripId={trip.id} destinations={trip.destinations} canEdit={canEdit} />
     </>
   );
 }

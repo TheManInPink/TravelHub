@@ -19,7 +19,13 @@ from django.urls import resolve
 from apps.core.views import health
 
 # Valeurs saisies dans le tableau de bord de Render (sync: false), jamais écrites dans le dépôt.
-DASHBOARD_ONLY = {"SECRET_KEY", "DATABASE_URL", "ALLOWED_HOSTS", "CORS_ALLOWED_ORIGINS"}
+DASHBOARD_ONLY = {
+    "SECRET_KEY",
+    "DATABASE_URL",
+    "ALLOWED_HOSTS",
+    "CORS_ALLOWED_ORIGINS",
+    "SUPABASE_STORAGE_HOST",
+}
 
 
 def load_yaml(name):
@@ -138,12 +144,13 @@ class TestEnvironment:
     @pytest.mark.slow
     def test_production_settings_accept_these_values(self, values):
         # SECRET_KEY et DATABASE_URL viennent de l'environnement de la CI ou du fichier .env.
-        # Les deux autres valeurs du tableau de bord sont remplacées par des exemples.
+        # Les autres valeurs du tableau de bord sont remplacées par des exemples.
         env = {
             **os.environ,
             **values,
             "ALLOWED_HOSTS": "travelhub-uqar-api.onrender.com,localhost",
             "CORS_ALLOWED_ORIGINS": "https://travelhub-uqar.vercel.app",
+            "SUPABASE_STORAGE_HOST": "abcdefgh.supabase.co",
         }
         result = subprocess.run(  # noqa: S603 : commande fixe, sans entrée externe
             [sys.executable, "manage.py", "check", "--deploy", "--fail-level", "WARNING"],

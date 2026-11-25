@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { TripCard } from "@/components/trips/TripCard";
 import type { TripStatus } from "@/types/api";
 import { japanTrip } from "../../msw/fixtures";
+import { PUBLIC_IMAGES_URL } from "../../msw/supabase";
 
 // fr-CA sépare les milliers et le symbole $ par une espace insécable (U+00A0).
 const NBSP = " ";
@@ -42,14 +43,24 @@ describe("TripCard", () => {
     expect(screen.getByText("3 destinations")).toBeInTheDocument();
   });
 
-  it("affiche la couverture du voyage comme image décorative", () => {
-    const url = "https://abc.supabase.co/storage/v1/object/public/travelhub-images/trips/1/a.webp";
+  it("affiche la couverture du voyage comme image décorative, par l'optimiseur", () => {
+    const url = `${PUBLIC_IMAGES_URL}trips/1/0f8fad5b-d9cb-469f-a165-70867728950e.webp`;
     const { container } = render(<TripCard trip={{ ...japanTrip, cover_image_url: url }} />);
 
     // alt="" : l'image n'est pas annoncée, le titre de la carte nomme déjà le voyage.
     const image = container.querySelector("img");
-    expect(image).toHaveAttribute("src", url);
     expect(image).toHaveAttribute("alt", "");
+    // next/image passe par /_next/image, qui redimensionne l'image selon sizes.
+    expect(image?.getAttribute("src")).toMatch(/^\/_next\/image\?url=/);
+    expect(image?.getAttribute("src")).toContain(encodeURIComponent(url));
+    expect(image).toHaveAttribute("sizes", expect.stringContaining("22rem"));
+  });
+
+  it("montre l'image par défaut pour une adresse qui ne vient pas de notre bucket", () => {
+    const url = "https://images.example.org/japon.jpg";
+    const { container } = render(<TripCard trip={{ ...japanTrip, cover_image_url: url }} />);
+
+    expect(container.querySelector("img")).toBeNull();
   });
 
   it("garde la place de la couverture sans image", () => {

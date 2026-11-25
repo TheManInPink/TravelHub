@@ -12,6 +12,23 @@ import tseslint from "typescript-eslint";
 // des plugins qui l'acceptent : @eslint-react, import-x et jsx-a11y-x.
 const sourceFiles = ["**/*.{js,jsx,mjs,ts,tsx,mts,cts}"];
 
+/** Sélecteur de process.env.NOM et de process.env["NOM"]. */
+function envVariable(name) {
+  return `MemberExpression[object.property.name='env']:matches([property.name='${name}'], [property.value='${name}'])`;
+}
+
+const DJANGO_URL_RULE = {
+  selector: envVariable("DJANGO_API_URL"),
+  message:
+    "Seuls les modules de src/lib/api/ appellent Django. Utilisez djangoFetch() ou gqlFetch().",
+};
+
+const SUPABASE_KEY_RULE = {
+  selector: envVariable("SUPABASE_SECRET_KEY"),
+  message:
+    "Seul src/lib/supabase/server.ts lit la clé secrète de Supabase. Utilisez getSupabase().",
+};
+
 export default defineConfig([
   globalIgnores([
     ".next/**",
@@ -81,23 +98,25 @@ export default defineConfig([
     },
   },
 
-  // Seuls les modules de src/lib/api/ appellent Django. Ailleurs, lire l'adresse de
-  // l'API est donc une erreur : il faut passer par djangoFetch() ou gqlFetch().
+  // Seuls les modules de src/lib/api/ appellent Django, et seul src/lib/supabase/ lit la
+  // clé secrète de Supabase. Ailleurs, lire ces variables est une erreur.
+  // Pour une même règle, le dernier bloc qui vise un fichier remplace les autres. Chaque
+  // fichier ne tombe donc que dans un des trois blocs.
   {
-    name: "travelhub/django-seulement-dans-lib-api",
+    name: "travelhub/variables-serveur",
     files: ["src/**/*.{ts,tsx}"],
-    ignores: ["src/lib/api/**"],
-    rules: {
-      "no-restricted-syntax": [
-        "error",
-        {
-          selector:
-            "MemberExpression[object.property.name='env']:matches([property.name='DJANGO_API_URL'], [property.value='DJANGO_API_URL'])",
-          message:
-            "Seuls les modules de src/lib/api/ appellent Django. Utilisez djangoFetch() ou gqlFetch().",
-        },
-      ],
-    },
+    ignores: ["src/lib/api/**", "src/lib/supabase/**"],
+    rules: { "no-restricted-syntax": ["error", DJANGO_URL_RULE, SUPABASE_KEY_RULE] },
+  },
+  {
+    name: "travelhub/variables-serveur-lib-api",
+    files: ["src/lib/api/**/*.{ts,tsx}"],
+    rules: { "no-restricted-syntax": ["error", SUPABASE_KEY_RULE] },
+  },
+  {
+    name: "travelhub/variables-serveur-lib-supabase",
+    files: ["src/lib/supabase/**/*.{ts,tsx}"],
+    rules: { "no-restricted-syntax": ["error", DJANGO_URL_RULE] },
   },
 
   // Fichiers générés par shadcn, que nous ne modifions pas à la main.

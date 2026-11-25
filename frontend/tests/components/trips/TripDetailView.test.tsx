@@ -3,9 +3,14 @@ import { describe, expect, it, vi } from "vitest";
 import { TripDetailView } from "@/components/trips/TripDetailView";
 import type { ParticipantRole, TripDetail } from "@/types/api";
 import { japanTripDetail } from "../../msw/fixtures";
+import { PUBLIC_IMAGES_URL } from "../../msw/supabase";
 
-// Le bouton Supprimer importe la Server Action, qui appellerait Django.
+// Le bouton Supprimer et l'envoi de l'image importent des Server Actions, qui
+// appelleraient Django et Supabase.
 vi.mock("@/actions/trips", () => ({ deleteTripAction: vi.fn() }));
+vi.mock("@/actions/upload", () => ({ uploadTripCover: vi.fn() }));
+
+const COVER_URL = `${PUBLIC_IMAGES_URL}trips/1/0f8fad5b-d9cb-469f-a165-70867728950e.webp`;
 
 // fr-CA sépare les milliers et le symbole $ par une espace insécable (U+00A0).
 const NBSP = " ";
@@ -52,6 +57,38 @@ describe("TripDetailView", () => {
     expect(screen.getByText("Votre rôle : Lecteur")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Modifier" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Supprimer" })).not.toBeInTheDocument();
+  });
+
+  it.each(["owner", "editor"] as const)(
+    "montre l'image par défaut et « Ajouter une image » au rôle %s",
+    (role) => {
+      const { container } = render(<TripDetailView trip={tripAs(role)} />);
+
+      expect(screen.getByRole("button", { name: "Ajouter une image" })).toBeInTheDocument();
+      // L'image par défaut est décorative : aucune balise img.
+      expect(container.querySelector("img")).toBeNull();
+    },
+  );
+
+  it("montre la couverture et « Changer l'image » quand le voyage a une image", () => {
+    render(<TripDetailView trip={{ ...tripAs("editor"), cover_image_url: COVER_URL }} />);
+
+    const cover = screen.getByRole("img", { name: "Couverture du voyage Japon 2027" });
+    expect(cover.getAttribute("src")).toContain(encodeURIComponent(COVER_URL));
+    expect(screen.getByRole("button", { name: "Changer l'image" })).toBeInTheDocument();
+  });
+
+  it("ne montre pas le bouton d'envoi à un lecteur, ni de bandeau vide", () => {
+    const { container, unmount } = render(<TripDetailView trip={tripAs("viewer")} />);
+    expect(screen.queryByRole("button", { name: /image/ })).not.toBeInTheDocument();
+    expect(container.querySelector(".bg-linear-to-br")).toBeNull();
+    unmount();
+
+    render(<TripDetailView trip={{ ...tripAs("viewer"), cover_image_url: COVER_URL }} />);
+    expect(
+      screen.getByRole("img", { name: "Couverture du voyage Japon 2027" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /image/ })).not.toBeInTheDocument();
   });
 
   it("affiche l'itinéraire : destination, pays, dates et activités", () => {
